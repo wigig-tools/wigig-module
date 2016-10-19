@@ -1,117 +1,81 @@
+        WLAN IEEE 802.11ad Model in ns-3, Version 0.2
+        ---------------------------------------------
 
-    The Network Simulator, Version 3
-    --------------------------------
+Introduction:
+-------------
+This is a repository for the development of WLAN IEEE 802.11ad model in ns-3. 
+The implemented model supports the following features:
 
-Table of Contents:
-------------------
+1. DMG Channel Access Periods (BTI/A-BFT/ATI/DTI with both CBAP and Service Periods).
+2. Beamforming Training (BT) in BHI and DTI.
+3. Abstract DMG PHY layer for DMG CTRL/SC/OFDM.
+4. Fast Session Transfer (FST) Mechanism.
+5. DMG Relay Support (Full Duplex).
+6. DMG PLCP Model for 802.11ad frame.
+7. 60 GHz Directional Antenna Model.
 
-1) An overview
-2) Building ns-3
-3) Running ns-3
-4) Getting access to the ns-3 documentation
-5) Working with the development version of ns-3
+The implementation is based on the available model of WLAN IEEE 802.11 in ns-3. 
+The following paper includes a background on IEEE 802.11ad, implementation details,
+and evaluation section for this model. If you use our model in your research, 
+please cite the following paper: 
 
-Note:  Much more substantial information about ns-3 can be found at
-http://www.nsnam.org
+Implementation and Evaluation of a WLAN IEEE 802.11ad Model in ns-3.
+Hany Assasa, Joerg Widmer (June 2016)
+The Workshop on ns-3 (WNS3 2016), 15-16 June 2016, Seattle, WA, USA
 
-1) An Open Source project
--------------------------
+Link: http://dl.acm.org/citation.cfm?id=2915377
 
-ns-3 is a free open source project aiming to build a discrete-event
-network simulator targeted for simulation research and education.   
-This is a collaborative project; we hope that
-the missing pieces of the models we have not yet implemented
-will be contributed by the community in an open collaboration
-process.
 
-The process of contributing to the ns-3 project varies with
-the people involved, the amount of time they can invest
-and the type of model they want to work on, but the current
-process that the project tries to follow is described here:
-http://www.nsnam.org/developers/contributing-code/
+Project Road-map:
+-----------------
+We are planning to develop and add the following features to the project:
 
-This README excerpts some details from a more extensive
-tutorial that is maintained at:
-http://www.nsnam.org/documentation/latest/
+1. Half Duplex DMG Relay Support.
+2. Fast Link Adaptation.
+3. Dynamic Channel Allocation (Polling).
+4. Reverse Direction Protocol (RDP).
+5. Statistical Channel Model + Raytracing Model for Millimeter-Wave Band.
+6. Beamformed Link Maintenance.
+7. Decntralized Clustering.
+8. Spatial Sharing.
 
-2) Building ns-3
+If you are willing to work on one of the previous features, we are happy to collaborate.
+
+
+
+Building The Project:
+---------------------
+The current implementation is based on ns3-26. In order to save time and evaluate the IEEE 802.11ad model only, type the following command:
+
+./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi'
+./waf build
+
+The previous command builds the required models only to run IEEE 802.11ad with its provided scripts in debug mode. 
+
+To build the project in optimized mode for fast execution type the following command:
+
+./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi' --enable-static -d optimized
+./waf build
+Running Scripts:
+
+The project includes different scripts located in scratch folder to test the previous listed features and mechanisms. 
+At the beginning of each script, there is a some regarding the simulated scenario (network topology + expected output + usage description).
+
+
+
+Bug Reporting:
+---------------------
+In case of a bug is encountered during the usage of the original model, please report the problem
+to the following email address (hany.assasa@gmail.com). In the email, please include the following:
+
+1. Simulation file with small description on the simulated scenario and the expected output.
+2. Exact run parameters which caused the simulation to crash.
+
+Please do not report any problem related to your own modification of the original code.
+
+
+
+About the Model:
 ----------------
-
-The code for the framework and the default models provided
-by ns-3 is built as a set of libraries. User simulations
-are expected to be written as simple programs that make
-use of these ns-3 libraries.
-
-To build the set of default libraries and the example
-programs included in this package, you need to use the
-tool 'waf'. Detailed information on how use waf is 
-included in the file doc/build.txt
-
-However, the real quick and dirty way to get started is to
-type the command
-  ./waf configure --enable-examples
-followed by
-  ./waf 
-in the the directory which contains
-this README file. The files built will be copied in the
-build/ directory.
-
-The current codebase is expected to build and run on the
-set of platforms listed in the RELEASE_NOTES file.
-
-Other platforms may or may not work: we welcome patches to 
-improve the portability of the code to these other platforms. 
-
-3) Running ns-3
----------------
-
-On recent Linux systems, once you have built ns-3 (with examples
-enabled), it should be easy to run the sample programs with the
-following command, such as:
-
-  ./waf --run simple-global-routing
-
-That program should generate a simple-global-routing.tr text 
-trace file and a set of simple-global-routing-xx-xx.pcap binary
-pcap trace files, which can be read by tcpdump -tt -r filename.pcap
-The program source can be found in the examples/routing directory.
-
-4) Getting access to the ns-3 documentation
--------------------------------------------
-
-Once you have verified that your build of ns-3 works by running
-the simple-point-to-point example as outlined in 4) above, it is
-quite likely that you will want to get started on reading
-some ns-3 documentation. 
-
-All of that documentation should always be available from
-the ns-3 website: http:://www.nsnam.org/documentation/.
-
-This documentation includes:
-
-  - a tutorial
- 
-  - a reference manual
-
-  - models in the ns-3 model library
-
-  - a wiki for user-contributed tips: http://www.nsnam.org/wiki/
-
-  - API documentation generated using doxygen: this is
-    a reference manual, most likely not very well suited 
-    as introductory text:
-    http://www.nsnam.org/doxygen/index.html
-
-5) Working with the development version of ns-3
------------------------------------------------
-
-If you want to download and use the development version 
-of ns-3, you need to use the tool 'mercurial'. A quick and
-dirty cheat sheet is included in doc/mercurial.txt but
-reading through the mercurial tutorials included on the
-mercurial website is usually a good idea if you are not
-familiar with it.
-
-If you have successfully installed mercurial, you can get
-a copy of the development version with the following command:
-"hg clone http://code.nsnam.org/ns-3-dev"
+The model is developed and maintained by Hany Assasa. For more information about the author research,
+please check his personal website on: http://people.networks.imdea.org/~hany_assasa/
