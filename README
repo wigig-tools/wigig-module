@@ -36,7 +36,7 @@ We are planning to develop and add the following features to the project:
 4. Reverse Direction Protocol (RDP).
 5. Statistical Channel Model + Raytracing Model for Millimeter-Wave Band.
 6. Beamformed Link Maintenance.
-7. Decntralized Clustering.
+7. Decentralized Clustering.
 8. Spatial Sharing.
 
 If you are willing to work on one of the previous features, we are happy to collaborate.
@@ -56,8 +56,11 @@ To build the project in optimized mode for fast execution type the following com
 
 ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi' --enable-static -d optimized
 ./waf build
-Running Scripts:
 
+
+
+Running Scripts:
+----------------
 The project includes different scripts located in scratch folder to test the previous listed features and mechanisms. 
 At the beginning of each script, there is a some regarding the simulated scenario (network topology + expected output + usage description).
 
