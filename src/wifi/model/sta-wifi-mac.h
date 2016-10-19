@@ -28,22 +28,11 @@
 #include "ns3/traced-callback.h"
 #include "supported-rates.h"
 #include "amsdu-subframe-header.h"
+#include "capability-information.h"
 
 namespace ns3  {
 
 class MgtAddBaRequestHeader;
-
-/**
- * The current MAC state of the STA.
- */
-enum MacState
-{
-  ASSOCIATED,
-  WAIT_PROBE_RESP,
-  WAIT_ASSOC_RESP,
-  BEACON_MISSED,
-  REFUSED
-};
 
 /**
  * \ingroup wifi
@@ -174,12 +163,6 @@ private:
    * \return SupportedRates all rates that we support
    */
   Ptr<SupportedRates> GetSupportedRates (void) const;
-    /**
-   * Return the Capability information of the current STA.
-   *
-   * \return the Capability information that we support
-   */
-  CapabilityInformation GetCapabilities (void) const;
   /**
    * Return the HT capability of the current AP.
    *
@@ -192,8 +175,23 @@ private:
    * \return the VHT capability that we support
    */
   Ptr<VhtCapabilities> GetVhtCapabilities (void) const;
+  /**
+   * Set the EDCA parameters.
+   *
+   * \param ac the access class
+   * \param cwMin the minimum contention window size
+   * \param cwMax the maximum contention window size
+   * \param aifsn the number of slots that make up an AIFS
+   * \param txopLimit the TXOP limit
+   */
+  void SetEdcaParameters (AcIndex ac, uint8_t cwMin, uint8_t cwMax, uint8_t aifsn, Time txopLimit);
+  /**
+   * Return the Capability information of the current STA.
+   *
+   * \return the Capability information that we support
+   */
+  CapabilityInformation GetCapabilities (void) const;
 
-  enum MacState m_state;
   Time m_probeRequestTimeout;
   Time m_assocRequestTimeout;
   EventId m_probeRequestEvent;

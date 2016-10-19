@@ -31,6 +31,7 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/udp-socket-factory.h"
 #include "packet-sink.h"
+#include "timestamp-tag.h"
 
 namespace ns3 {
 
@@ -79,6 +80,13 @@ uint64_t PacketSink::GetTotalRx () const
 {
   NS_LOG_FUNCTION (this);
   return m_totalRx;
+}
+
+uint64_t
+PacketSink::GetTotalReceivedPackets (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return m_totalPackets;
 }
 
 Ptr<Socket>
@@ -188,9 +196,31 @@ void PacketSink::HandleRead (Ptr<Socket> socket)
                        << " total Rx " << m_totalRx << " bytes");
         }
       m_rxTrace (packet, from);
+
+      TimestampTag timestamp;
+      // Should never not be found since the sender is adding it, but
+      // you never know.
+      if (packet->FindFirstMatchingByteTag (timestamp))
+        {
+          Time tx = timestamp.GetTimestamp ();
+          accummulator += Simulator::Now () - tx;
+          m_totalPackets++;
+        }
     }
 }
 
+Time
+PacketSink::GetAverageDelay (void) const
+{
+  if (m_totalPackets != 0)
+    {
+      return accummulator/m_totalPackets;
+    }
+  else
+    {
+      return Seconds (0);
+    }
+}
 
 void PacketSink::HandlePeerClose (Ptr<Socket> socket)
 {

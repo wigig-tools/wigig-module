@@ -2313,8 +2313,7 @@ NS_OBJECT_ENSURE_REGISTERED (ExtRelaySearchResponseHeader);
 
 ExtRelaySearchResponseHeader::ExtRelaySearchResponseHeader ()
   : m_dialogToken (0),
-    m_statusCode (0),
-    m_list (0)
+    m_statusCode (0)
 {
 }
 
@@ -2349,7 +2348,9 @@ ExtRelaySearchResponseHeader::GetSerializedSize (void) const
   size += 1; //Dialog Token
   size += 2; //Status Code
   if (m_statusCode == 0)
+    {
       size += m_list.size () * 3; //Relay Capable STA Info
+    }
   return size;
 }
 
@@ -2357,15 +2358,14 @@ void
 ExtRelaySearchResponseHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
-  Ptr<ExtRelayCapableStaInfo> info;
   i.WriteU8 (m_dialogToken);
   i.WriteHtolsbU16 (m_statusCode);
   if (m_statusCode == 0)
     {
       for (RelayCapableStaList::const_iterator item = m_list.begin (); item != m_list.end (); item++)
         {
-          info = *item;
-          i = info->Serialize (i);
+          i.WriteU8 ((item->first & 0xFF));
+          i = item->second.Serialize (i);
         }
     }
 }
@@ -2374,16 +2374,17 @@ uint32_t
 ExtRelaySearchResponseHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
-  Ptr<ExtRelayCapableStaInfo> element;
+  RelayCapabilitiesInfo info;
+  uint16_t aid;
   m_dialogToken = i.ReadU8 ();
   m_statusCode = i.ReadLsbtohU16 ();
   if (!i.IsEnd ())
     {
       do
         {
-          element = Create<ExtRelayCapableStaInfo> ();
-          i = element->Deserialize (i);
-          m_list.push_back (element);
+          aid = i.ReadU8 ();
+          i = info.Deserialize (i);
+          m_list[aid] = info;
         }
       while (!i.IsEnd ());
     }
@@ -2403,9 +2404,9 @@ ExtRelaySearchResponseHeader::SetStatusCode (uint16_t code)
 }
 
 void
-ExtRelaySearchResponseHeader::AddRelayCapableStaInfo (Ptr<ExtRelayCapableStaInfo> element)
+ExtRelaySearchResponseHeader::AddRelayCapableStaInfo (uint8_t aid, RelayCapabilitiesInfo &element)
 {
-  m_list.push_back (element);
+  m_list[aid] = element;
 }
 
 void
@@ -3380,36 +3381,50 @@ void
 ExtFstSetupRequest::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
-
   i.WriteU8 (m_dialogToken);
   i.WriteHtolsbU32 (m_llt);
   i = m_sessionTransition.Serialize (i);
   if (m_multiBand != 0)
-    i = m_multiBand->Serialize (i);
+    {
+      i = m_multiBand->Serialize (i);
+    }
   if (m_wakeupSchedule != 0)
-    i = m_wakeupSchedule->Serialize (i);
+    {
+      i = m_wakeupSchedule->Serialize (i);
+    }
   if (m_awakeWindow != 0)
-    i = m_awakeWindow->Serialize (i);
+    {
+      i = m_awakeWindow->Serialize (i);
+    }
   if (m_switchingStream != 0)
-    i= m_switchingStream->Serialize (i);
+    {
+      i = m_switchingStream->Serialize (i);
+    }
 }
 
 uint32_t
 ExtFstSetupRequest::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
-
   m_dialogToken = i.ReadU8 ();
   m_llt = i.ReadLsbtohU32 ();
   i = m_sessionTransition.Deserialize (i);
   if (m_multiBand != 0)
-    i = m_multiBand->DeserializeIfPresent (i);
+    {
+      i = m_multiBand->DeserializeIfPresent (i);
+    }
   if (m_wakeupSchedule != 0)
-    i = m_wakeupSchedule->DeserializeIfPresent (i);
+    {
+      i = m_wakeupSchedule->DeserializeIfPresent (i);
+    }
   if (m_awakeWindow != 0)
-    i = m_awakeWindow->DeserializeIfPresent (i);
+    {
+      i = m_awakeWindow->DeserializeIfPresent (i);
+    }
   if (m_switchingStream != 0)
-    i= m_switchingStream->DeserializeIfPresent (i);
+    {
+      i = m_switchingStream->DeserializeIfPresent (i);
+    }
 
   return i.GetDistanceFrom (start);
 }
@@ -3497,7 +3512,7 @@ ExtFstSetupResponse::Serialize (Buffer::Iterator start) const
   if (m_awakeWindow != 0)
     i = m_awakeWindow->Serialize (i);
   if (m_switchingStream != 0)
-    i= m_switchingStream->Serialize (i);
+    i = m_switchingStream->Serialize (i);
 }
 
 uint32_t
@@ -3509,13 +3524,21 @@ ExtFstSetupResponse::Deserialize (Buffer::Iterator start)
   m_statusCode = i.ReadLsbtohU16 ();
   i = m_sessionTransition.Deserialize (i);
   if (m_multiBand != 0)
-    i = m_multiBand->DeserializeIfPresent (i);
+    {
+      i = m_multiBand->DeserializeIfPresent (i);
+    }
   if (m_wakeupSchedule != 0)
-    i = m_wakeupSchedule->DeserializeIfPresent (i);
+    {
+      i = m_wakeupSchedule->DeserializeIfPresent (i);
+    }
   if (m_awakeWindow != 0)
-    i = m_awakeWindow->DeserializeIfPresent (i);
+    {
+      i = m_awakeWindow->DeserializeIfPresent (i);
+    }
   if (m_switchingStream != 0)
-    i= m_switchingStream->DeserializeIfPresent (i);
+    {
+      i = m_switchingStream->DeserializeIfPresent (i);
+    }
 
   return i.GetDistanceFrom (start);
 }

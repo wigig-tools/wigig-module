@@ -1,22 +1,9 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
+ * Copyright (c) 2015, IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+
 #include "multi-band-net-device.h"
 #include "wifi-mac.h"
 #include "regular-wifi-mac.h"
@@ -31,7 +18,8 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/log.h"
 #include "sta-wifi-mac.h"
-#include  "wifi-mac-queue.h"
+#include "dmg-sta-wifi-mac.h"
+#include "wifi-mac-queue.h"
 
 namespace ns3 {
 
@@ -168,15 +156,15 @@ MultiBandNetDevice::BandChanged (enum WifiPhyStandard standard, Mac48Address add
 {
   NS_LOG_FUNCTION (this << standard << address << isInitiator);
   /* Before switching the current technology, we keep a pointer to the current technology */
-  Ptr<RegularWifiMac> oldMac;
-  Ptr<RegularWifiMac> newMac;
+  Ptr<RegularWifiMac> oldMac, newMac;
   oldMac = StaticCast<RegularWifiMac> (m_mac);
 
-  /* Switch current active layers for 802.11 */
+  /* Switch current active technology for 802.11 */
   SwitchTechnology (standard);
 
   /* In all cases, we copy the content of all the queues (DCA + EDCA) */
   newMac = StaticCast<RegularWifiMac> (m_mac);
+//  m_technologyMap[address] = newMac;
 
   /* Copy DCA Packets */
   oldMac->GetDcaTxop ()->GetQueue ()->TransferPacketsByAddress (address, newMac->GetDcaTxop ()->GetQueue ());
@@ -193,15 +181,21 @@ MultiBandNetDevice::BandChanged (enum WifiPhyStandard standard, Mac48Address add
   oldMac->GetBKQueue ()->CopyBlockAckAgreements (address, newMac->GetBKQueue ());
 
   /* Check the type of the BSS */
-  if (newMac->GetTypeOfStation () == STA)
+  if (newMac->GetTypeOfStation () == DMG_STA)
     {
       /* Copy Association State */
-      Ptr<StaWifiMac> oldStaMac = StaticCast<StaWifiMac> (oldMac);
-      Ptr<StaWifiMac> newStaMac = StaticCast<StaWifiMac> (newMac);
-      newStaMac->SetState (ASSOCIATED);
-      newStaMac->SetBssid (oldStaMac->GetBssid ());
+      Ptr<DmgStaWifiMac> newDmgMac = StaticCast<DmgStaWifiMac> (newMac);
+      newMac->SetBssid (oldMac->GetBssid ());
+      newDmgMac->SetState (oldMac->GetMacState ());
     }
-  else if (newMac->GetTypeOfStation () == AP)
+  else if (newMac->GetTypeOfStation () == STA)
+    {
+      /* Copy Association State */
+      Ptr<StaWifiMac> newWifiMac = StaticCast<StaWifiMac> (newMac);
+      newMac->SetBssid (oldMac->GetBssid ());
+      newWifiMac->SetState (oldMac->GetMacState ());
+    }
+  else if ((newMac->GetTypeOfStation () == AP) || (newMac->GetTypeOfStation () == DMG_AP))
     {
       /* Copy Association State */
       m_stationManager->RecordGotAssocTxOk (Mac48Address (address));
@@ -214,9 +208,22 @@ void
 MultiBandNetDevice::EstablishFastSessionTransferSession (Mac48Address address)
 {
   NS_LOG_FUNCTION (this << address);
-  /* Use the current mac to switch to the alternative mac layer */
   Ptr<RegularWifiMac> mac = StaticCast<RegularWifiMac> (m_mac);
   mac->SetupFSTSession (address);
+}
+
+Ptr<WifiMac>
+MultiBandNetDevice::GetTechnologyMac (enum WifiPhyStandard standard)
+{
+  WifiTechnology *technology = &m_list[standard];
+  return technology->Mac;
+}
+
+Ptr<WifiPhy>
+MultiBandNetDevice::GetTechnologyPhy (enum WifiPhyStandard standard)
+{
+  WifiTechnology *technology = &m_list[standard];
+  return technology->Phy;
 }
 
 Ptr<WifiMac>
@@ -354,6 +361,7 @@ MultiBandNetDevice::Send (Ptr<Packet> packet, const Address& dest, uint16_t prot
   llc.SetType (protocolNumber);
   packet->AddHeader (llc);
 
+//  m_mac = m_technologyMap[realTo];
   m_mac->NotifyTx (packet);
   m_mac->Enqueue (packet, realTo);
   return true;
@@ -390,6 +398,7 @@ MultiBandNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Addre
   LlcSnapHeader llc;
   packet->RemoveHeader (llc);
   enum NetDevice::PacketType type;
+//  m_mac = m_technologyMap[from];
   if (to.IsBroadcast ())
     {
       type = NetDevice::PACKET_BROADCAST;

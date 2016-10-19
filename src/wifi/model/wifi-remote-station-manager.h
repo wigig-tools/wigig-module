@@ -49,6 +49,7 @@ enum TypeOfStation
 {
   DMG_STA,
   DMG_AP,
+  DMG_ADHOC,
   STA,
   AP,
   ADHOC_STA,
@@ -215,7 +216,7 @@ public:
    *
    * \param enable enable or disable HT capability support
    */
-  void SetHtSupported (bool enable);
+  virtual void SetHtSupported (bool enable);
   /**
    * Return whether the device has HT capability support enabled.
    *
@@ -227,7 +228,7 @@ public:
    *
    * \param enable enable or disable VHT capability support
    */
-  void SetVhtSupported (bool enable);
+  virtual void SetVhtSupported (bool enable);
   /**
    * Return whether the device has VHT capability support enabled.
    *
@@ -441,6 +442,13 @@ public:
    */
   void AddAllSupportedModes (Mac48Address address);
   /**
+   * Invoked in a STA or AP to store all of the MCS supported
+   * by a destination which is also supported locally.
+   *
+   * \param address the address of the station being recorded
+   */
+  void AddAllSupportedMcs (Mac48Address address);
+  /**
    * Record whether the short PLCP preamble is supported by the station.
    *
    * \param address the address of the station
@@ -520,16 +528,18 @@ public:
    * is set to false, in which case, the tx parameters of the packet are calculated and stored in
    * the packet as a tag. These tx parameters are later retrieved from GetDadaMode and GetRtsMode.
    */
-  void PrepareForQueue (Mac48Address address, const WifiMacHeader *header, Ptr<const Packet> packet);
+  void PrepareForQueue (Mac48Address address, const WifiMacHeader *header,
+                        Ptr<const Packet> packet);
 
   /**
    * \param address remote address
    * \param header MAC header
    * \param packet the packet to send
    *
-   * \return the transmission mode to use to send this packet
+   * \return the TXVECTOR to use to send this packet
    */
-  WifiTxVector GetDataTxVector (Mac48Address address, const WifiMacHeader *header, Ptr<const Packet> packet);
+  WifiTxVector GetDataTxVector (Mac48Address address, const WifiMacHeader *header,
+                                Ptr<const Packet> packet);
   /**
    * \param address remote address
    * \param header MAC header
@@ -624,7 +634,7 @@ public:
    */
   void ReportFinalDataFailed (Mac48Address address, const WifiMacHeader *header);
   /**
-   * Typically called per A-MPDU, either when a Block ACK was successfully
+   * Typically called per A-MPDU, either when a Block ACK was successfully 
    * received or when a BlockAckTimeout has elapsed.
    *
    * \param address the address of the receiver
@@ -745,11 +755,9 @@ public:
    */
   WifiTxVector GetAckTxVector (Mac48Address address, WifiMode dataMode);
   /**
-   * \param address
-   *
    * \return the DMG Control transmission mode.
    */
-  WifiTxVector GetDmgControlTxVector (Mac48Address address);
+  WifiTxVector GetDmgControlTxVector (void);
   /**
    * \param address
    * \param dataMode the transmission mode used to send an ACK we just received
@@ -861,6 +869,7 @@ protected:
    *
    * \return the WifiMode at the given index of the specified station
    */
+
   WifiMode GetMcsSupported (const WifiRemoteStation *station, uint32_t i) const;
   /**
    * Return the number of MCS supported by the given station.
@@ -1202,6 +1211,18 @@ private:
    * \return WifiRemoteStation corresponding to the address
    */
   WifiRemoteStation* Lookup (Mac48Address address, const WifiMacHeader *header) const;
+
+  /**
+   * Return whether the modulation class of the selected mode for the 
+   * control answer frame is allowed.
+   *
+   * \param modClassReq modulation class of the request frame
+   * \param modClassAnswer modulation class of the answer frame
+   *
+   * \return true if the modulation class of the selected mode for the 
+   * control answer frame is allowed, false otherwise
+   */
+  bool IsAllowedControlAnswerModulationClass (enum WifiModulationClass modClassReq, enum WifiModulationClass modClassAnswer) const;
 
   WifiMode GetControlAnswerMode (Mac48Address address, WifiMode reqMode);
 

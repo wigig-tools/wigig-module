@@ -1,22 +1,9 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+#include "ns3/address-utils.h"
 #include "ns3/fatal-error.h"
 #include "ns3/log.h"
 
@@ -107,7 +94,7 @@ DMG_SSW_Field::Deserialize (Buffer::Iterator start)
   NS_LOG_FUNCTION (this << &start);
   uint8_t ssw[3];
 
-  start.Read(ssw, 3);
+  start.Read (ssw, 3);
   m_dir = static_cast<BeamformingDirection> (ssw[0] & 0x1);
   m_cdown = (static_cast<uint16_t> (ssw[0] & 0xFE) >> 1) | (static_cast<uint16_t> (ssw[1] & 0x03) << 7);
   m_sid = (ssw[1] & 0xFC) >> 2;
@@ -1060,7 +1047,7 @@ BF_Control_Field::GetRxssTxRate (void) const
 NS_OBJECT_ENSURE_REGISTERED (BF_Link_Maintenance_Field);
 
 BF_Link_Maintenance_Field::BF_Link_Maintenance_Field ()
-  : m_unitIndex (0),
+  : m_unitIndex (UNIT_32US),
     m_value (0),
     m_isMaster (false)
 {
@@ -1113,7 +1100,7 @@ BF_Link_Maintenance_Field::Serialize (Buffer::Iterator start) const
   Buffer::Iterator i = start;
   uint8_t value = 0;
 
-  value |= m_unitIndex & 0x1;
+  value |= static_cast<uint8_t> (m_unitIndex) & 0x1;
   value |= ((m_value & 0x3F) << 1);
   value |= ((m_isMaster & 0x1) << 7);
 
@@ -1129,7 +1116,7 @@ BF_Link_Maintenance_Field::Deserialize (Buffer::Iterator start)
   Buffer::Iterator i = start;
   uint8_t value = i.ReadU8 ();
 
-  m_unitIndex = value & 0x1;
+  m_unitIndex = static_cast<BeamLinkMaintenanceUnitIndex> (value & 0x1);
   m_value = ((value >> 1) & 0x3F);
   m_isMaster = ((value >> 7) & 0x1);
 
@@ -1137,7 +1124,7 @@ BF_Link_Maintenance_Field::Deserialize (Buffer::Iterator start)
 }
 
 void
-BF_Link_Maintenance_Field::SetUnitIndex (bool index)
+BF_Link_Maintenance_Field::SetUnitIndex (BeamLinkMaintenanceUnitIndex index)
 {
   NS_LOG_FUNCTION (this << index);
   m_unitIndex = index;
@@ -1151,13 +1138,13 @@ BF_Link_Maintenance_Field::SetMaintenanceValue (uint8_t value)
 }
 
 void
-BF_Link_Maintenance_Field::SetIsMaster (bool value)
+BF_Link_Maintenance_Field::SetAsMaster (bool value)
 {
   NS_LOG_FUNCTION (this << value);
   m_isMaster = value;
 }
 
-bool
+BeamLinkMaintenanceUnitIndex
 BF_Link_Maintenance_Field::GetUnitIndex (void) const
 {
   NS_LOG_FUNCTION (this);
@@ -1172,7 +1159,7 @@ BF_Link_Maintenance_Field::GetMaintenanceValue (void) const
 }
 
 bool
-BF_Link_Maintenance_Field::GetIsMaster (void) const
+BF_Link_Maintenance_Field::IsMaster (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_isMaster;

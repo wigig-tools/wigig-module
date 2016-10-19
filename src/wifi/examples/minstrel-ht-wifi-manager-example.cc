@@ -113,6 +113,7 @@ ChangeSignalAndReportRate (Ptr<FixedRssLossModel> rssModel, struct Step step, do
   g_intervalBytes = 0;
   Simulator::Schedule (Seconds (step.stepTime), &ChangeSignalAndReportRate, rssModel, step, (rss - step.stepSize), rateDataset, actualDataset);
 }
+
 int main (int argc, char *argv[])
 {
   std::vector <StandardInfo> standards;
@@ -133,6 +134,7 @@ int main (int argc, char *argv[])
   std::string standard ("802.11b");
   StandardInfo selectedStandard;
   std::string outfileName ("minstrel-ht-");
+
   CommandLine cmd;
   cmd.AddValue ("rtsThreshold", "RTS threshold", rtsThreshold);
   cmd.AddValue ("BE_MaxAmpduSize", "BE Max A-MPDU size", BE_MaxAmpduSize);
@@ -144,7 +146,7 @@ int main (int argc, char *argv[])
   cmd.AddValue ("nss", "Set nss (valid only for 802.11n or ac)", nss);
   cmd.AddValue ("standard", "Set standard (02.11a, 802.11b, 802.11g, 802.11n-5GHz, 802.11n-2.4GHz, 802.11ac, 802.11-holland, 802.11-10MHz, 802.11-5MHz)", standard);
   cmd.Parse (argc, argv);
-
+  
   if (standard == "802.11b")
     {
       NS_ABORT_MSG_IF (channelWidth != 20 && channelWidth != 22, "Invalid channel width for standard " << standard);
@@ -165,6 +167,7 @@ int main (int argc, char *argv[])
       NS_ABORT_MSG_IF (channelWidth != 20 && channelWidth != 40 && channelWidth != 80 && channelWidth != 160, "Invalid channel width for standard " << standard);
       NS_ABORT_MSG_IF (nss == 0 || nss > 4, "Invalid nss " << nss << " for standard " << standard);
     }
+
   outfileName.append (standard);
   if (standard == "802.11n-5GHz" || standard == "802.11n-2.4GHz" || standard == "802.11ac")
     {
@@ -185,6 +188,7 @@ int main (int argc, char *argv[])
   std::ofstream outfile (tmp.c_str ());
   tmp = outfileName + ".eps";
   Gnuplot gnuplot = Gnuplot (tmp.c_str ());
+
   // The first number is channel width, second is minimum SNR, third is maximum
   // SNR, fourth and fifth provide xrange axis limits, and sixth the yaxis
   // maximum
@@ -197,6 +201,7 @@ int main (int argc, char *argv[])
   standards.push_back (StandardInfo ("802.11-holland", WIFI_PHY_STANDARD_holland, 20, false, 3, 27, 0, 30, 60));
   standards.push_back (StandardInfo ("802.11-10MHz", WIFI_PHY_STANDARD_80211_10MHZ, 10, false, 3, 27, 0, 30, 60));
   standards.push_back (StandardInfo ("802.11-5MHz", WIFI_PHY_STANDARD_80211_5MHZ, 5, false, 3, 27, 0, 30, 60));
+
   for (std::vector<StandardInfo>::size_type i = 0; i != standards.size (); i++)
     {
       if (standard == standards[i].m_name)
@@ -210,6 +215,7 @@ int main (int argc, char *argv[])
   steps = std::abs ((int) (selectedStandard.m_snrHigh - selectedStandard.m_snrLow ) / stepSize) + 1;
   Ptr<Node> clientNode = CreateObject<Node> ();
   Ptr<Node> serverNode = CreateObject<Node> ();
+
   WifiHelper wifi;
   wifi.SetStandard (selectedStandard.m_standard);
   YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
@@ -217,6 +223,7 @@ int main (int argc, char *argv[])
   wifiPhy.Set ("RxNoiseFigure", DoubleValue (0.0));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-110.0));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-110.0));
+
   Ptr<YansWifiChannel> wifiChannel = CreateObject<YansWifiChannel> ();
   Ptr<ConstantSpeedPropagationDelayModel> delayModel = CreateObject<ConstantSpeedPropagationDelayModel> ();
   wifiChannel->SetPropagationDelayModel (delayModel);
@@ -224,16 +231,21 @@ int main (int argc, char *argv[])
   wifiChannel->SetPropagationLossModel (rssLossModel);
   wifiPhy.SetChannel (wifiChannel);
   wifiPhy.Set ("ShortGuardEnabled", BooleanValue (selectedStandard.m_sgi));
+
   wifi.SetRemoteStationManager ("ns3::MinstrelHtWifiManager", "RtsCtsThreshold", UintegerValue (rtsThreshold), "PrintStats", BooleanValue (true));
+
   // Use Adhoc so we don't get into association issues
   NetDeviceContainer serverDevice;
   NetDeviceContainer clientDevice;
+
   WifiMacHelper wifiMac;
   wifiMac.SetType ("ns3::AdhocWifiMac",
                    "BE_MaxAmpduSize", UintegerValue (BE_MaxAmpduSize));
   serverDevice = wifi.Install (wifiPhy, wifiMac, serverNode);
   clientDevice = wifi.Install (wifiPhy, wifiMac, clientNode);
+
   Config::ConnectWithoutContext ("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/RemoteStationManager/$ns3::MinstrelHtWifiManager/RateChange", MakeCallback (&RateChange));
+
   // Configure the mobility.
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
@@ -246,11 +258,13 @@ int main (int argc, char *argv[])
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   mobility.Install (clientNode);
   mobility.Install (serverNode);
+
   Gnuplot2dDataset rateDataset (selectedStandard.m_name + std::string ("-rate selected"));
   Gnuplot2dDataset actualDataset (selectedStandard.m_name + std::string ("-observed"));
   struct Step step;
   step.stepSize = stepSize;
   step.stepTime = stepTime;
+
   // Set channel width
   // Adjust noise for channel width
   // Obtain pointer to the WifiPhy
@@ -262,6 +276,7 @@ int main (int argc, char *argv[])
   wifiPhyPtrClient->SetNumberOfReceiveAntennas (nss);
   noiseDbm += 10 * log10 (selectedStandard.m_width * 1000000);
   NS_LOG_DEBUG ("Channel width " << wifiPhyPtrClient->GetChannelWidth () << " noiseDbm " << noiseDbm);
+
   // Set channel width
   // Adjust noise for channel width
   // Obtain pointer to the WifiPhy
@@ -271,14 +286,17 @@ int main (int argc, char *argv[])
   wifiPhyPtrServer->SetChannelWidth (selectedStandard.m_width);
   wifiPhyPtrServer->SetNumberOfTransmitAntennas (nss);
   wifiPhyPtrServer->SetNumberOfReceiveAntennas (nss);
+
   double rssCurrent = (selectedStandard.m_snrHigh + noiseDbm);
   rssLossModel->SetRss (rssCurrent);
   NS_LOG_INFO ("Setting initial Rss to " << rssCurrent);
   //Move the STA by stepsSize meters every stepTime seconds
   Simulator::Schedule (Seconds (0.5 + stepTime), &ChangeSignalAndReportRate, rssLossModel, step, rssCurrent, rateDataset, actualDataset);
+
   PacketSocketHelper packetSocketHelper;
   packetSocketHelper.Install (serverNode);
   packetSocketHelper.Install (clientNode);
+
   PacketSocketAddress socketAddr;
   socketAddr.SetSingleDevice (serverDevice.Get (0)->GetIfIndex ());
   if (broadcast)
@@ -293,6 +311,7 @@ int main (int argc, char *argv[])
   // Note: PacketSocket doesn't have any L4 multiplexing or demultiplexing
   //       The only mux/demux is based on the protocol field
   socketAddr.SetProtocol (1);
+
   Ptr<PacketSocketClient> client = CreateObject<PacketSocketClient> ();
   client->SetRemote (socketAddr);
   client->SetStartTime (Seconds (0.5));
@@ -300,15 +319,19 @@ int main (int argc, char *argv[])
   client->SetAttribute ("PacketSize", UintegerValue (packetSize));
   client->SetAttribute ("Interval", TimeValue (MicroSeconds (20)));
   clientNode->AddApplication (client);
+
   Ptr<PacketSocketServer> server = CreateObject<PacketSocketServer> ();
   server->SetLocal (socketAddr);
   server->TraceConnectWithoutContext ("Rx", MakeCallback (&PacketRx));
   serverNode->AddApplication (server);
+
   Simulator::Stop (Seconds ((steps + 1) * stepTime));
   Simulator::Run ();
   Simulator::Destroy ();
+
   gnuplot.AddDataset (rateDataset);
   gnuplot.AddDataset (actualDataset);
+
   std::ostringstream xMinStr, xMaxStr, yMaxStr;
   std::string xRangeStr ("set xrange [");
   xMinStr << selectedStandard.m_xMin;
@@ -321,7 +344,7 @@ int main (int argc, char *argv[])
   yMaxStr << selectedStandard.m_yMax;
   yRangeStr.append (yMaxStr.str ());
   yRangeStr.append ("]");
-
+  
   std::ostringstream widthStrStr;
   std::ostringstream nssStrStr;
   std::string title ("Wi-Fi Minstrel ht rate control: ");
@@ -336,12 +359,13 @@ int main (int argc, char *argv[])
     {
       title.append (" shortGuard: true");
     }
+
   gnuplot.SetTerminal ("postscript eps color enh \"Times-BoldItalic\"");
   gnuplot.SetLegend ("SNR (dB)", "Rate (Mb/s)");
   gnuplot.SetTitle (title);
-  gnuplot.SetExtra  ("set xrange [0:50]");
-  gnuplot.SetExtra  ("set yrange [0:150]");
-  gnuplot.SetExtra  ("set key reverse left Left");
+  gnuplot.SetExtra  (xRangeStr);
+  gnuplot.AppendExtra (yRangeStr);
+  gnuplot.AppendExtra  ("set key reverse left Left");
   gnuplot.GenerateOutput (outfile);
   outfile.close ();
   return 0;

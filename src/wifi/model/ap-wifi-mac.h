@@ -30,7 +30,9 @@
 #include "vht-capabilities.h"
 #include "amsdu-subframe-header.h"
 #include "supported-rates.h"
+#include "dsss-parameter-set.h"
 #include "erp-information.h"
+#include "edca-parameter-set.h"
 #include "ns3/random-variable-stream.h"
 
 namespace ns3 {
@@ -114,6 +116,11 @@ public:
    * stations support short PLCP preamble.
    */
   bool GetShortPreambleEnabled (void) const;
+  /**
+   * Determine whether non-Greenfield HT stations are present or not.
+   */
+  bool IsNonGfHtStasPresent (void) const;
+
 
   /**
    * Assign a fixed random variable stream number to the random variables
@@ -209,11 +216,11 @@ private:
    */
   Ptr<ErpInformation> GetErpInformation (void) const;
   /**
-   * Return the HT capability of the current AP.
+   * Return the EDCA Parameter Set of the current AP.
    *
-   * \return the HT capability that we support
+   * \return the EDCA Parameter Set that we support
    */
-  Ptr<HtCapabilities> GetHtCapabilities (void) const;
+  Ptr<EdcaParameterSet> GetEdcaParameterSet (void) const;
   /**
    * Return the HT operations of the current AP.
    *
@@ -221,18 +228,18 @@ private:
    */
   Ptr<HtOperations> GetHtOperations (void) const;
   /**
-   * Return the VHT capability of the current AP.
-   *
-   * \return the VHT capability that we support
-   */
-   Ptr<VhtCapabilities> GetVhtCapabilities (void) const;
-  /**
    * Return an instance of SupportedRates that contains all rates that we support
    * including HT rates.
    *
    * \return SupportedRates all rates that we support
    */
   Ptr<SupportedRates> GetSupportedRates (void) const;
+  /**
+   * Return the DSSS Parameter Set that we support.
+   *
+   * \return the DSSS Parameter Set that we support
+   */
+  Ptr<DsssParameterSet> GetDsssParameterSet (void) const;
   /**
    * Enable or disable beacon generation of the AP.
    *

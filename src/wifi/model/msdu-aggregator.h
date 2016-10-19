@@ -63,6 +63,16 @@ public:
                           Mac48Address src, Mac48Address dest, Ptr<MacLow> maclow, Time duration) = 0;
 
   static DeaggregatedMsdus Deaggregate (Ptr<Packet> aggregatedPacket);
+  /**
+   * \param packetSize size of the packet we want to insert into <i>aggregatedPacket</i>.
+   * \param aggregatedPacket packet that will contain the packet of size <i>packetSize</i>, if aggregation is possible.
+   *
+   * \return true if the packet of size <i>packetSize</i> can be aggregated to <i>aggregatedPacket</i>,
+   *         false otherwise.
+   *
+   * This method is used to determine if a packet could be aggregated to an A-MPDU without exceeding the maximum packet size.
+   */
+  virtual bool CanBeAggregated (uint32_t packetSize, Ptr<Packet> aggregatedPacket) = 0;
 };
 
 } //namespace ns3

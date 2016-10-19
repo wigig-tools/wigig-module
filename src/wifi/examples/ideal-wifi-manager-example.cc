@@ -21,7 +21,7 @@
 // Test the operation of IdealWifiManager as the SNR is varied, and create
 // a gnuplot output file for plotting
 //
-// By default, the 802.11b standard is plotted.  Several command line
+// By default, the 802.11b standard is plotted.  Several command line 
 // arguments can change the following options:
 // --standard (802.11a, 802.11b, 802.11g, 802.11n-5GHz, 802.11n-2.4GHz, 802.11ac, 802.11-holland, 802.11-10MHz, 802.11-5MHz)
 // --shortGuard (for 802.11n/ac)
@@ -92,9 +92,9 @@ struct StandardInfo
   uint32_t m_width;
   double m_snrLow;
   double m_snrHigh;
-  double m_xMin;
-  double m_xMax;
-  double m_yMax;
+  double m_xMin; 
+  double m_xMax; 
+  double m_yMax; 
 };
 
 void
@@ -148,7 +148,7 @@ int main (int argc, char *argv[])
       NS_ABORT_MSG_IF (channelWidth != 20 && channelWidth != 22, "Invalid channel width for standard " << standard);
       NS_ABORT_MSG_IF (nss != 1, "Invalid nss for standard " << standard);
     }
- else if (standard == "802.11a" || standard == "802.11g")
+  else if (standard == "802.11a" || standard == "802.11g")
     {
       NS_ABORT_MSG_IF (channelWidth != 20, "Invalid channel width for standard " << standard);
       NS_ABORT_MSG_IF (nss != 1, "Invalid nss for standard " << standard);
@@ -205,7 +205,7 @@ int main (int argc, char *argv[])
   standards.push_back (StandardInfo ("802.11-holland", WIFI_PHY_STANDARD_holland, 20, false, 3, 27, 0, 30, 60));
   standards.push_back (StandardInfo ("802.11-10MHz", WIFI_PHY_STANDARD_80211_10MHZ, 10, false, 3, 27, 0, 30, 60));
   standards.push_back (StandardInfo ("802.11-5MHz", WIFI_PHY_STANDARD_80211_5MHZ, 5, false, 3, 27, 0, 30, 60));
-
+ 
   for (std::vector<StandardInfo>::size_type i = 0; i != standards.size(); i++)
     {
       if (standard == standards[i].m_name)
@@ -215,7 +215,7 @@ int main (int argc, char *argv[])
     }
   NS_ABORT_IF (selectedStandard.m_name == "none");
   std::cout << "Testing " << selectedStandard.m_name << "..." << std::endl;
-  NS_ABORT_MSG_IF (selectedStandard.m_snrLow >= selectedStandard.m_snrHigh, "SNR values in wrong order");
+  NS_ABORT_MSG_IF (selectedStandard.m_snrLow >= selectedStandard.m_snrHigh, "SNR values in wrong order"); 
   steps = static_cast<uint32_t> (std::floor ((selectedStandard.m_snrHigh - selectedStandard.m_snrLow )/stepSize)) + 1;
   NS_LOG_DEBUG ("Using " << steps << " steps for SNR range " << selectedStandard.m_snrLow << ":" << selectedStandard.m_snrHigh);
   Ptr<Node> clientNode = CreateObject<Node> ();
@@ -245,12 +245,12 @@ int main (int argc, char *argv[])
   WifiMacHelper wifiMac;
   wifiMac.SetType ("ns3::AdhocWifiMac");
   serverDevice = wifi.Install (wifiPhy, wifiMac, serverNode);
- clientDevice = wifi.Install (wifiPhy, wifiMac, clientNode);
+  clientDevice = wifi.Install (wifiPhy, wifiMac, clientNode);
 
-  Config::ConnectWithoutContext ("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/RemoteStationManager/$ns3::IdealWifiManager/Rate", MakeCallback(&RateChange));
+  Config::ConnectWithoutContext ("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/RemoteStationManager/$ns3::IdealWifiManager/Rate", MakeCallback(&RateChange)); 
   // Configure the mobility.
   MobilityHelper mobility;
-  Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
+ Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
   //Initial position of AP and STA
   positionAlloc->Add (Vector (ap1_x, ap1_y, 0.0));
   NS_LOG_INFO ("Setting initial AP position to " << Vector (ap1_x, ap1_y, 0.0));
@@ -266,7 +266,7 @@ int main (int argc, char *argv[])
   struct Step step;
   step.stepSize = stepSize;
   step.stepTime = stepTime;
-
+  
   // Perform post-install configuration from defaults for channel width,
   // guard interval, and nss, if necessary
   // Obtain pointer to the WifiPhy
@@ -281,7 +281,7 @@ int main (int argc, char *argv[])
   wifiPhyPtrServer->SetNumberOfTransmitAntennas (nss);
   wifiPhyPtrServer->SetNumberOfReceiveAntennas (nss);
   // Only set the channel width and guard interval for HT and VHT modes
-  if (selectedStandard.m_name == "802.11n-5GHz" ||
+  if (selectedStandard.m_name == "802.11n-5GHz" || 
       selectedStandard.m_name == "802.11n-2.4GHz" ||
       selectedStandard.m_name == "802.11ac")
     {
@@ -304,7 +304,7 @@ int main (int argc, char *argv[])
   PacketSocketHelper packetSocketHelper;
   packetSocketHelper.Install (serverNode);
   packetSocketHelper.Install (clientNode);
-
+  
   PacketSocketAddress socketAddr;
   socketAddr.SetSingleDevice (serverDevice.Get (0)->GetIfIndex ());
   if (broadcast)
@@ -326,7 +326,7 @@ int main (int argc, char *argv[])
   client->SetAttribute ("MaxPackets", UintegerValue (0));  // unlimited
   client->SetAttribute ("PacketSize", UintegerValue (packetSize));
 
-  // Set a maximum rate 10% above the yMax specified for the selected standard
+  // Set a maximum rate 10% above the yMax specified for the selected standard 
   double rate = selectedStandard.m_yMax * 1e6 * 1.10;
   double clientInterval = static_cast<double> (packetSize) * 8 / rate;
   NS_LOG_DEBUG ("Setting interval to " << clientInterval << " sec for rate of " << rate << " bits/sec");
@@ -385,3 +385,4 @@ int main (int argc, char *argv[])
 
   return 0;
 }
+

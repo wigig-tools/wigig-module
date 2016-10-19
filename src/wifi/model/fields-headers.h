@@ -1,26 +1,13 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Copyright (c) 2015, IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef FIELDS_HEADERS_H
 #define FIELDS_HEADERS_H
 
 #include "ns3/header.h"
+#include "ns3/mac48-address.h"
 
 namespace ns3 {
 
@@ -42,6 +29,7 @@ class DMG_SSW_Field : public ObjectBase
 public:
   DMG_SSW_Field ();
   ~DMG_SSW_Field ();
+
   static TypeId GetTypeId (void);
   virtual TypeId GetInstanceTypeId (void) const;
   void Print(std::ostream &os) const;
@@ -51,7 +39,6 @@ public:
 
   /**
   * Set the direction field in the SSW field.
-  *
   * \param dir 0 = the frame is transmiited by the beamforming initiator.
   *		 1 = the frame is transmiited by the beamforming responder.
   */
@@ -59,26 +46,22 @@ public:
   /**
   * Set the Count Down (CDOWN) field. the number of remaining DMG beacon frame transmissions to the end
   * of TXSS, or the number of the remaining SSW frame transmissions to the end of the TXSS/RXSS.
-  *
   * \param cdown This field is set to 0 in the last frame DMG Beacon and SSW frame transmission.
   * Possible values range from 0 to 511.
   */
   void SetCountDown (uint16_t cdown);
   /**
   * Set Sector ID (SID).
-  *
   * \param sid indicates the sector number through which the frame containing this SSW field is transmitted.
   */
   void SetSectorID (uint8_t sid);
   /**
   * Set the DMG Antenna ID.
-  *
   * \param antenna_id the DMG antenna the transmitter is currently using for this transmission.
   */
   void SetDMGAntennaID (uint8_t antenna_id);
   /**
   * Set the Receive Sector Sweep (RXSS) Length.
-  *
   * \param length the length of a receive sector sweep as required by the transmitting STA.
   * It is defined in units of a SSW frame
   */
@@ -92,26 +75,22 @@ public:
   BeamformingDirection GetDirection (void) const;
   /**
   * Get the Count Down (CDOWN) field value.
-  *
   * \return the number of remaining DMG beacon frame transmissions to the end of TXSS,
   * or the number of the remaining SSW frame transmissions to the end of the TXSS/RXSS.
   */
   uint16_t GetCountDown (void) const;
   /**
   * Get Sector ID (SID) value.
-  *
   * \return the sector number through which the frame containing this SSW field is transmitted.
   */
   uint8_t GetSectorID (void) const;
   /**
   * Get the DMG Antenna ID value.
-  *
   * \return the DMG antenna the transmitter is currently using for this transmission.
   */
   uint8_t GetDMGAntennaID (void) const;
   /**
   * Get the RXSS Length.
-  *
   * \return the length of a receive sector sweep as required by the transmitting STA.
   * It is defined in units of a SSW frame
   */
@@ -135,6 +114,8 @@ typedef enum  {
   CBAP_ALLOCATION
 } AllocationType;
 
+typedef uint8_t AllocationID;
+
 /**
  * \ingroup wifi
  * \brief Dynamic Allocation Info Field.
@@ -142,30 +123,28 @@ typedef enum  {
 class Dynamic_Allocation_Info_Field : public ObjectBase
 {
 public:
-  Dynamic_Allocation_Info_Field();
-  ~Dynamic_Allocation_Info_Field();
-  static TypeId GetTypeId(void);
-  virtual TypeId GetInstanceTypeId(void) const;
-  void Print(std::ostream &os) const;
-  uint32_t GetSerializedSize(void) const;
+  Dynamic_Allocation_Info_Field ();
+  ~Dynamic_Allocation_Info_Field ();
+
+  static TypeId GetTypeId (void);
+  virtual TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
   Buffer::Iterator Serialize (Buffer::Iterator start) const;
   Buffer::Iterator Deserialize (Buffer::Iterator start);
 
   /**
   * Set the TID field that identifies the TC or TS for the allocation request or grant.
-  *
   * \param tid The value of the Traffic Identifier field.
   */
   void SetTID (uint8_t tid);
   /**
   * Set the allocation type field.
-  *
   * \param
   */
   void SetAllocationType (AllocationType value);
   /**
   * Set Source AID.
-  *
   * \param
   */
   void SetSourceAID (uint8_t aid);
@@ -177,48 +156,20 @@ public:
   void SetDestinationAID (uint8_t aid);
   /**
   * Set the Allocation Duration.
-  *
   * \param
   */
   void SetAllocationDuration (uint16_t duration);
   /**
   * Set the Reserved Field value.
-  *
   * \param
   */
   void SetReserved (uint8_t reserved);
 
-  /**
-  *
-  *
-  * \return
-  */
   uint8_t GetTID (void) const;
-  /**
-   * @brief GetAllocationType
-   * @return
-   */
   AllocationType GetAllocationType (void) const;
-  /**
-   * @brief GetSourceAID
-   * @return
-   */
   uint8_t GetSourceAID (void) const;
-  /**
-   * @brief GetDestinationAID
-   * @return
-   */
   uint8_t GetDestinationAID (void) const;
-  /**
-   * @brief GetAllocationDuration
-   * @return
-   */
   uint16_t GetAllocationDuration (void) const;
-  /**
-  * Get the Reserved Field value.
-  *
-  * \param
-  */
   uint8_t GetReserved (void);
 
 private:
@@ -255,37 +206,31 @@ public:
   /**
   * Set the total number of sectors the initiator uses in the ISS or the ID of
   * the frame that was received with best quality in the preceding sector sweep.
-  *
   * \param value the total number of sectors the initiator uses in the ISS or the ID of the best sector.
   */
   void SetSector (uint16_t value);
   /**
   * Set the number of RX DMG Antennas in ISS or Select DMG Antenna in case
-  *
   * \param antennas the number of RX DMG antennas the initiator uses during the following RSS.
   */
   void SetDMGAntenna (uint8_t antennas);
   /**
   * Set the SNR Report in case not ISS or the reserved value in case ISS.
-  *
   * \param antennas
   */
   void SetSNRReport (uint8_t antennas);
   /**
   * Set whether a non-PCP/non-AP STA requires the PCP/AP to initiate the communication.
-  *
   * \param value
   */
   void SetPollRequired (bool value);
   /**
   * Set the value of the reserved subfield in the SSW Feedback field.
-  *
   * \param value
   */
   void SetReserved (uint8_t value);
   /**
   * Set whether the SSW Feedback Field is transmitted as part of ISS.
-  *
   * \param value True if the SSW Feedback Field is transmitted as part of ISS, otherwise false.
   */
   void IsPartOfISS (bool value);
@@ -447,6 +392,11 @@ private:
  * Beamformed Link Maintenance (8.4a.6)
  ***************************************/
 
+typedef enum {
+  UNIT_32US = 0,
+  UNIT_2000US = 1
+} BeamLinkMaintenanceUnitIndex;
+
 /**
  * \ingroup wifi
  * \brief The Beamformed Link Maintenance provides the DMG STA with the value of dot11BeamLinkMaintenanceTime.
@@ -466,45 +416,27 @@ public:
 
   /**
   * Set the encoding of the BeamLink Maintenance Unit Index.
-  *
   * \param index The encoding of the BeamLink Maintenance Unit Index.
   */
-  void SetUnitIndex (bool index);
+  void SetUnitIndex (BeamLinkMaintenanceUnitIndex index);
   /**
   * Set the number of RX DMG Antennas in ISS or Select DMG Antenna in case
-  *
   * \param value The number of RX DMG antennas the initiator uses during the following RSS.
   */
   void SetMaintenanceValue (uint8_t value);
   /**
   * Set the BeamLink isMaster field is set to 1 to indicate that the DMG STA is the
   * master of the data transfer and set to 0 if the DMG STA is a slave of the data transfer.
-  *
-  * \param value Is DMG STA is the master or not.
+  * \param value Inidicate whether the DMG STA is the master or not.
   */
-  void SetIsMaster (bool value);
+  void SetAsMaster (bool value);
 
-  /**
-  *
-  *
-  * \return
-  */
-  bool GetUnitIndex (void) const;
-  /**
-  *
-  *
-  * \return
-  */
+  BeamLinkMaintenanceUnitIndex GetUnitIndex (void) const;
   uint8_t GetMaintenanceValue (void) const;
-  /**
-  *
-  *
-  * \return
-  */
-  bool GetIsMaster (void) const;
+  bool IsMaster (void) const;
 
 private:
-  bool m_unitIndex;
+  BeamLinkMaintenanceUnitIndex m_unitIndex;
   uint8_t m_value;
   bool m_isMaster;
 

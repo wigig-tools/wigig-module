@@ -50,8 +50,11 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("Test-block-ack");
 
-int main (int argc, char const* argv[])
+int main (int argc, char * argv[])
 {
+  CommandLine cmd;
+  cmd.Parse (argc, argv);
+  
   LogComponentEnable ("EdcaTxopN", LOG_LEVEL_DEBUG);
   LogComponentEnable ("BlockAckManager", LOG_LEVEL_INFO);
  
@@ -72,7 +75,6 @@ int main (int argc, char const* argv[])
   mac.SetType ("ns3::StaWifiMac",
                "QosSupported", BooleanValue (true),
                "Ssid", SsidValue (ssid),
-               "ActiveProbing", BooleanValue (false),
   /* setting blockack threshold for sta's BE queue */
                "BE_BlockAckThreshold", UintegerValue (2),
   /* setting block inactivity timeout to 3*1024 = 3072 microseconds */

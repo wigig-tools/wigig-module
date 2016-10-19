@@ -1,20 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
+ * Copyright (c) 2016 IMDEA Networks
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef SERVICE_PERIOD_H
@@ -96,6 +82,11 @@ public:
    * packet transmission was completed unsuccessfully.
    */
   void SetTxFailedCallback (TxFailed callback);
+  /**
+   * \param callback the callback to invoke when an ACK/BlockAck
+   * is missed from the peer side
+   */
+  void SetMissedAckCallback (TxFailed callback);
   /**
    * Set WifiRemoteStationsManager this EdcaTxopN is associated to.
    *
@@ -252,15 +243,32 @@ public:
    */
   void StartAccessIfNeeded (void);
   /**
-   * Start access.
+   * Get the remaining duration in the current allocation.
+   * \return The remaining time in the current allocation.
    */
-  void StartAccess (void);
+  Time GetRemainingDuration (void) const;
   /**
-   * Initiate Transmission in this service period.
+   * Change all the packets receive address (Addr1).
+   * \param oldAddress The old receiver MAC Address.
+   * \param newAddress The new receiver MAC address.
+   */
+  void ChangePacketsAddress (Mac48Address relayAddress, Mac48Address destAddress);
+  /**
+   * ٍStart new service period.
+   * \param allocationID The ID of the current allocation.
    * \param peerStation The address of the peer station.
    * \param servicePeriodDuration The duration of this service period in microseconds.
    */
-  void InitiateTransmission (Mac48Address peerStation, Time servicePeriodDuration);
+  void StartServicePeriod (AllocationID allocationID, Mac48Address peerStation, Time servicePeriodDuration);
+  /**
+   * Initiate Transmission in this service period.
+   */
+  void InitiateTransmission (void);
+  /**
+   * Resume Transmission in this service period.
+   * \param servicePeriodDuration The duration of this service period in microseconds.
+   */
+  void ResumeTransmission (Time servicePeriodDuration);
   /**
    * SendAddBaResponse
    * \param reqHdr
@@ -342,7 +350,7 @@ public:
    * Store the packet in the internal queue until it
    * can be sent safely.
    */
-  void Queue (Ptr<const Packet> packet, const WifiMacHeader &hdr);
+  void Queue (Ptr<const Packet> packet, WifiMacHeader &hdr);
 
   void SetMsduAggregator (Ptr<MsduAggregator> aggr);
   void SetMpduAggregator (Ptr<MpduAggregator> aggr);
@@ -426,8 +434,11 @@ public:
    */
   typedef void (* AccessGrantedCallback)(Mac48Address address, uint32_t queueSize);
 
-  void AllowChannelAccess ();
-  void DisableChannelAccess ();
+  void AllowChannelAccess (void);
+  void DisableChannelAccess (void);
+  void EndCurrentServicePeriod (void);
+
+  void SetupBlockAck (uint8_t tid, Mac48Address recipient);
 
 private:
 
@@ -504,7 +515,6 @@ private:
      present, could be an A-MSDU.
    */
   Ptr<const Packet> m_currentPacket;
-
   WifiMacHeader m_currentHdr;
   Ptr<MsduAggregator> m_msduAggregator;
   Ptr<MpduAggregator> m_mpduAggregator;
@@ -521,13 +531,20 @@ private:
   struct Bar m_currentBar;
   Ptr<WifiMac> m_wifiMac;
 
+  /* Store packet and header for service period */
+  typedef std::pair<Ptr<const Packet>, WifiMacHeader> PacketInformation;
+  typedef std::map<AllocationID, PacketInformation> StoredPackets;
+  typedef StoredPackets::const_iterator StoredPacketsCI;
+  StoredPackets m_storedPackets;
+
   bool m_accessOngoing;
   bool m_accessAllowed;
-  
-  Mac48Address m_peerStation;       /* The address of the peer station. */
+  AllocationID m_allocationID;      /* Allocation ID for the current service period */
+  Mac48Address m_peerStation;       /* The address of the peer station (Destination DMG STA or Destination REDS). */
   Time m_remainingDuration;         /* The remaining duration till the end of this CBAP allocation*/
   Time m_servicePeriodDuration;     /* The total duration of the service period. */
   Time m_transmissionStarted;       /* The time of the initiation of transmission */
+  TxFailed m_missedAck;             /* Missed Ack/BlockAck from the peer station */
 
   TracedCallback<Mac48Address, uint32_t> m_accessGrantedTrace;
 

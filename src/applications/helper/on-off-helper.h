@@ -44,6 +44,10 @@ class OnOffHelper
 public:
   /**
    * Create an OnOffHelper to make it easier to work with OnOffApplications
+   */
+  OnOffHelper ();
+  /**
+   * Create an OnOffHelper to make it easier to work with OnOffApplications
    *
    * \param protocol the name of the protocol to use to send traffic
    *        by the applications. This string identifies the socket

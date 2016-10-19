@@ -64,7 +64,12 @@ QosWifiMacHelper::SetType (std::string type,
                            std::string n7, const AttributeValue &v7,
                            std::string n8, const AttributeValue &v8,
                            std::string n9, const AttributeValue &v9,
-                           std::string n10, const AttributeValue &v10)
+                           std::string n10, const AttributeValue &v10,
+                           std::string n11, const AttributeValue &v11,
+                           std::string n12, const AttributeValue &v12,
+                           std::string n13, const AttributeValue &v13,
+                           std::string n14, const AttributeValue &v14,
+                           std::string n15, const AttributeValue &v15)
 {
   m_mac.SetTypeId (type);
   m_mac.Set (n0, v0);
@@ -78,6 +83,11 @@ QosWifiMacHelper::SetType (std::string type,
   m_mac.Set (n8, v8);
   m_mac.Set (n9, v9);
   m_mac.Set (n10, v10);
+  m_mac.Set (n11, v11);
+  m_mac.Set (n12, v12);
+  m_mac.Set (n13, v13);
+  m_mac.Set (n14, v14);
+  m_mac.Set (n15, v15);
 }
 
 void

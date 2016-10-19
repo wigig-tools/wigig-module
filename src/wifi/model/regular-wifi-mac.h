@@ -1,7 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2008 INRIA
- * Copyright (c) 2015, IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,9 +15,9 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
- *          Hany Assasa <hany.assasa@gmail.com>
+ * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
+
 #ifndef REGULAR_WIFI_MAC_H
 #define REGULAR_WIFI_MAC_H
 
@@ -58,7 +57,19 @@ typedef struct {
   EventId LinkLossCountDownEvent;   //!< Event for Link Loss Timeout.
 } FstSession;
 
-typedef std::map<Mac48Address, FstSession> FstSessionMap;  //!< Map between the MAC Address of the Peer FST and FST Session ID.
+/**
+ * The current MAC state of the STA.
+ */
+enum MacState
+{
+  ASSOCIATED,
+  WAIT_PROBE_RESP,
+  WAIT_ASSOC_RESP,
+  BEACON_MISSED,
+  REFUSED
+};
+
+typedef std::map<Mac48Address, FstSession> FstSessionMap;  //!< Map between the MAC Address of the Peer FST and FST Session Variables.
 
 /** This type defines a mapping between an Access Category index,
 and a pointer to the corresponding channel access function */
@@ -195,6 +206,10 @@ public:
    */
   virtual Mac48Address GetBssid (void) const;
   /**
+   * \return Get the state of the MAC layer (Associated/MissedBeacon...)
+   */
+  virtual enum MacState GetMacState (void) const;
+  /**
    * \brief Sets the interface in promiscuous mode.
    *
    * Enables promiscuous mode on the interface. Note that any further
@@ -247,6 +262,18 @@ public:
    * \return the station manager attached to this MAC.
    */
   virtual Ptr<WifiRemoteStationManager> GetWifiRemoteStationManager (void) const;
+  /**
+   * Return the HT capability of the device.
+   *
+   * \return the HT capability that we support
+   */
+  Ptr<HtCapabilities> GetHtCapabilities (void) const;
+  /**
+   * Return the VHT capability of the device.
+   *
+   * \return the VHT capability that we support
+   */
+  Ptr<VhtCapabilities> GetVhtCapabilities (void) const;
 
   /**
    * This type defines the callback of a higher layer that a
@@ -384,6 +411,7 @@ protected:
   FstSessionMap m_fstSessionMap;
 
   Ssid m_ssid; //!< Service Set ID (SSID)
+  enum MacState m_state;
 
   /** This holds a pointer to the DCF instance for this WifiMac - used
   for transmission of frames to non-QoS peers. */
@@ -575,6 +603,24 @@ protected:
    * \return true if ERP is supported, false otherwise
    */
   bool GetErpSupported () const;
+  
+  /**
+   * This Boolean is set \c true iff this WifiMac is to model
+   * 802.11b. It is exposed through the attribute system.
+   */
+  bool m_dsssSupported;
+  /**
+   * Enable or disable DSSS support for the device.
+   *
+   * \param enable whether DSSS is supported
+   */
+  void SetDsssSupported (bool enable);
+  /**
+   * Return whether the device supports DSSS.
+   *
+   * \return true if DSSS is supported, false otherwise
+   */
+  bool GetDsssSupported () const;
   /**
    * This Boolean is set \c true if this WifiMac is to model
    * 802.11ad. It is exposed through the attribute system.

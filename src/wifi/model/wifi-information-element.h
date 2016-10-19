@@ -1,7 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2010 Dean Armstrong
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,9 +15,9 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Dean Armstrong <deanarm@gmail.com>
- *          Hany Assasa <hany.assasa@gmail.com>
+ * Author: Dean Armstrong <deanarm@gmail.com>
  */
+
 #ifndef WIFI_INFORMATION_ELEMENT_H
 #define WIFI_INFORMATION_ELEMENT_H
 
@@ -42,6 +41,7 @@ namespace ns3 {
  * declare "subclasses" of WifiInformationElement). Sorry.
  */
 typedef uint8_t WifiInformationElementId;
+
 
 /**
  * Here we have definition of all Information Element IDs in IEEE
@@ -127,6 +127,7 @@ typedef uint8_t WifiInformationElementId;
 #define IE_WAKEUP_SCHEDULE                     ((WifiInformationElementId)143)
 #define IE_EXTENDED_SCHEDULE                   ((WifiInformationElementId)144)
 #define IE_STA_AVAILABILITY                    ((WifiInformationElementId)145)
+#define IE_DMG_TSPEC                           ((WifiInformationElementId)146)
 #define IE_NEXT_DMG_ATI                        ((WifiInformationElementId)147)
 #define IE_DMG_CAPABILITIES                    ((WifiInformationElementId)148)
 #define IE_DMG_OPERATION                       ((WifiInformationElementId)151)
@@ -141,12 +142,15 @@ typedef uint8_t WifiInformationElementId;
 #define IE_DMG_LINK_MARGIN                     ((WifiInformationElementId)162)
 #define IE_SWITCHING_STREAM                    ((WifiInformationElementId)163)
 #define IE_SESSION_TRANSITION                  ((WifiInformationElementId)164)
+#define IE_DYNAMIC_TONE_PAIRING_REPORT         ((WifiInformationElementId)165)
+#define IE_CLUSTER_REPORT                      ((WifiInformationElementId)166)
 #define IE_RELAY_CAPABILITIES                  ((WifiInformationElementId)167)
 #define IE_RELAY_TRANSFER_PARAMETER_SET        ((WifiInformationElementId)168)
 #define IE_BEAMLINK_MAINENANCE                 ((WifiInformationElementId)169)
 #define IE_DMG_LINK_ADAPTATION_ACKNOWLEDGMENT  ((WifiInformationElementId)172)
 #define IE_QUIET_PERIOD_REQUEST                ((WifiInformationElementId)175)
 #define IE_QUIET_PERIOD_RESPONSE               ((WifiInformationElementId)177)
+#define IE_ECPAC_POLICY                        ((WifiInformationElementId)182)
 // 128 to 190 are reserved in 802.11-2007
 #define IE_VHT_CAPABILITIES                    ((WifiInformationElementId)191)
 #define IE_VENDOR_SPECIFIC                     ((WifiInformationElementId)221)

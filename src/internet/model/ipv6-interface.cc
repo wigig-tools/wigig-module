@@ -21,17 +21,17 @@
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/packet.h"
+#include "ns3/net-device.h"
+#include "ns3/mac16-address.h"
+#include "ns3/mac64-address.h"
 
 #include "ipv6-interface.h"
 #include "ipv6-queue-disc-item.h"
-#include "ns3/net-device.h"
 #include "loopback-net-device.h"
-#include "ns3/mac16-address.h"
-#include "ns3/mac64-address.h"
 #include "ipv6-l3-protocol.h"
 #include "icmpv6-l4-protocol.h"
+#include "ipv6-header.h"
 #include "ndisc-cache.h"
-#include "ns3/traffic-control-layer.h"
 
 namespace ns3
 {
@@ -114,7 +114,7 @@ void Ipv6Interface::DoSetup ()
         }
       else
         {
-          NS_ASSERT_MSG (false, "IPv6 autoconf for this kind of address not implemented.");
+          NS_FATAL_ERROR ("IPv6 autoconf for this kind of address not implemented.");
         }
     }
   else
@@ -299,8 +299,10 @@ Ipv6InterfaceAddress Ipv6Interface::GetAddress (uint32_t index) const
           i++;
         }
     }
-
-  NS_ASSERT_MSG (false, "Address " << index << " not found");
+  else
+    {
+      NS_FATAL_ERROR ("index " << index << " out of bounds");
+    }
   Ipv6InterfaceAddress addr;
   return addr;  /* quiet compiler */
 }
@@ -318,7 +320,7 @@ Ipv6InterfaceAddress Ipv6Interface::RemoveAddress (uint32_t index)
 
   if (m_addresses.size () < index)
     {
-      NS_ASSERT_MSG (false, "Try to remove index that don't exist in Ipv6Interface::RemoveAddress");
+      NS_FATAL_ERROR ("Removing index that does not exist in Ipv6Interface::RemoveAddress");
     }
 
   for (Ipv6InterfaceAddressListI it = m_addresses.begin (); it != m_addresses.end (); ++it)
@@ -332,8 +334,7 @@ Ipv6InterfaceAddress Ipv6Interface::RemoveAddress (uint32_t index)
 
       i++;
     }
-
-  NS_ASSERT_MSG (false, "Address " << index << " not found");
+  NS_FATAL_ERROR ("Address " << index << " not found");
   Ipv6InterfaceAddress addr;
   return addr;  /* quiet compiler */
 }

@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015 HANY ASSASA
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,6 +19,7 @@
  * Authors: Mirko Banchi <mk.banchi@gmail.com>
  *          Hany Assasa <hany.assasa@gmail.com>
  */
+
 #include "ns3/address-utils.h"
 #include "ns3/fatal-error.h"
 #include "ns3/log.h"

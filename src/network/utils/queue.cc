@@ -97,19 +97,18 @@ bool
 Queue::Enqueue (Ptr<QueueItem> item)
 {
   NS_LOG_FUNCTION (this << item);
-  Ptr<Packet> p = item->GetPacket ();
 
   if (m_mode == QUEUE_MODE_PACKETS && (m_nPackets.Get () >= m_maxPackets))
     {
       NS_LOG_LOGIC ("Queue full (at max packets) -- dropping pkt");
-      Drop (p);
+      Drop (item);
       return false;
     }
 
   if (m_mode == QUEUE_MODE_BYTES && (m_nBytes.Get () + item->GetPacketSize () > m_maxBytes))
     {
       NS_LOG_LOGIC ("Queue full (packet would exceed max bytes) -- dropping pkt");
-      Drop (p);
+      Drop (item);
       return false;
     }
 
@@ -155,6 +154,32 @@ Queue::Dequeue (void)
 
       NS_LOG_LOGIC ("m_traceDequeue (packet)");
       m_traceDequeue (item->GetPacket ());
+    }
+  return item;
+}
+
+Ptr<QueueItem>
+Queue::Remove (void)
+{
+  NS_LOG_FUNCTION (this);
+
+  if (m_nPackets.Get () == 0)
+    {
+      NS_LOG_LOGIC ("Queue empty");
+      return 0;
+    }
+
+  Ptr<QueueItem> item = DoRemove ();
+
+  if (item != 0)
+    {
+      NS_ASSERT (m_nBytes.Get () >= item->GetPacketSize ());
+      NS_ASSERT (m_nPackets.Get () > 0);
+
+      m_nBytes -= item->GetPacketSize ();
+      m_nPackets--;
+
+      Drop (item);
     }
   return item;
 }
@@ -319,15 +344,33 @@ Queue::GetMaxBytes (void) const
 }
 
 void
-Queue::Drop (Ptr<Packet> p)
+Queue::SetDropCallback (DropCallback cb)
 {
-  NS_LOG_FUNCTION (this << p);
+  m_dropCallback = cb;
+}
+
+void
+Queue::NotifyDrop (Ptr<QueueItem> item)
+{
+  NS_LOG_FUNCTION (this << item);
+
+  if (!m_dropCallback.IsNull ())
+    {
+      m_dropCallback (item);
+    }
+}
+
+void
+Queue::Drop (Ptr<QueueItem> item)
+{
+  NS_LOG_FUNCTION (this << item);
 
   m_nTotalDroppedPackets++;
-  m_nTotalDroppedBytes += p->GetSize ();
+  m_nTotalDroppedBytes += item->GetPacketSize ();
 
   NS_LOG_LOGIC ("m_traceDrop (p)");
-  m_traceDrop (p);
+  m_traceDrop (item->GetPacket ());
+  NotifyDrop (item);
 }
 
 } // namespace ns3

@@ -1,8 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2006, 2009 INRIA
+ * Copyright (c) 2005, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,7 +18,6 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *          Mirko Banchi <mk.banchi@gmail.com>
- *          Hany Assasa <hany.assasa@gmail.com>
  */
 
 #ifndef WIFI_MAC_QUEUE_H
@@ -32,6 +30,7 @@
 #include "ns3/object.h"
 #include "wifi-mac-header.h"
 #include "ns3/traced-callback.h"
+#include "ns3/traced-value.h"
 
 namespace ns3 {
 class QosBlockedDestinations;
@@ -63,6 +62,12 @@ public:
   static TypeId GetTypeId (void);
   WifiMacQueue ();
   ~WifiMacQueue ();
+
+  enum DropPolicy
+  {
+    DROP_NEWEST,
+    DROP_OLDEST
+  };
 
   /**
    * Set the maximum queue size.
@@ -251,6 +256,13 @@ public:
                                                  WifiMacHeader::AddressType type,
                                                  Mac48Address dest,
                                                  const QosBlockedDestinations *blockedPackets);
+
+  /**
+   * Check whether the queue contains packets for the provided receiver address.
+   * \param addr The MAC Address of the receiver.
+   * \return true if the queue has at least one packet for the provided receiver address.
+   */
+  bool HasPacketsForReceiver (Mac48Address addr);
   /**
    * Flush the queue.
    */
@@ -268,10 +280,21 @@ public:
    * \return the current queue size
    */
   uint32_t GetSize (void);
-
+  /**
+   * Transfer all the packets specified by the address to destination Queue.
+   * \param addr The MAC Address
+   * \param destQueue Pointer to the destination queue.
+   */
   void TransferPacketsByAddress (Mac48Address addr, Ptr<WifiMacQueue> destQueue);
+  /**
+   * Change Packets Receiver Address.
+   * \param addr The MAC address of the old receiver.
+   * \param addr The MAC address of the new receiver.
+   */
+  void ChangePacketsReceiverAddress (Mac48Address OriginalAddress, Mac48Address newAddress);
 
-  void PrintPacketInformation ();
+  void PrintPacketInformation (void);
+  void PrintPacketsPayload (void);
 
   virtual void Empty (void);
 
@@ -324,11 +347,11 @@ protected:
    */
   Mac48Address GetAddressForPacket (enum WifiMacHeader::AddressType type, PacketQueueI it);
 
-  PacketQueue m_queue; //!< Packet (struct Item) queue
-  uint32_t m_size;     //!< Current queue size
-  uint32_t m_maxSize;  //!< Queue capacity
-  Time m_maxDelay;     //!< Time to live for packets in the queue
-
+  PacketQueue m_queue;                //!< Packet (struct Item) queue
+  TracedValue<uint32_t> m_size;       //!< Current queue size
+  uint32_t m_maxSize;                 //!< Queue capacity
+  Time m_maxDelay;                    //!< Time to live for packets in the queue
+  enum DropPolicy m_dropPolicy; //!< Drop behavior of queue
   /**
    * TracedCallback signature for monitor mode transmit events.
    *
@@ -336,7 +359,6 @@ protected:
    * \param cause the reason of drop
    */
   typedef void (* PacketDropped)(const Ptr<const Packet> packet, enum QueueDropCause cause);
-
   /**
    * The trace source fired when packets coming into the device
    * are dropped at the Wifi MAC layer.

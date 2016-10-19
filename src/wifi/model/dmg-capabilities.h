@@ -1,22 +1,9 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Copyright (c) 2015, IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+
 #ifndef DMG_CAPABILITIES_H
 #define DMG_CAPABILITIES_H
 
@@ -237,34 +224,34 @@ public:
    */
   void SetRXSSTxRateSupported (bool value);
 
-  bool GetReverseDirection () const;
-  bool GetHigherLayerTimerSynchronization () const;
-  bool GetTPC () const;
-  bool GetSPSH () const;
-  uint8_t GetNumberOfRxDmgAntennas () const;
-  bool GetFastLinkAdaption () const;
-  uint8_t GetNumberOfSectors () const;
-  uint8_t GetRxssLength () const;
-  bool GetDmgAntennaReciprocity () const;
-  uint8_t GetAmpduMaximumLength () const;
-  uint8_t GetAmpduMinimumSpacing () const;
-  bool GetBaFlowControl () const;
-  uint8_t GetMaximumScRxMcs () const;
-  uint8_t GetMaximumOfdmRxMcs () const;
-  uint8_t GetMaximumScTxMcs () const;
-  uint8_t GetMaximumOfdmTxMcs () const;
-  bool GetLowPowerScSupported () const;
-  bool GetCodeRate13_16Suppoted () const;
-  bool GetDtpSupported () const;
-  bool GetAppduSupported () const;
-  bool GetHeartbeat () const;
-  bool GetSupportsOtherAid () const;
-  bool GetAntennaPatternReciprocity () const;
-  uint8_t GetHeartbeatElapsedIndication () const;
-  bool GetGrantAckSupported () const;
-  bool GetRXSSTxRateSupported () const;
+  bool GetReverseDirection (void) const;
+  bool GetHigherLayerTimerSynchronization (void) const;
+  bool GetTPC (void) const;
+  bool GetSPSH (void) const;
+  uint8_t GetNumberOfRxDmgAntennas (void) const;
+  bool GetFastLinkAdaption (void) const;
+  uint8_t GetNumberOfSectors (void) const;
+  uint8_t GetRxssLength (void) const;
+  bool GetDmgAntennaReciprocity (void) const;
+  uint8_t GetAmpduMaximumLength (void) const;
+  uint8_t GetAmpduMinimumSpacing (void) const;
+  bool GetBaFlowControl (void) const;
+  uint8_t GetMaximumScRxMcs (void) const;
+  uint8_t GetMaximumOfdmRxMcs (void) const;
+  uint8_t GetMaximumScTxMcs (void) const;
+  uint8_t GetMaximumOfdmTxMcs (void) const;
+  bool GetLowPowerScSupported (void) const;
+  bool GetCodeRate13_16Suppoted (void) const;
+  bool GetDtpSupported (void) const;
+  bool GetAppduSupported (void) const;
+  bool GetHeartbeat (void) const;
+  bool GetSupportsOtherAid (void) const;
+  bool GetAntennaPatternReciprocity (void) const;
+  uint8_t GetHeartbeatElapsedIndication (void) const;
+  bool GetGrantAckSupported (void) const;
+  bool GetRXSSTxRateSupported (void) const;
 
-  /* DMG PCP/AP Capability Info fields */
+  /***** DMG PCP/AP Capability Info fields ******/
 
   /**
    * The TDDTI (time division data transfer interval) field is set to 1 if the STA, while operating as a
@@ -278,12 +265,31 @@ public:
    * Allocations field is set to 1 only if the TDDTI field in the DMG PCP/AP Capability Information field is set
    * to 1. The Pseudo-static Allocations field is reserved if the TDDTI field in the DMG PCP/AP Capability
    * Information field is set to 0.
-   * @param pseudoStatic
+   * \param pseudoStatic
    */
   void SetPseudoStaticAllocations (bool pseudoStatic);
+  /**
+   * The PCP Handover field is set to 1 if the STA, while operating as a PCP, is capable of performing a PCP
+   * Handover as defined in 10.28.2 and is set to 0 if the STA does not support PCP Handover.
+   * \param handover
+   */
   void SetPcpHandover (bool handover);
+  /**
+   * The MAX Associated STA Number field indicates the maximum number of STAs that the STA can perform association
+   * with if operating as a PCP/AP. The value of this field includes the STAs, if any, that are colocated with
+   * the PCP/AP.
+   * \param max The maximum number of STAs that the STA can perform association with if operating as a PCP/AP.
+   */
   void SetMaxAssociatedStaNumber (uint8_t max);
+  /**
+   * \param powerSource The Power Source field is set to 0 if the STA is battery powered and is set to 1 otherwise.
+   */
   void SetPowerSource (bool powerSource);
+  /**
+   * The Decentralized PCP/AP Clustering field is set to 1 if the STA, when operating as a PCP/AP, is capable of
+   * performing Decentralized PCP/AP clustering and is set to 0 otherwise.
+   * \param decentralized
+   */
   void SetDecentralizedClustering (bool decentralized);
   /**
    * The PCP Forwarding field is set to 1 if the STA, while operating as a PCP, is capable of forwarding frames
@@ -291,23 +297,23 @@ public:
    * \param forwarding
    */
   void SetPcpForwarding (bool forwarding);
+  /**
+   * The Centralized PCP/AP Clustering field is set to 1 if the STA, when operating as a PCP/AP, is capable of
+   * performing centralized PCP/AP clustering and is set to 0 otherwise. A PCP/AP that is incapable of
+   * performing centralized PCP/AP clustering is subject to requirements as described in 9.34.2.2.
+   * \param centralized
+   */
   void SetCentralizedClustering (bool centralized);
 
-  bool GetTDDTI () const;
-  bool GetPseudoStaticAllocations () const;
-  bool GetPcpHandover () const;
-  uint8_t GetMaxAssociatedStaNumber () const;
-  bool GetPowerSource () const;
-  bool GetDecentralizedClustering () const;
-  bool GetPcpForwarding () const;
-  bool GetCentralizedClustering () const;
+  bool GetTDDTI (void) const;
+  bool GetPseudoStaticAllocations (void) const;
+  bool GetPcpHandover (void) const;
+  uint8_t GetMaxAssociatedStaNumber (void) const;
+  bool GetPowerSource (void) const;
+  bool GetDecentralizedClustering (void) const;
+  bool GetPcpForwarding (void) const;
+  bool GetCentralizedClustering (void) const;
 
-  /*
-   * This information element is a bit special in that it is only
-   * included if the STA is an VHT STA. To support this we
-   * override the Serialize and GetSerializedSize methods of
-   * WifiInformationElement.
-   */
   Buffer::Iterator Serialize (Buffer::Iterator start) const;
   uint16_t GetSerializedSize () const;
 
@@ -315,7 +321,7 @@ private:
   Mac48Address m_staAddress;
   uint8_t m_aid;
 
-  /* DMG STA Capability Info fields */
+  /** DMG STA Capability Info fields **/
   bool m_reverseDirection;
   bool m_higherLayerTimerSynchronziation;
   bool m_tpc;
@@ -345,7 +351,7 @@ private:
   bool m_GrantAckSupported;
   bool m_RxssTxRateSupported;
 
-  /* DMG PCP/AP Capability Info fields */
+  /** DMG PCP/AP Capability Info fields **/
   bool m_tddti;
   bool m_pseudoStaticAllocations;
   bool m_pcpHandover;

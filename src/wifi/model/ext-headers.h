@@ -1,21 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Copyright (c) 2015, IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef EXT_HEADERS_H
 #define EXT_HEADERS_H
@@ -27,6 +13,7 @@
 #include "dmg-capabilities.h"
 #include "dmg-information-elements.h"
 #include "fields-headers.h"
+#include "ssid.h"
 
 namespace ns3 {
 
@@ -93,45 +80,6 @@ private:
 
 };
 
-/******************************************
-*  Relay Capable STA Info Field (8.4.1.44)
-*******************************************/
-
-/**
- * \ingroup wifi
- * Implement the header for Relay Capable STA Info Field.
- */
-class ExtRelayCapableStaInfo : public SimpleRefCount<ExtRelayCapableStaInfo>
-{
-public:
-  ExtRelayCapableStaInfo (void);
-  virtual ~ExtRelayCapableStaInfo (void);
-
-  void Print (std::ostream &os) const;
-  uint32_t GetSerializedSize (void) const;
-  Buffer::Iterator Serialize (Buffer::Iterator start) const;
-  Buffer::Iterator Deserialize (Buffer::Iterator start);
-
-  /**
-   * Set the AID of the relay capable STA that is associated with the PCP or AP.
-   * \param aid
-   */
-  void SetStaAid (uint8_t aid);
-  /**
-   * Set the Relay Capabilities Info field.
-   * \param element
-   */
-  void SetStaCapabilitiesInfo (RelayCapabilitiesInfo &element);
-
-  uint8_t GetStaAid (void) const;
-  RelayCapabilitiesInfo GetStaCapabilitiesInfo (void) const;
-
-private:
-  uint8_t m_aid;                            //!< STA AID.
-  RelayCapabilitiesInfo m_capabilities;     //!< Relay Capabilities Element.
-
-};
-
 enum BSSType
 {
   Reserved = 0,
@@ -153,6 +101,7 @@ class ExtDMGParameters : public ObjectBase
 public:
   ExtDMGParameters ();
   ~ExtDMGParameters ();
+
   static TypeId GetTypeId (void);
   virtual TypeId GetInstanceTypeId (void) const;
   void Print (std::ostream &os) const;
@@ -360,50 +309,6 @@ private:
 };
 
 /******************************************
-* Beacon Clustering Control Field (8-34c&d)
-*******************************************/
-
-/**
- * \ingroup wifi
- * Implement the header for Beacon Interval Control Field.
- */
-class ExtDMGClusteringControlField : public ObjectBase
-{
-public:
-  ExtDMGClusteringControlField ();
-  ~ExtDMGClusteringControlField ();
-
-  static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  void Print (std::ostream &os) const;
-  uint32_t GetSerializedSize (void) const;
-  Buffer::Iterator Serialize (Buffer::Iterator start) const;
-  Buffer::Iterator Deserialize (Buffer::Iterator start);
-
-  void SetDiscoveryMode (bool value);
-  bool GetDiscoveryMode (void) const;
-
-  void SetABFT_ResponderAddress (Mac48Address address);
-  void SetReserved (uint16_t value);
-
-  Mac48Address GetABFT_ResponderAddress (void) const;
-  uint16_t GetReserved () const;
-
-private:
-  bool m_discoveryMode;
-  /* With Discovery Mode Disabled */
-  uint8_t m_beaconSpDuration;
-  uint64_t m_clusterID;
-  uint8_t m_clusterMemberRole;
-  uint8_t m_clusterMaxMem;
-
-  /* With Discovery Mode Enabled */
-  Mac48Address m_responderAddress;
-  uint16_t m_reserved;
-
-};
-
-/******************************************
 *	     DMG Beacon (8.3.4.1)
 *******************************************/
 
@@ -460,11 +365,11 @@ public:
   */
   void SetDMGParameters (ExtDMGParameters &parameters);
   /**
-  * Set DMG Cluster Control Field
+  * Set the Service Set Identifier (SSID)
   *
-  * \param The DMG Cluster Control Field.
+  * \param ssid SSID.
   */
-  void SetClusterControlField (ExtDMGClusteringControlField &cluster);
+  void SetSsid (Ssid ssid);
 
   /**
   * Return the Service Set Identifier (SSID).
@@ -503,11 +408,11 @@ public:
   */
   ExtDMGParameters GetDMGParameters (void) const;
   /**
-  * Get DMG Cluster Control Field
-  *
-  * \return The DMG Cluster Control Field.
-  */
-  ExtDMGClusteringControlField GetClusterControlField (void) const;
+   * Return the Service Set Identifier (SSID).
+   *
+   * \return SSID
+   */
+  Ssid GetSsid (void) const;
 
   static TypeId GetTypeId (void);
   virtual TypeId GetInstanceTypeId (void) const;
@@ -523,7 +428,7 @@ private:
   uint64_t m_beaconInterval;                              //!< Beacon Interval.
   ExtDMGBeaconIntervalCtrlField m_beaconIntervalCtrl;     //!< Beacon Interval Control.
   ExtDMGParameters m_dmgParameters;                       //!< DMG Parameters.
-  ExtDMGClusteringControlField m_cluster;                 //!< Cluster Control Field.
+  Ssid m_ssid;                                            //!< Service set ID (SSID)
 
 };
 

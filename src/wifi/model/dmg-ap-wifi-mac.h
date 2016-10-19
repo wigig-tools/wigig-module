@@ -1,21 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Author: Hany Assasa <hany.assasa@hotmail.com>
  */
 #ifndef DMG_AP_WIFI_MAC_H
 #define DMG_AP_WIFI_MAC_H
@@ -27,6 +13,13 @@
 #include "dmg-wifi-mac.h"
 
 namespace ns3 {
+
+#define TU                      1024            /* Time Unit defined in 802.11 std */
+#define aMaxBIDuration          TU * 1024       /* Maximum BI Duration Defined in 802.11ad */
+#define aMinChannelTime         aMaxBIDuration  /* Minimum Channel Time for Clustering */
+#define aMinSSSlotsPerABFT      1               /* Minimum Number of Sector Sweep Slots Per A-BFT */
+#define aSSFramesPerSlot        8               /* Number of SSW Frames per Sector Sweep Slot */
+#define aDMGPPMinListeningTime  150             /* The minimum time between two adjacent SPs with the same source or destination AIDs*/
 
 /**
  * \brief Wi-Fi DMG AP state machine
@@ -94,73 +87,63 @@ public:
    */
   Time GetBeaconTransmissionInterval (void) const;
   /**
-   * Assign a fixed random variable stream number to the random variables
-   * used by this model. Return the number of streams (possibly zero) that
-   * have been assigned.
-   *
-   * \param stream first stream index to use
-   * \return the number of stream indices assigned by this model
+   * Allocate CBAP period to be announced in DMG Beacon or Announce Frame.
+   * \param staticAllocation Is the allocation static.
+   * \param allocationStart The start time of the allocation relative to the beginning of DTI.
+   * \param blockDuration The duration of the allocation period.
+   * \return The start of the next allocation period.
    */
-  int64_t AssignStreams (int64_t stream);
-
-  void SetDMGAntennaCount (uint8_t antennas);
-  void SetDMGSectorCount (uint8_t sectors);
-
-  uint8_t GetDMGAntennaCount (void) const;
-  uint8_t GetDMGSectorCount (void) const;
-
-  Time GetBTIRemainingTime (void) const;
-  Ptr<MultiBandElement> GetMultiBandElement (void) const;
+  uint32_t AllocateCbapPeriod (bool staticAllocation, uint32_t allocationStart, uint16_t blockDuration);
   /**
-   * Add an allocation period to be announced in DMG Beacon or Announce Frame.
+   * Add a new allocation period to be announced in DMG Beacon or Announce Frame.
+   * \param allocationID The unique identifier o
    * \param allocationType The type of the allocation (CBAP or SP).
    * \param staticAllocation Is the allocation static.
    * \param sourceAid The AID of the source DMG STA.
    * \param destAid The AID of the destination DMG STA.
    * \param allocationStart The start time of the allocation relative to the beginning of DTI.
    * \param blockDuration The duration of the allocation period.
+   * \return The start of the next allocation period.
    */
-  void AddAllocationPeriod (AllocationType allocationType, bool staticAllocation,
-                            uint8_t sourceAid, uint8_t destAid,
-                            uint32_t allocationStart, uint16_t blockDuration);
+  uint32_t AddAllocationPeriod (AllocationID allocationID,
+                                AllocationType allocationType, bool staticAllocation,
+                                uint8_t sourceAid, uint8_t destAid,
+                                uint32_t allocationStart, uint16_t blockDuration);
   /**
    * AllocateBeamformingServicePeriod
    * \param sourceAid The AID of the source DMG STA.
    * \param destAid The AID of the destination DMG STA.
    * \param allocationStart The start time of the allocation relative to the beginning of DTI.
    * \param isTxss Is the Beamforming TxSS or RxSS.
+   * \return The start of the next allocation period.
    */
-  void AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destAid,
-                                         uint32_t allocationStart, bool isTxss);
+  uint32_t AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destAid,
+                                             uint32_t allocationStart, bool isTxss);
 
 protected:
+  friend class DmgBeaconDca;
+
+  Time GetBTIRemainingTime (void) const;
+
+private:
   virtual void DoDispose (void);
   virtual void DoInitialize (void);
 
+  void StartBeaconInterval (void);
   void StartBeaconTransmissionInterval (void);
   void StartAssociationBeamformTraining (void);
-  /**
-   * Start A-BFT Sector Sweep Slot.
-   */
-  void StartSectorSweepSlot (void);
   void StartAnnouncementTransmissionInterval (void);
   void StartDataTransmissionInterval (void);
   void FrameTxOk (const WifiMacHeader &hdr);
-  /**
-   * Establish BRP Setup Subphase
-   */
-  void DoBrpSetupSubphase (void);
   virtual void BrpSetupCompleted (Mac48Address address);
   virtual void NotifyBrpPhaseCompleted (void);
-
-private:
   virtual void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
   /**
    * The packet we sent was successfully received by the receiver
    * (i.e. we received an ACK from the receiver). If the packet
    * was an association response to the receiver, we record that
    * the receiver is now associated with us.
-   * 
+   *
    * \param hdr the header of the packet that we successfully sent
    */
   virtual void TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr);
@@ -172,7 +155,7 @@ private:
    *
    * \param hdr the header of the packet that we failed to sent
    */
-  virtual void TxFailed(const WifiMacHeader &hdr);
+  virtual void TxFailed (const WifiMacHeader &hdr);
   /**
    * This method is called to de-aggregate an A-MSDU and forward the
    * constituent packets up the stack. We override the WifiMac version
@@ -183,6 +166,15 @@ private:
    * \param hdr a pointer to the MAC header for \c aggregatedPacket.
    */
   virtual void DeaggregateAmsduAndForward (Ptr<Packet> aggregatedPacket, const WifiMacHeader *hdr);
+  Ptr<MultiBandElement> GetMultiBandElement (void) const;
+  /**
+   * Start A-BFT Sector Sweep Slot.
+   */
+  void StartSectorSweepSlot (void);
+  /**
+   * Establish BRP Setup Subphase
+   */
+  void DoBrpSetupSubphase (void);
   /**
    * Forward the packet down to DCF/EDCAF (enqueue the packet). This method
    * is a wrapper for ForwardDown with traffic id.
@@ -216,21 +208,6 @@ private:
    * \param success indicates whether the association was successful or not
    */
   void SendAssocResp (Mac48Address to, bool success);
-
-  /**
-   * Start Polling Phase.
-   */
-  void StartPollingPhase (void);
-  /**
-   * Send Poll Frame
-   * \param to
-   */
-  void SendPollFrame (Mac48Address to);
-  /**
-   * Send Grant Frame.
-   * \param to
-   */
-  void SendGrantFrame (Mac48Address to);
   /**
    * Send Announce Frame
    * \param to
@@ -262,26 +239,26 @@ private:
    * Cleanup non-static allocations.
    */
   void CleanupAllocations (void);
-
   /**
    * Send One DMG Beacon Frame with the provided arguments.
-   * \param antennaID The ID of the current ID.
+   * \param antennaID The ID of the current Antenna.
    * \param sectorID The ID of the current sector in the antenna.
    * \param count Number of remaining DMG Beacons till the end of BTI.
    */
   void SendOneDMGBeacon (uint8_t sectorID, uint8_t antennaID, uint16_t count);
 
-  /* BTI Period Variables */
+  /** BTI Period Variables **/
   Ptr<DmgBeaconDca> m_beaconDca;        //!< Dedicated DcaTxop for beacons.
   EventId m_beaconEvent;		//!< Event to generate one beacon.
-
-  bool m_atiPresent;                    //!< Flag to indicate whether ATI is present or not.
   DcfManager *m_beaconDcfManager;       //!< DCF manager (access to channel)
   Time m_btiRemaining;                  //!< Remaining Time to the end of the current BTI.
   Time m_beaconTransmitted;             //!< The time at which we transmitted DMG Beacon.
+  std::vector<ANTENNA_CONFIGURATION> m_antennaConfigurationTable; //! Table with the current antenna configuration.
+  uint32_t m_antennaConfigurationIndex; //! Index of the current antenna configuration.
+  uint32_t m_antennaConfigurationOffset;//! The first antenna configuration to start BTI with.
+  bool m_beaconRandomization;           //!< Flag to indicate whether we want to randomize selection of DMG Beacon at each BI.
 
   /** A-BFT Access Period Variables **/
-  uint8_t m_nextAbft;                   //!< The value of the next A-BFT in DMG Beacon.
   uint8_t m_abftPeriodicity;            //!< The periodicity of the A-BFT in DMG Beacon.
   /* Ensure only one DMG STA is communicating with us during A-BFT slot */
   bool m_receivedOneSSW;
@@ -295,9 +272,23 @@ private:
   STATION_BRP_MAP m_stationBrpMap;      //!< Map to indicate if a station has conducted BRP Phase or not.
   uint16_t m_aidCounter;                //!< Association Identifier.
 
+  /**
+   * Type definition for storing IEs of the associated stations.
+   */
   typedef std::map<Mac48Address, WifiInformationElementMap> AssociatedStationsInfoByAddress;
   AssociatedStationsInfoByAddress m_associatedStationsInfoByAddress;
   std::map<uint16_t, WifiInformationElementMap> m_associatedStationsInfoByAid;
+
+  /**
+   * TracedCallback signature for DTI access period start event.
+   *
+   * \param address The MAC address of the station.
+   * \param duration The duration of the DTI period.
+   */
+  typedef void (* DtiStartedCallback)(Mac48Address address, Time duration);
+
+  TracedCallback<Mac48Address> m_biStarted;         //!< New BI Started has started.
+  TracedCallback<Mac48Address, Time> m_dtiStarted;  //!< DTI Started has started.
 
 };
 

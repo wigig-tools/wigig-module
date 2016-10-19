@@ -1,22 +1,9 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+
 #ifndef DMG_INFORMATION_ELEMENTS_H
 #define DMG_INFORMATION_ELEMENTS_H
 
@@ -76,7 +63,6 @@ enum TimeoutIntervalType
   KeyLifetimeInterval = 2,
   AssociationComebackTime = 3,
 };
-
 /**
  * \ingroup wifi
  *
@@ -418,7 +404,7 @@ public:
   Buffer::Iterator Serialize (Buffer::Iterator start) const;
   Buffer::Iterator Deserialize (Buffer::Iterator start);
 
-  void SetAllocationID (uint8_t id);
+  void SetAllocationID (AllocationID id);
   void SetAllocationType (AllocationType type);
   void SetAsPseudoStatic (bool value);
   void SetAsTruncatable (bool value);
@@ -426,7 +412,7 @@ public:
   void SetPcpActive (bool value);
   void SetLpScUsed (bool value);
 
-  uint8_t GetAllocationID (void) const;
+  AllocationID GetAllocationID (void) const;
   AllocationType GetAllocationType (void) const;
   bool IsPseudoStatic (void) const;
   bool IsTruncatable (void) const;
@@ -490,18 +476,18 @@ public:
 
 private:
   /* Allocation Control Subfield*/
-  uint8_t m_allocationID;                 //!< Allocation ID
-  uint8_t m_allocationType;               //!< Allocation Type
-  bool m_pseudoStatic;                    //!< Pseudostatic
-  bool m_truncatable;                     //!< Truncatable
-  bool m_extendable;                      //!< Extendable
-  bool m_pcpActive;                       //!< PCP Active
-  bool m_lpScUsed;                        //!< Low Power SC.
+  AllocationID m_allocationID;            //!< Allocation ID.
+  uint8_t m_allocationType;               //!< Allocation Type.
+  bool m_pseudoStatic;                    //!< Pseudostatic Allocation.
+  bool m_truncatable;                     //!< Truncatable service period.
+  bool m_extendable;                      //!< Extendable service period.
+  bool m_pcpActive;                       //!< PCP Active.
+  bool m_lpScUsed;                        //!< Low Power SC Operation.
 
   BF_Control_Field m_bfControl;           //!< BF Control.
-  uint8_t m_SourceAid;                   //!< Source STA AID.
-  uint8_t m_destinationAid;              //!< Destination STA AID.
-  uint16_t m_allocationStart;             //!< Allocation Start.
+  uint8_t m_SourceAid;                    //!< Source STA AID.
+  uint8_t m_destinationAid;               //!< Destination STA AID.
+  uint32_t m_allocationStart;             //!< Allocation Start.
   uint16_t m_allocationBlockDuration;     //!< Allocation Block Duration.
   uint8_t m_numberOfBlocks;               //!< Number of Blocks.
   uint16_t m_allocationBlockPeriod;       //!< Allocation Block Period.
@@ -615,10 +601,25 @@ public:
   void SerializeInformationField (Buffer::Iterator start) const;
   uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
 
-  void AddStaAvailabilityElement (StaInfoField &field);
-  void SetAllocationFieldList (const StaInfoFieldList &list);
-
-  StaInfoFieldList GetAllocationFieldList (void) const;
+  /**
+   * Add STA Info Field.
+   * \param field The STA Information Field.
+   */
+  void AddStaInfo (StaInfoField &field);
+  /**
+   * Set the STA Info list to be sent by the PCP/AP.
+   * \param list The STA Info list.
+   */
+  void SetStaInfoList (const StaInfoFieldList &list);
+  /**
+   * \return The list of STA Info sent by the PCP/AP.
+   */
+  StaInfoFieldList GetStaInfoList (void) const;
+  /**
+   * This function returns the first STA Info Field in the list (Used by the PCP/AP to obtain information about the STA).
+   * \return
+   */
+  StaInfoField GetStaInfoField (void) const;
 
 private:
   StaInfoFieldList m_list;
@@ -629,6 +630,164 @@ std::ostream &operator << (std::ostream &os, const StaAvailabilityElement &eleme
 std::istream &operator >> (std::istream &is, StaAvailabilityElement &element);
 
 ATTRIBUTE_HELPER_HEADER (StaAvailabilityElement)
+
+/*********************************************
+*  DMG Allocation Info Field Format (8-401af)
+**********************************************/
+
+typedef enum {
+  ISOCHRONOUS = 0,
+  ASYNCHRONOUS = 1
+} AllocationFormat;
+
+/**
+ * \ingroup wifi
+ * Implement the header for DMG Allocation Info Field.
+ */
+class DmgAllocationInfo
+{
+public:
+  DmgAllocationInfo ();
+
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  Buffer::Iterator Serialize (Buffer::Iterator start) const;
+  Buffer::Iterator Deserialize (Buffer::Iterator start);
+
+  void SetAllocationID (AllocationID id);
+  void SetAllocationType (AllocationType type);
+  void SetAllocationFormat (AllocationFormat format);
+  void SetAsPseudoStatic (bool value);
+  void SetAsTruncatable (bool value);
+  void SetAsExtendable (bool value);
+  void SetLpScUsed (bool value);
+  void SetUp (uint8_t value);
+  void SetDestinationAid (uint8_t aid);
+
+  AllocationID GetAllocationID (void) const;
+  AllocationType GetAllocationType (void) const;
+  AllocationFormat GetAllocationFormat (void) const;
+  bool IsPseudoStatic (void) const;
+  bool IsTruncatable (void) const;
+  bool IsExtendable (void) const;
+  bool IsLpScUsed (void) const;
+  uint8_t GetUp (void) const;
+  uint8_t GetDestinationAid (void) const;
+
+private:
+  AllocationID m_allocationID;            //!< Allocation ID.
+  uint8_t m_allocationType;               //!< Allocation Type.
+  uint8_t m_allocationFormat;             //!< Allocation Format.
+  bool m_pseudoStatic;                    //!< Pseudostatic Allocation.
+  bool m_truncatable;                     //!< Truncatable service period.
+  bool m_extendable;                      //!< Extendable service period.
+  bool m_lpScUsed;                        //!< Low Power SC Operation.
+  uint8_t m_up;                           //!< User Priority.
+  uint8_t m_destAid;                      //!< Destination Association Identifier.
+
+};
+
+/**
+ * \ingroup wifi
+ * Implement the header for Constraint subfield format (Figure 8-401ah).
+ */
+class ConstraintSubfield
+{
+public:
+  ConstraintSubfield ();
+
+  uint32_t GetSerializedSize (void) const;
+  Buffer::Iterator Serialize (Buffer::Iterator start) const;
+  Buffer::Iterator Deserialize (Buffer::Iterator start);
+
+  /**
+   * The TSCONST Start Time field contains the lower 4 octets of the TSF at the time the scheduling constraint starts.
+   * \param time The start time of the traffic scheduling contraint.
+   */
+  void SetStartStartTime (uint32_t time);
+  /**
+   * The TSCONST Duration field indicates the time, in microseconds, for which the scheduling constraint is specified.
+   * \param duration The duration of the traffic scheduling contraint in microseconds.
+   */
+  void SetDuration (uint16_t duration);
+
+  void SetPeriod (uint16_t period);
+  /**
+   * The Interferer MAC Address field is set to the value of the TA field within a frame received during the
+   * interval of time indicated by this TSCONST field. If the value is unknown, the Interferer MAC Address field
+   * is set to the broadcast MAC address.
+   * \param address The MAC address of the Interferer.
+   */
+  void SetInterfererAddress (Mac48Address address);
+
+  uint32_t GetStartStartTime (void) const;
+  uint16_t GetDuration (void) const;
+  uint16_t GetPeriod (void) const;
+  Mac48Address GetInterfererAddress (void) const;
+
+private:
+  uint32_t m_startTime;           //!< Start Time.
+  uint16_t m_duration;            //!< Duration in MicroSeconds.
+  uint16_t m_period;              //!< Period in MicroSeconds.
+  Mac48Address m_address;         //!< Interferer MAC address.
+
+};
+
+typedef std::vector<ConstraintSubfield> ConstraintList;
+typedef ConstraintList::const_iterator ConstraintListCI;
+
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11ad DMG TSPEC element 8.4.2.136
+ *
+ * The DMG TSPEC element is present in the ADDTS Request frame sent by a non-PCP/non-AP DMG STA
+ * and contains the set of parameters needed to create or modify an airtime allocation. The DMG TSPEC
+ * element is also present in the ADDTS Response frame sent by a DMG PCP/AP and reflects the parameters,
+ * possibly modified, by which the allocation was created.
+ */
+class DmgTspecElement : public WifiInformationElement
+{
+public:
+  DmgTspecElement ();
+
+  WifiInformationElementId ElementId () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  void SetDmgAllocationInfo (DmgAllocationInfo &info);
+  void SetBfControl (BF_Control_Field &ctrl);
+  void SetAllocationPeriod (uint16_t period);
+  void SetMinimumAllocation (uint16_t min);
+  void SetMaximumAllocation (uint16_t max);
+  void SetMinimumDuration (uint16_t duration);
+  void AddTrafficSchedulingConstraint (ConstraintSubfield &constraint);
+
+  DmgAllocationInfo GetDmgAllocationInfo (void) const;
+  BF_Control_Field GetBfControl (void) const;
+  uint16_t GetAllocationPeriod (void) const;
+  uint16_t GetMinimumAllocation (void) const;
+  uint16_t GetMaximumAllocation (void) const;
+  uint16_t GetMinimumDuration (void) const;
+  uint8_t GetNumberOfConstraints (void) const;
+  ConstraintList GetConstraintList (void) const;
+
+private:
+  DmgAllocationInfo m_dmgAllocationInfo;
+  BF_Control_Field m_bfControlField;
+  uint16_t m_allocationPeriod;
+  uint16_t m_minAllocation;
+  uint16_t m_maxAllocation;
+  uint16_t m_minDuration;
+  ConstraintList m_constraintList;
+
+};
+
+std::ostream &operator << (std::ostream &os, const DmgTspecElement &element);
+std::istream &operator >> (std::istream &is, DmgTspecElement &element);
+
+ATTRIBUTE_HELPER_HEADER (DmgTspecElement)
 
 /**
  * \ingroup wifi
@@ -850,7 +1009,7 @@ public:
   /**
    * Set the Multi-band Connection Capability. The Multi-band Connection Capability field indicates the
    * connection capabilities supported by the STA on the channel and band indicated in this element.
-   * @param capability
+   * \param capability
    */
   void SetConnectionCapability (uint8_t capability);
   void SetFstSessionTimeout (uint8_t timeout);
@@ -1221,9 +1380,6 @@ public:
   Band GetNewBand (void) const;
   Band GetOldBand (void) const;
 
-  Buffer::Iterator Serialize (Buffer::Iterator start) const;
-  uint16_t GetSerializedSize () const;
-
 private:
   uint32_t m_fstsID;
   SessionType m_sessionType;
@@ -1238,13 +1394,11 @@ std::istream &operator >> (std::istream &is, SessionTransitionElement &element);
 
 ATTRIBUTE_HELPER_HEADER (SessionTransitionElement)
 
-typedef enum
-{
-  RELAY_FD_AF = 1, /* Full Duplex, Amplify and Forward */
-  RELAY_HD_DF = 2, /* Half Duplex, Decode and Forward */
+typedef enum {
+  RELAY_FD_AF = 1,  /* Full Duplex, Amplify and Forward */
+  RELAY_HD_DF = 2,  /* Half Duplex, Decode and Forward */
   RELAY_BOTH = 3
 } RelayDuplexMode;
-
 
 /**
  * \ingroup wifi

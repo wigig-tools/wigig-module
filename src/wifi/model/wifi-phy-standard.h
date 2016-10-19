@@ -52,7 +52,9 @@ enum WifiPhyStandard
   /** PHY for 802.11ad (Clause 21) */
   WIFI_PHY_STANDARD_80211ad,
   /** VHT OFDM PHY (clause 22) */
-  WIFI_PHY_STANDARD_80211ac
+  WIFI_PHY_STANDARD_80211ac,
+  /** Unspecified */
+  WIFI_PHY_STANDARD_UNSPECIFIED
 };
 
 /**

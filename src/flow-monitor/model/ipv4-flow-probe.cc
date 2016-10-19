@@ -104,6 +104,8 @@ public:
    *
    * This check is important for IP over IP encapsulation.
    *
+   * \param src Source address.
+   * \param dst Destination address.
    * \returns True if the addresses are matching.
    */
   bool IsSrcDstValid (Ipv4Address src, Ipv4Address dst) const;
@@ -249,6 +251,10 @@ Ipv4FlowProbe::Ipv4FlowProbe (Ptr<FlowMonitor> monitor,
     {
       NS_FATAL_ERROR ("trace fail");
     }
+
+  std::ostringstream qd;
+  qd << "/NodeList/" << node->GetId () << "/$ns3::TrafficControlLayer/RootQueueDiscList/*/Drop";
+  Config::ConnectWithoutContext (qd.str (), MakeCallback (&Ipv4FlowProbe::QueueDiscDropLogger, Ptr<Ipv4FlowProbe> (this)));
 
   // code copied from point-to-point-helper.cc
   std::ostringstream oss;
@@ -459,6 +465,27 @@ Ipv4FlowProbe::QueueDropLogger (Ptr<const Packet> ipPayload)
                         << "); ");
 
   m_flowMonitor->ReportDrop (this, flowId, packetId, size, DROP_QUEUE);
+}
+
+void
+Ipv4FlowProbe::QueueDiscDropLogger (Ptr<const QueueItem> item)
+{
+  Ipv4FlowProbeTag fTag;
+  bool tagFound = item->GetPacket ()->FindFirstMatchingByteTag (fTag);
+
+  if (!tagFound)
+    {
+      return;
+    }
+
+  FlowId flowId = fTag.GetFlowId ();
+  FlowPacketId packetId = fTag.GetPacketId ();
+  uint32_t size = fTag.GetPacketSize ();
+
+  NS_LOG_DEBUG ("Drop ("<<this<<", "<<flowId<<", "<<packetId<<", "<<size<<", " << DROP_QUEUE_DISC
+                        << "); ");
+
+  m_flowMonitor->ReportDrop (this, flowId, packetId, size, DROP_QUEUE_DISC);
 }
 
 } // namespace ns3

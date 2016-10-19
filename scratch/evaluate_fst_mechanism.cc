@@ -1,29 +1,14 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
-#include "ns3/cone-antenna.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/wifi-module.h"
+#include "common-functions.h"
 
 /**
  * This script is used to evaluate IEEE 802.11ad Fast Session Transfer Mechanism with the presence of blockage.
@@ -70,51 +55,6 @@ CalculateThroughput ()
   Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
 }
 
-void
-PopulateArpCache (void)
-{
-  Ptr<ArpCache> arp = CreateObject<ArpCache> ();
-  arp->SetAliveTimeout (Seconds (3600 * 24 * 365));
-
-  for (NodeList::Iterator i = NodeList::Begin (); i != NodeList::End (); ++i)
-    {
-      Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol> ();
-      NS_ASSERT (ip != 0);
-      ObjectVectorValue interfaces;
-      ip->GetAttribute ("InterfaceList", interfaces);
-      for (ObjectVectorValue::Iterator j = interfaces.Begin (); j != interfaces.End (); j ++)
-        {
-          Ptr<Ipv4Interface> ipIface = (j->second)->GetObject<Ipv4Interface> ();
-          NS_ASSERT (ipIface != 0);
-          Ptr<NetDevice> device = ipIface->GetDevice ();
-          NS_ASSERT (device != 0);
-          Mac48Address addr = Mac48Address::ConvertFrom(device->GetAddress ());
-          for (uint32_t k = 0; k < ipIface->GetNAddresses (); k++)
-            {
-              Ipv4Address ipAddr = ipIface->GetAddress (k).GetLocal ();
-              if (ipAddr == Ipv4Address::GetLoopback ())
-                continue;
-              ArpCache::Entry *entry = arp->Add (ipAddr);
-              entry->MarkWaitReply (0);
-              entry->MarkAlive (addr);
-            }
-        }
-    }
-
-  for (NodeList::Iterator i = NodeList::Begin (); i != NodeList::End (); ++i)
-    {
-      Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol> ();
-      NS_ASSERT (ip != 0);
-      ObjectVectorValue interfaces;
-      ip->GetAttribute("InterfaceList", interfaces);
-      for(ObjectVectorValue::Iterator j = interfaces.Begin (); j != interfaces.End (); j ++)
-        {
-          Ptr<Ipv4Interface> ipIface = (j->second)->GetObject<Ipv4Interface> ();
-          ipIface->SetAttribute ("ArpCache", PointerValue (arp));
-        }
-    }
-}
-
 /**
  * Insert Blockage
  * \return The actual value of the blockage we introduce in the simulator.
@@ -142,7 +82,6 @@ main(int argc, char *argv[])
 {
   uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
   string dataRate = "100Mbps";                  /* Application Layer Data Rate. */
-  uint32_t aggregationType = 0;                 /* Level of packet aggregation. */
   uint32_t queueSize = 1000;                    /* Wifi Mac Queue Size. */
   string adPhyMode = "DMG_MCS24";               /* Type of the 802.11ad Physical Layer. */
   string nPhyMode = "HtMcs7";                   /* Type of the 802.11n Physical Layer. */
@@ -154,7 +93,6 @@ main(int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
   cmd.AddValue ("dataRate", "Payload size in bytes", dataRate);
-  cmd.AddValue ("aggregationType", "Level of Aggregation: 0=No, 1=A-MSDU, 2=A-MPDU, 3=TwoLevel", aggregationType);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
   cmd.AddValue ("blockageValue", "The amount of attenuation in [dBm] the blockage adds", m_blockageValue);
   cmd.AddValue ("llt", "LLT", llt);

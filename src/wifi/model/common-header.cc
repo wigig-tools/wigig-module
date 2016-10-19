@@ -1,20 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
+ * Copyright (c) 2015, IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/fatal-error.h"
@@ -30,6 +16,8 @@
 #include "erp-information.h"
 #include "vht-capabilities.h"
 #include "dmg-capabilities.h"
+#include "dsss-parameter-set.h"
+#include "edca-parameter-set.h"
 
 namespace ns3 {
 
@@ -129,6 +117,16 @@ MgtFrame::DeserializeInformationElements (Buffer::Iterator start)
               element = Create<ErpInformation> ();
               break;
             }
+          case IE_EDCA_PARAMETER_SET:
+            {
+              element = Create<EdcaParameterSet> ();
+              break;
+            }
+          case IE_DS_PARAMETER_SET:
+            {
+              element = Create<DsssParameterSet> ();
+              break;
+            }
           case IE_DMG_CAPABILITIES:
             {
               element = Create<DmgCapabilities> ();
@@ -157,6 +155,11 @@ MgtFrame::DeserializeInformationElements (Buffer::Iterator start)
           case IE_EXTENDED_SCHEDULE:
             {
               element = Create<ExtendedScheduleElement> ();
+              break;
+            }
+          case IE_STA_AVAILABILITY:
+            {
+              element = Create<StaAvailabilityElement> ();
               break;
             }
         }

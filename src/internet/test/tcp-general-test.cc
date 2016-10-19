@@ -181,7 +181,8 @@ TcpGeneralTest::DoRun (void)
   m_receiverSocket->TraceConnectWithoutContext ("Rx",
                                                 MakeCallback (&TcpGeneralTest::RxPacketCb, this));
 
-  InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), 4477);  m_receiverSocket->Bind (local);
+  InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), 4477);
+  m_receiverSocket->Bind (local);
 
   m_senderSocket = CreateSenderSocket (nodes.Get (0));
   m_senderSocket->SetCloseCallbacks (MakeCallback (&TcpGeneralTest::NormalCloseCb, this),
@@ -600,18 +601,7 @@ TcpGeneralTest::GetSegSize (SocketWho who)
 SequenceNumber32
 TcpGeneralTest::GetHighestTxMark (SocketWho who)
 {
-  if (who == SENDER)
-    {
-      return DynamicCast<TcpSocketMsgBase> (m_senderSocket)->m_highTxMark;
-    }
-  else if (who == RECEIVER)
-    {
-      return DynamicCast<TcpSocketMsgBase> (m_receiverSocket)->m_highTxMark;
-    }
-  else
-    {
-      NS_FATAL_ERROR ("Not defined");
-    }
+  return GetTcb (who)->m_highTxMark;
 }
 
 uint32_t
@@ -823,6 +813,24 @@ TcpGeneralTest::GetTcb (SocketWho who)
     }
 }
 
+Ptr<TcpRxBuffer>
+TcpGeneralTest::GetRxBuffer (SocketWho who)
+{
+  if (who == SENDER)
+    {
+      return DynamicCast<TcpSocketMsgBase> (m_senderSocket)->m_rxBuffer;
+    }
+  else if (who == RECEIVER)
+    {
+
+      return DynamicCast<TcpSocketMsgBase> (m_receiverSocket)->m_rxBuffer;
+    }
+  else
+    {
+      NS_FATAL_ERROR ("Not defined");
+    }
+}
+
 void
 TcpGeneralTest::SetRcvBufSize (SocketWho who, uint32_t size)
 {
@@ -1012,7 +1020,7 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
 {
   Ptr<Packet> p = Create<Packet> ();
   TcpHeader header;
-  SequenceNumber32 s = m_nextTxSequence;
+  SequenceNumber32 s = m_tcb->m_nextTxSequence;
 
   /*
    * Add tags for each socket option.
@@ -1020,7 +1028,7 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
    * if both options are set. Once the packet got to layer three, only
    * the corresponding tags will be read.
    */
-  if (IsManualIpTos ())
+  if (GetIpTos ())
     {
       SocketIpTosTag ipTosTag;
       ipTosTag.SetTos (GetIpTos ());

@@ -36,7 +36,6 @@
 #include "tcp-tx-buffer.h"
 #include "tcp-rx-buffer.h"
 #include "rtt-estimator.h"
-#include "tcp-congestion-ops.h"
 
 namespace ns3 {
 
@@ -46,6 +45,7 @@ class Node;
 class Packet;
 class TcpL4Protocol;
 class TcpHeader;
+class TcpCongestionOps;
 
 /**
  * \ingroup tcp
@@ -100,6 +100,11 @@ public:
   static TypeId GetTypeId (void);
 
   TcpSocketState ();
+
+  /**
+   * \brief Copy constructor.
+   * \param other object to copy.
+   */
   TcpSocketState (const TcpSocketState &other);
 
   /**
@@ -153,8 +158,11 @@ public:
 
   // Segment
   uint32_t               m_segmentSize;     //!< Segment size
+  SequenceNumber32       m_lastAckedSeq;    //!< Last sequence ACKed
 
   TracedValue<TcpCongState_t> m_congState;    //!< State in the Congestion state machine
+  TracedValue<SequenceNumber32> m_highTxMark; //!< Highest seqno ever sent, regardless of ReTx
+  TracedValue<SequenceNumber32> m_nextTxSequence; //!< Next seqnum to be sent (SND.NXT), ReTx pushes it back
 
   /**
    * \brief Get cwnd in segments rather than bytes
@@ -164,6 +172,16 @@ public:
   uint32_t GetCwndInSegments () const
   {
     return m_cWnd / m_segmentSize;
+  }
+
+  /**
+   * \brief Get slow start thresh in segments rather than bytes
+   *
+   * \return Slow start threshold in segments
+   */
+  uint32_t GetSsThreshInSegments () const
+  {
+    return m_ssThresh / m_segmentSize;
   }
 };
 
@@ -179,6 +197,15 @@ public:
  * provides connection orientation and sliding window flow control. Part of
  * this class is modified from the original NS-3 TCP socket implementation
  * (TcpSocketImpl) by Raj Bhattacharjea <raj.b@gatech.edu> of Georgia Tech.
+ *
+ * For IPv4 packets, the TOS set for the socket is used. The Bind and Connect
+ * operations set the TOS for the socket to the value specified in the provided
+ * address. A SocketIpTos tag is only added to the packet if the resulting
+ * TOS is non-null.
+ * Each packet is assigned the priority set for the socket. Setting a TOS
+ * for a socket also sets a priority for the socket (according to the
+ * Socket::IpTos2Priority function). A SocketPriority tag is only added to the
+ * packet if the priority is non-null.
  *
  * Congestion state machine
  * ---------------------------
@@ -342,6 +369,16 @@ public:
   TracedCallback<TcpSocketState::TcpCongState_t, TcpSocketState::TcpCongState_t> m_congStateTrace;
 
   /**
+   * \brief Callback pointer for high tx mark chaining
+   */
+  TracedCallback <SequenceNumber32, SequenceNumber32> m_highTxMarkTrace;
+
+  /**
+   * \brief Callback pointer for next tx sequence chaining
+   */
+  TracedCallback<SequenceNumber32, SequenceNumber32> m_nextTxSequenceTrace;
+
+  /**
    * \brief Callback function to hook to TcpSocketState congestion window
    * \param oldValue old cWnd value
    * \param newValue new cWnd value
@@ -362,6 +399,20 @@ public:
    */
   void UpdateCongState (TcpSocketState::TcpCongState_t oldValue,
                         TcpSocketState::TcpCongState_t newValue);
+
+  /**
+   * \brief Callback function to hook to TcpSocketState high tx mark
+   * \param oldValue old high tx mark
+   * \param newValue new high tx mark
+   */
+  void UpdateHighTxMark (SequenceNumber32 oldValue, SequenceNumber32 newValue);
+
+  /**
+   * \brief Callback function to hook to TcpSocketState next tx sequence
+   * \param oldValue old nextTxSeq value
+   * \param newValue new nextTxSeq value
+   */
+  void UpdateNextTxSequence (SequenceNumber32 oldValue, SequenceNumber32 newValue);
 
   /**
    * \brief Install a congestion control algorithm on this socket
@@ -741,9 +792,11 @@ protected:
 
   /**
    * \brief The amount of Rx window announced to the peer
+   * \param scale indicate if the window should be scaled. True for
+   * almost all cases, except when we are sending a SYN
    * \returns size of Rx window announced to the peer
    */
-  virtual uint16_t AdvertisedWindowSize (void) const;
+  virtual uint16_t AdvertisedWindowSize (bool scale = true) const;
 
   /**
    * \brief Update the receiver window (RWND) based on the value of the
@@ -805,6 +858,21 @@ protected:
    * \param resetRTO indicates if RTO should be reset
    */
   virtual void NewAck (SequenceNumber32 const& seq, bool resetRTO);
+
+  /**
+   * \brief Dupack management
+   */
+  void DupAck ();
+
+  /**
+   * \brief Limited transmit algorithm
+   */
+  void LimitedTransmit ();
+
+  /**
+   * \brief Enter the FastRetransmit, and retransmit the head
+   */
+  void FastRetransmit ();
 
   /**
    * \brief Call Retransmit() upon RTO event
@@ -941,8 +1009,6 @@ protected:
   Ptr<RttEstimator> m_rtt; //!< Round trip time estimator
 
   // Rx and Tx buffer management
-  TracedValue<SequenceNumber32> m_nextTxSequence; //!< Next seqnum to be sent (SND.NXT), ReTx pushes it back
-  TracedValue<SequenceNumber32> m_highTxMark;     //!< Highest seqno ever sent, regardless of ReTx
   Ptr<TcpRxBuffer>              m_rxBuffer;       //!< Rx buffer (reordering buffer)
   Ptr<TcpTxBuffer>              m_txBuffer;       //!< Tx buffer
 

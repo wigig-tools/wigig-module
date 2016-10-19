@@ -22,6 +22,7 @@
 #include "ns3/simple-net-device.h"
 #include "ns3/error-model.h"
 #include "ns3/tcp-socket-base.h"
+#include "ns3/tcp-congestion-ops.h"
 #include "ns3/test.h"
 
 namespace ns3 {
@@ -465,6 +466,14 @@ protected:
    * \return the transmission control block
    */
   Ptr<TcpSocketState> GetTcb (SocketWho who);
+
+  /**
+   * \brief Get the Rx buffer from selected socket
+   *
+   * \param who socket where get the TCB
+   * \return the rx buffer
+   */
+  Ptr<TcpRxBuffer> GetRxBuffer (SocketWho who);
 
   /**
    * \brief Get the rWnd of the selected socket

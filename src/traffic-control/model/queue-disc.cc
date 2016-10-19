@@ -23,6 +23,7 @@
 #include "ns3/pointer.h"
 #include "ns3/object-vector.h"
 #include "ns3/packet.h"
+#include "ns3/socket.h"
 #include "ns3/unused.h"
 #include "queue-disc.h"
 
@@ -118,6 +119,7 @@ void
 QueueDiscClass::SetQueueDisc (Ptr<QueueDisc> qd)
 {
   NS_LOG_FUNCTION (this);
+  NS_ABORT_MSG_IF (m_queueDisc, "Cannot set the queue disc on a class already having an attached queue disc");
   m_queueDisc = qd;
 }
 
@@ -312,6 +314,9 @@ void
 QueueDisc::AddInternalQueue (Ptr<Queue> queue)
 {
   NS_LOG_FUNCTION (this);
+  // set the drop callback on the internal queue, so that the queue disc is
+  // notified of packets dropped by the internal queue
+  queue->SetDropCallback (MakeCallback (&QueueDisc::Drop, this));
   m_queues.push_back (queue);
 }
 
@@ -353,6 +358,13 @@ QueueDisc::AddQueueDiscClass (Ptr<QueueDiscClass> qdClass)
 {
   NS_LOG_FUNCTION (this);
   NS_ABORT_MSG_IF (qdClass->GetQueueDisc () == 0, "Cannot add a class with no attached queue disc");
+  // the child queue disc cannot be one with wake mode equal to WAKE_CHILD because
+  // such queue discs do not implement the enqueue/dequeue methods
+  NS_ABORT_MSG_IF (qdClass->GetQueueDisc ()->GetWakeMode () == WAKE_CHILD,
+                   "A queue disc with WAKE_CHILD as wake mode can only be a root queue disc");
+  // set the parent drop callback on the child queue disc, so that it can notify
+  // packet drops to the parent queue disc
+  qdClass->GetQueueDisc ()->SetParentDropCallback (MakeCallback (&QueueDisc::Drop, this));
   m_classes.push_back (qdClass);
 }
 
@@ -390,9 +402,24 @@ QueueDisc::GetWakeMode (void)
 }
 
 void
-QueueDisc::Drop (Ptr<QueueDiscItem> item)
+QueueDisc::SetParentDropCallback (ParentDropCallback cb)
+{
+  m_parentDropCallback = cb;
+}
+
+void
+QueueDisc::Drop (Ptr<QueueItem> item)
 {
   NS_LOG_FUNCTION (this << item);
+
+  // if the wake mode of this queue disc is WAKE_CHILD, packets are directly
+  // enqueued/dequeued from the child queue discs, thus this queue disc does not
+  // keep valid packets/bytes counters and no actions need to be performed.
+  if (this->GetWakeMode () == WAKE_CHILD)
+    {
+      return;
+    }
+
   NS_ASSERT_MSG (m_nPackets >= 1u, "No packet in the queue disc, cannot drop");
   NS_ASSERT_MSG (m_nBytes >= item->GetPacketSize (), "The size of the packet that"
                  << " is reported to be dropped is greater than the amount of bytes"
@@ -405,6 +432,19 @@ QueueDisc::Drop (Ptr<QueueDiscItem> item)
 
   NS_LOG_LOGIC ("m_traceDrop (p)");
   m_traceDrop (item);
+
+  NotifyParentDrop (item);
+}
+
+void
+QueueDisc::NotifyParentDrop (Ptr<QueueItem> item)
+{
+  NS_LOG_FUNCTION (this << item);
+  // the parent drop callback is clearly null on root queue discs
+  if (!m_parentDropCallback.IsNull ())
+    {
+      m_parentDropCallback (item);
+    }
 }
 
 bool
@@ -537,7 +577,7 @@ QueueDisc::DequeuePacket ()
       // queue disc should try not to dequeue a packet destined to a stopped queue).
       // Otherwise, ask the queue disc to dequeue a packet only if the (unique) queue
       // is not stopped.
-      if (m_devQueueIface->GetTxQueuesN ()>1 || !m_devQueueIface->GetTxQueue (0)->IsStopped ())
+      if (m_devQueueIface->GetNTxQueues ()>1 || !m_devQueueIface->GetTxQueue (0)->IsStopped ())
         {
           item = Dequeue ();
           // If the item is not null, add the header to the packet.
@@ -572,29 +612,46 @@ QueueDisc::Transmit (Ptr<QueueDiscItem> item)
 {
   NS_LOG_FUNCTION (this << item);
   NS_ASSERT (m_devQueueIface);
-  bool ret = false;
 
-  if (!m_devQueueIface->GetTxQueue (item->GetTxQueueIndex ())->IsStopped ())
-    {
-      // send a copy of the packet because the device might add the
-      // MAC header even if the transmission is unsuccessful (see BUG 2284)
-      Ptr<Packet> copy = item->GetPacket ()->Copy ();
-      ret = m_device->Send (copy, item->GetAddress (), item->GetProtocol ());
-    }
-
-  // If the transmission did not happen or failed, requeue the item
-  if (!ret)
+  // if the device queue is stopped, requeue the packet and return false.
+  // Note that if the underlying device is tc-unaware, packets are never
+  // requeued because the queues of tc-unaware devices are never stopped
+  if (m_devQueueIface->GetTxQueue (item->GetTxQueueIndex ())->IsStopped ())
     {
       Requeue (item);
+      return false;
     }
 
-  // If the transmission succeeded but now the queue is stopped, return false
-  if (ret && m_devQueueIface->GetTxQueue (item->GetTxQueueIndex ())->IsStopped ())
+  // a single queue device makes no use of the priority tag
+  if (m_devQueueIface->GetNTxQueues () == 1)
     {
-      ret = false;
+      SocketPriorityTag priorityTag;
+      item->GetPacket ()->RemovePacketTag (priorityTag);
+    }
+  m_device->Send (item->GetPacket (), item->GetAddress (), item->GetProtocol ());
+
+  // the behavior here slightly diverges from Linux. In Linux, it is advised that
+  // the function called when a packet needs to be transmitted (ndo_start_xmit)
+  // should always return NETDEV_TX_OK, which means that the packet is consumed by
+  // the device driver and thus is not requeued. However, the ndo_start_xmit function
+  // of the device driver is allowed to return NETDEV_TX_BUSY (and hence the packet
+  // is requeued) when there is no room for the received packet in the device queue,
+  // despite the queue is not stopped. This case is considered as a corner case or
+  // an hard error, and should be avoided.
+  // Here, we do not handle such corner case and always assume that the packet is
+  // consumed by the netdevice. Thus, we ignore the value returned by Send and a
+  // packet sent to a netdevice is never requeued. The reason is that the semantics
+  // of the value returned by NetDevice::Send does not match that of the value
+  // returned by ndo_start_xmit.
+
+  // if the queue disc is empty or the device queue is now stopped, return false so
+  // that the Run method does not attempt to dequeue other packets and exits
+  if (GetNPackets () == 0 || m_devQueueIface->GetTxQueue (item->GetTxQueueIndex ())->IsStopped ())
+    {
+      return false;
     }
 
-  return ret;
+  return true;
 }
 
 } // namespace ns3

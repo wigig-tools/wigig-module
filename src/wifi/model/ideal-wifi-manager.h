@@ -99,7 +99,7 @@ private:
   uint32_t GetChannelWidthForMode (WifiMode mode) const;
 
   /**
-   * A vector of <snr, WifiTxVector> pair holding the minimum SNR for the
+   * A vector of <snr, WifiTxVector> pair holding the minimum SNR for the 
    * WifiTxVector
    */
   typedef std::vector<std::pair<double, WifiTxVector> > Thresholds;

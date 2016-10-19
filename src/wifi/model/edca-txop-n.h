@@ -25,6 +25,7 @@
 #include "ns3/object.h"
 #include "ns3/mac48-address.h"
 #include "ns3/packet.h"
+#include "ns3/traced-value.h"
 #include "wifi-mode.h"
 #include "wifi-mac-header.h"
 #include "wifi-remote-station-manager.h"
@@ -146,9 +147,12 @@ public:
   virtual void SetMinCw (uint32_t minCw);
   virtual void SetMaxCw (uint32_t maxCw);
   virtual void SetAifsn (uint32_t aifsn);
+  virtual void SetTxopLimit (Time txopLimit);
   virtual uint32_t GetMinCw (void) const;
   virtual uint32_t GetMaxCw (void) const;
   virtual uint32_t GetAifsn (void) const;
+  virtual Time GetTxopLimit (void) const;
+  void ResetState (void);
 
   /**
    * Return the MacLow associated with this EdcaTxopN.
@@ -168,7 +172,7 @@ public:
    * Checks if a block ack agreement exists with station addressed by
    * <i>recipient</i> for tid <i>tid</i>.
    */
-  bool GetBaAgreementExists (Mac48Address address, uint8_t tid);
+  bool GetBaAgreementExists (Mac48Address address, uint8_t tid) const;
   /**
    * \param recipient address of peer station involved in block ack mechanism.
    * \param tid traffic ID.
@@ -280,6 +284,10 @@ public:
    * Start transmission for the next fragment.
    * This is called for fragment only.
    */
+  void StartNextFragment (void);
+  /**
+   * Start transmission for the next packet if allowed by the TxopLimit.
+   */
   void StartNext (void);
   /**
    * Cancel the transmission.
@@ -299,28 +307,33 @@ public:
    */
   void StartAccessIfNeeded (void);
   /**
-   * Request access from DCF manager if needed for CBAP Allocation.
+   * End Current Contention Period.
    */
-  void StartAccess (void);
+  void EndCurrentContentionPeriod (void);
   /**
    * Initiate Transmission in this CBAP period.
+   * \param allocationID The unique ID of this allocation.
    * \param cbapDuration The duration of this service period in microseconds.
    */
-  void InitiateTransmission (Time cbapDuration);
+  void InitiateTransmission (AllocationID allocationID, Time cbapDuration);
   /**
    * Check if RTS should be re-transmitted if CTS was missed.
    *
+   * \param packet current packet being transmitted
+   * \param hdr current header being transmitted
    * \return true if RTS should be re-transmitted,
    *         false otherwise
    */
-  bool NeedRtsRetransmission (void);
+  bool NeedRtsRetransmission (Ptr<const Packet> packet, const WifiMacHeader &hdr);
   /**
    * Check if DATA should be re-transmitted if ACK was missed.
    *
+   * \param packet current packet being transmitted
+   * \param hdr current header being transmitted
    * \return true if DATA should be re-transmitted,
    *         false otherwise
    */
-  bool NeedDataRetransmission (void);
+  bool NeedDataRetransmission (Ptr<const Packet> packet, const WifiMacHeader &hdr);
   /**
    * Check if Block ACK Request should be re-transmitted.
    *
@@ -425,7 +438,7 @@ public:
   void SetBlockAckInactivityTimeout (uint16_t timeout);
   void SendDelbaFrame (Mac48Address addr, uint8_t tid, bool byOriginator);
   void CompleteMpduTx (Ptr<const Packet> packet, WifiMacHeader hdr, Time tstamp);
-  bool GetAmpduExist (Mac48Address dest);
+  bool GetAmpduExist (Mac48Address dest) const;
   void SetAmpduExist (Mac48Address dest, bool enableAmpdu);
 
   /**
@@ -538,6 +551,23 @@ private:
    * if an established block ack agreement exists with the receiver.
    */
   void VerifyBlockAck (void);
+  /**
+   * Get Traffic ID of the current packet.
+   */
+  uint8_t GetCurrentTid () const;
+  /*
+   * Return the remaining duration in the current TXOP.
+   *
+   * \return the remaining duration in the current TXOP
+   */
+  Time GetTxopRemaining (void);
+  /*
+   * Check if the station has TXOP granted for the next MPDU.
+   *
+   * \return true if the station has TXOP granted for the next MPDU,
+   *         false otherwise
+   */
+  bool HasTxop (void);
 
   AcIndex m_ac;
   class Dcf;
@@ -577,13 +607,27 @@ private:
   Time m_currentPacketTimestamp;
   uint16_t m_blockAckInactivityTimeout;
   struct Bar m_currentBar;
+  Time m_startTxop;
+  bool m_isAccessRequestedForRts;
+  TracedValue<uint32_t> m_backoffTrace;
+  TracedValue<uint32_t> m_cwTrace;
 
   TracedCallback<Mac48Address, uint32_t> m_accessGrantedTrace;
 
-  Time m_transmissionStarted;   /* The time of the initiation of transmission */
-  Time m_remainingDuration;     /* The remaining duration till the end of this CBAP allocation*/
-  Time m_cbapDuration;          /* The duration of the current CBAP allocation*/
-  bool m_accessAllowed;         /* Flag to indicate whether the access is allowed for the curent EDCA Queue*/
+  /* Store packet and header for service period */
+  typedef std::pair<Ptr<const Packet>, WifiMacHeader> PacketInformation;
+  typedef std::map<AllocationID, PacketInformation> StoredPackets;
+  typedef StoredPackets::const_iterator StoredPacketsCI;
+  StoredPackets m_storedPackets;
+
+  AllocationID m_allocationID;      /* Allocation ID for the current contention period */
+  Time m_transmissionStarted;       /* The time of the initiation of transmission */
+  Time m_remainingDuration;         /* The remaining duration till the end of this CBAP allocation*/
+  Time m_cbapDuration;              /* The duration of the current CBAP allocation*/
+  bool m_accessAllowed;             /* Flag to indicate whether the access is allowed for the curent EDCA Queue*/
+  bool m_missedACK;
+  bool m_firstTransmission;
+
 };
 
 } //namespace ns3

@@ -27,7 +27,6 @@
 #include "ns3/string.h"
 #include "ns3/pointer.h"
 #include "ns3/boolean.h"
-#include "qos-tag.h"
 #include "wifi-phy.h"
 #include "dcf-manager.h"
 #include "mac-rx-middle.h"
@@ -75,7 +74,7 @@ ApWifiMac::GetTypeId (void)
                    MakeBooleanChecker ())
     .AddAttribute ("EnableNonErpProtection", "Whether or not protection mechanism should be used when non-ERP STAs are present within the BSS."
                    "This parameter is only used when ERP is supported by the AP.",
-                   BooleanValue (false),
+                   BooleanValue (true),
                    MakeBooleanAccessor (&ApWifiMac::m_enableNonErpProtection),
                    MakeBooleanChecker ())
   ;
@@ -240,6 +239,19 @@ ApWifiMac::GetShortPreambleEnabled (void) const
   return false;
 }
 
+bool
+ApWifiMac::IsNonGfHtStasPresent (void) const
+{
+  for (std::list<Mac48Address>::const_iterator i = m_staList.begin (); i != m_staList.end (); i++)
+  {
+    if (m_stationManager->GetGreenfieldSupported (*i) == false)
+      {
+        return true;
+      }
+  }
+  return false;
+}
+
 void
 ApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from,
                         Mac48Address to)
@@ -284,8 +296,7 @@ ApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from,
       hdr.SetQosAckPolicy (WifiMacHeader::NORMAL_ACK);
       hdr.SetQosNoEosp ();
       hdr.SetQosNoAmsdu ();
-      //Transmission of multiple frames in the same TXOP is not
-      //supported for now
+      //Transmission of multiple frames in the same Polled TXOP is not supported for now
       hdr.SetQosTxopLimit (0);
       //Fill in the QoS control field in the MAC header
       hdr.SetQosTid (tid);
@@ -357,7 +368,7 @@ ApWifiMac::GetSupportedRates (void) const
     {
       for (uint32_t i = 0; i < m_phy->GetNBssMembershipSelectors (); i++)
         {
-          rates->SetBasicRate (m_phy->GetBssMembershipSelector (i));
+          rates->AddBssMembershipSelectorRate (m_phy->GetBssMembershipSelector (i));
         }
     }
   //
@@ -369,7 +380,8 @@ ApWifiMac::GetSupportedRates (void) const
       WifiMode mode = m_phy->GetMode (i);
       uint64_t modeDataRate = mode.GetDataRate (m_phy->GetChannelWidth (), false, nss);
       NS_LOG_DEBUG ("Adding supported rate of " << modeDataRate);
-      rates->AddSupportedRate (modeDataRate);      //Add rates that are part of the BSSBasicRateSet (manufacturer dependent!)
+      rates->AddSupportedRate (modeDataRate);
+	  //Add rates that are part of the BSSBasicRateSet (manufacturer dependent!)
       //here we choose to add the mandatory rates to the BSSBasicRateSet,
       //except for 802.11b where we assume that only the non HR-DSSS rates are part of the BSSBasicRateSet
       if (mode.IsMandatory () && (mode.GetModulationClass () != WIFI_MOD_CLASS_HR_DSSS))
@@ -388,6 +400,18 @@ ApWifiMac::GetSupportedRates (void) const
     }
 
   return rates;
+}
+
+Ptr<DsssParameterSet>
+ApWifiMac::GetDsssParameterSet (void) const
+{
+  Ptr<DsssParameterSet> dsssParameters = Create<DsssParameterSet> ();
+  if (m_dsssSupported)
+    {
+      dsssParameters->SetDsssSupported (1);
+      dsssParameters->SetCurrentChannel (m_phy->GetChannelNumber ());
+    }
+  return dsssParameters;
 }
 
 CapabilityInformation
@@ -420,43 +444,49 @@ ApWifiMac::GetErpInformation (void) const
   return information;
 }
 
-Ptr<HtCapabilities>
-ApWifiMac::GetHtCapabilities (void) const
+Ptr<EdcaParameterSet>
+ApWifiMac::GetEdcaParameterSet (void) const
 {
-  Ptr<HtCapabilities> capabilities = Create<HtCapabilities> ();
-  capabilities->SetHtSupported (1);
-  if (m_htSupported)
+  Ptr<EdcaParameterSet> edcaParameters = Create<EdcaParameterSet> ();
+  edcaParameters->SetQosSupported (1);
+  if (m_qosSupported)
     {
-      capabilities->SetLdpc (m_phy->GetLdpc ());
-      capabilities->SetSupportedChannelWidth (m_phy->GetChannelWidth () == 40);
-      capabilities->SetShortGuardInterval20 (m_phy->GetGuardInterval ());
-      capabilities->SetShortGuardInterval40 (m_phy->GetChannelWidth () == 40 && m_phy->GetGuardInterval ());
-      capabilities->SetGreenfield (m_phy->GetGreenfield ());
-      capabilities->SetMaxAmsduLength (1); //hardcoded for now (TBD)
-      capabilities->SetLSigProtectionSupport (!m_phy->GetGreenfield ());
-      capabilities->SetMaxAmpduLength (3); //hardcoded for now (TBD)
-      uint64_t maxSupportedRate = 0; //in bit/s
-      for (uint8_t i = 0; i < m_phy->GetNMcs (); i++)
-        {
-          WifiMode mcs = m_phy->GetMcs (i);
-          if (mcs.GetModulationClass () != WIFI_MOD_CLASS_HT)
-            {
-              continue;
-            }
-          capabilities->SetRxMcsBitmask (mcs.GetMcsValue ());
-          uint8_t nss = (mcs.GetMcsValue () / 8) + 1;
-          NS_ASSERT (nss > 0 && nss < 5);
-          if (mcs.GetDataRate (m_phy->GetChannelWidth (), m_phy->GetGuardInterval (), nss) > maxSupportedRate)
-            {
-              maxSupportedRate = mcs.GetDataRate (m_phy->GetChannelWidth (), m_phy->GetGuardInterval (), nss);
-              NS_LOG_DEBUG ("Updating maxSupportedRate to " << maxSupportedRate);
-            }
-        }
-      capabilities->SetRxHighestSupportedDataRate (maxSupportedRate / 1e6); //in Mbit/s
-      capabilities->SetTxMcsSetDefined (m_phy->GetNMcs () > 0);
-      capabilities->SetTxMaxNSpatialStreams (m_phy->GetSupportedTxSpatialStreams ());
+      Ptr<EdcaTxopN> edca;
+      Time txopLimit;
+
+      edca = m_edca.find (AC_BE)->second;
+      txopLimit = edca->GetTxopLimit ();
+      edcaParameters->SetBeAci(0);
+      edcaParameters->SetBeCWmin(edca->GetMinCw ());
+      edcaParameters->SetBeCWmax(edca->GetMaxCw ());
+      edcaParameters->SetBeAifsn(edca->GetAifsn ());
+      edcaParameters->SetBeTXOPLimit(txopLimit.GetMicroSeconds () / 32);
+      
+      edca = m_edca.find (AC_BK)->second;
+      txopLimit = edca->GetTxopLimit ();
+      edcaParameters->SetBkAci(1);
+      edcaParameters->SetBkCWmin(edca->GetMinCw ());
+      edcaParameters->SetBkCWmax(edca->GetMaxCw ());
+      edcaParameters->SetBkAifsn(edca->GetAifsn ());
+      edcaParameters->SetBkTXOPLimit(txopLimit.GetMicroSeconds () / 32);
+      
+      edca = m_edca.find (AC_VI)->second;
+      txopLimit = edca->GetTxopLimit ();
+      edcaParameters->SetViAci(2);
+      edcaParameters->SetViCWmin(edca->GetMinCw ());
+      edcaParameters->SetViCWmax(edca->GetMaxCw ());
+      edcaParameters->SetViAifsn(edca->GetAifsn ());
+      edcaParameters->SetViTXOPLimit(txopLimit.GetMicroSeconds () / 32);
+      
+      edca = m_edca.find (AC_VO)->second;
+      txopLimit = edca->GetTxopLimit ();
+      edcaParameters->SetVoAci(3);
+      edcaParameters->SetVoCWmin(edca->GetMinCw ());
+      edcaParameters->SetVoCWmax(edca->GetMaxCw ());
+      edcaParameters->SetVoAifsn(edca->GetAifsn ());
+      edcaParameters->SetVoTXOPLimit(txopLimit.GetMicroSeconds () / 32);
     }
-  return capabilities;
+  return edcaParameters;
 }
 
 Ptr<HtOperations>
@@ -469,6 +499,7 @@ ApWifiMac::GetHtOperations (void) const
       if (!m_nonHtStations.empty ())
         {
           operations->SetHtProtection (MIXED_MODE_PROTECTION);
+          operations->SetNonGfHtStasPresent (IsNonGfHtStasPresent ());
         }
       else
         {
@@ -476,49 +507,6 @@ ApWifiMac::GetHtOperations (void) const
         }
     }
   return operations;
-}
-
-Ptr<VhtCapabilities>
-ApWifiMac::GetVhtCapabilities (void) const
-{
-  Ptr<VhtCapabilities> capabilities = Create<VhtCapabilities> ();
-  capabilities->SetVhtSupported (1);
-  if (m_vhtSupported)
-    {
-      if (m_phy->GetChannelWidth () == 160)
-        {
-          capabilities->SetSupportedChannelWidthSet (1);
-        }
-      else
-        {
-          capabilities->SetSupportedChannelWidthSet (0);
-        }
-      capabilities->SetMaxMpduLength (2); //hardcoded for now (TBD)
-      capabilities->SetRxLdpc (m_phy->GetLdpc ());
-      capabilities->SetShortGuardIntervalFor80Mhz ((m_phy->GetChannelWidth () == 80) && m_phy->GetGuardInterval ());
-      capabilities->SetShortGuardIntervalFor160Mhz ((m_phy->GetChannelWidth () == 160) && m_phy->GetGuardInterval ());
-      capabilities->SetMaxAmpduLengthExponent (7); //hardcoded for now (TBD)
-      uint8_t maxMcs = 0;
-      for (uint8_t i = 0; i < m_phy->GetNMcs (); i++)
-        {
-          WifiMode mcs = m_phy->GetMcs (i);
-          if ((mcs.GetModulationClass () == WIFI_MOD_CLASS_VHT)
-              && (mcs.GetMcsValue () > maxMcs))
-            {
-              maxMcs = mcs.GetMcsValue ();
-            }
-        }
-      // Support same MaxMCS for each spatial stream
-      for (uint8_t nss = 1; nss <= m_phy->GetSupportedRxSpatialStreams (); nss++)
-        {
-          capabilities->SetRxMcsMap (maxMcs, nss);
-        }
-      for (uint8_t nss = 1; nss <= m_phy->GetSupportedTxSpatialStreams (); nss++)
-        {
-          capabilities->SetTxMcsMap (maxMcs, nss);
-        }
-    }
-  return capabilities;
 }
 
 void
@@ -540,6 +528,10 @@ ApWifiMac::SendProbeResp (Mac48Address to)
   probe.SetCapabilities (GetCapabilities ());
   m_stationManager->SetShortPreambleEnabled (GetShortPreambleEnabled ());
   m_stationManager->SetShortSlotTimeEnabled (GetShortSlotTimeEnabled ());
+  if (m_dsssSupported)
+    {
+      probe.AddWifiInformationElement (GetDsssParameterSet ());
+    }
   if (m_erpSupported)
     {
       probe.AddWifiInformationElement (GetErpInformation ());
@@ -593,6 +585,10 @@ ApWifiMac::SendAssocResp (Mac48Address to, bool success)
     {
       assoc.AddWifiInformationElement (GetErpInformation ());
     }
+  if (m_qosSupported)
+    {
+      assoc.AddWifiInformationElement (GetEdcaParameterSet ());
+    }
   if (m_htSupported || m_vhtSupported)
     {
       assoc.AddWifiInformationElement (GetHtCapabilities ());
@@ -631,9 +627,17 @@ ApWifiMac::SendOneBeacon (void)
   beacon.SetCapabilities (GetCapabilities ());
   m_stationManager->SetShortPreambleEnabled (GetShortPreambleEnabled ());
   m_stationManager->SetShortSlotTimeEnabled (GetShortSlotTimeEnabled ());
+  if (m_dsssSupported)
+    {
+      beacon.AddWifiInformationElement (GetDsssParameterSet ());
+    }
   if (m_erpSupported)
     {
       beacon.AddWifiInformationElement (GetErpInformation ());
+    }
+  if (m_qosSupported)
+    {
+      beacon.AddWifiInformationElement (GetEdcaParameterSet ());
     }
   if (m_htSupported || m_vhtSupported)
     {

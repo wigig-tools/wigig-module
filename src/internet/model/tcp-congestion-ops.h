@@ -21,13 +21,20 @@
 
 #include "ns3/object.h"
 #include "ns3/timer.h"
+#include "ns3/tcp-socket-base.h"
 
 namespace ns3 {
 
-class TcpSocketState;
-class TcpSocketBase;
+/**
+ * \ingroup tcp
+ * \defgroup congestionOps Congestion Control Algorithms.
+ *
+ * The various congestion control algorithms, also known as "TCP flavors".
+ */
 
 /**
+ * \ingroup congestionOps
+ *
  * \brief Congestion control abstract class
  *
  * The design is inspired on what Linux v4.0 does (but it has been
@@ -52,6 +59,11 @@ public:
   static TypeId GetTypeId (void);
 
   TcpCongestionOps ();
+
+  /**
+   * \brief Copy constructor.
+   * \param other object to copy.
+   */
   TcpCongestionOps (const TcpCongestionOps &other);
 
   virtual ~TcpCongestionOps ();
@@ -106,11 +118,25 @@ public:
    * \param rtt last rtt
    */
   virtual void PktsAcked (Ptr<TcpSocketState> tcb, uint32_t segmentsAcked,
-                          const Time& rtt) { }
+                          const Time& rtt)
+  {
+  }
+
+  /**
+   * \brief Trigger events/calculations specific to a congestion state
+   *
+   * This function mimics the function set_state in Linux.
+   * The function is called before changing congestion state.
+   *
+   * \param tcb internal congestion state
+   * \param newState new congestion state to which the TCP is going to switch
+   */
+  virtual void CongestionStateSet (Ptr<TcpSocketState> tcb,
+                                   const TcpSocketState::TcpCongState_t newState)
+  {
+  }
 
   // Present in Linux but not in ns-3 yet:
-  /* call before changing ca_state (optional) */
-  // void (*set_state)(struct sock *sk, u8 new_state);
   /* call when cwnd event occurs (optional) */
   // void (*cwnd_event)(struct sock *sk, enum tcp_ca_event ev);
   /* call when ack arrives (optional) */
@@ -146,6 +172,11 @@ public:
   static TypeId GetTypeId (void);
 
   TcpNewReno ();
+
+  /**
+   * \brief Copy constructor.
+   * \param sock object to copy.
+   */
   TcpNewReno (const TcpNewReno& sock);
 
   ~TcpNewReno ();

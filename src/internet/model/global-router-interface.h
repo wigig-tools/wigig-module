@@ -40,6 +40,8 @@ class GlobalRouter;
 class Ipv4GlobalRouting;
 
 /**
+ * \ingroup globalrouting
+ *
  * @brief A single link record for a link state advertisement.
  *
  * The GlobalRoutingLinkRecord is modeled after the OSPF link record field of
@@ -826,6 +828,21 @@ private:
   void BuildNetworkLSAs (NetDeviceContainer c);
 
   /**
+   * \brief Return a container of all non-bridged NetDevices on a link
+   *
+   * This method will recursively find all of the 'edge' devices in an
+   * L2 broadcast domain.  If there are no bridged devices, then the
+   * container returned is simply the set of devices on the channel
+   * passed in as an argument.  If the link has bridges on it 
+   * (and therefore multiple ns3::Channel objects interconnected by 
+   * bridges), the method will find all of the non-bridged devices
+   * in the L2 broadcast domain.
+   *
+   * \param ch a channel from the link
+   */
+  NetDeviceContainer FindAllNonBridgedDevicesOnLink (Ptr<Channel> ch) const;
+
+  /**
    * \brief Decide whether or not a given net device is being bridged by a BridgeNetDevice.
    *
    * \param nd the NetDevice
@@ -847,6 +864,9 @@ private:
 
   // Declared mutable so that const member functions can clear it
   // (supporting the logical constness of the search methods of this class) 
+  /**
+   * Container of bridges visited.
+   */
   mutable std::vector<Ptr<BridgeNetDevice> > m_bridgesVisited;
   /**
    * Clear the list of bridges visited on the link 

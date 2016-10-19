@@ -488,13 +488,13 @@ WifiPhyStateHelper::SwitchFromRxEndOk (Ptr<Packet> packet, double snr, WifiTxVec
 }
 
 void
-WifiPhyStateHelper::ReportPsduEndError (Ptr<Packet> packet, double snr, bool isEndOfFrame)
+WifiPhyStateHelper::ReportPsduEndError (Ptr<Packet> packet, double snr)
 {
-  NS_LOG_FUNCTION (this << packet << snr << isEndOfFrame);
+  NS_LOG_FUNCTION (this << packet << snr);
   m_rxErrorTrace (packet, snr);
   if (!m_rxErrorCallback.IsNull ())
     {
-      m_rxErrorCallback (packet, snr, isEndOfFrame);
+      m_rxErrorCallback (packet, snr);
     }
 }
 
@@ -507,15 +507,15 @@ WifiPhyStateHelper::SwitchFromRxEndError (void)
 }
 
 void
-WifiPhyStateHelper::SwitchFromRxEndError (Ptr<Packet> packet, double snr, bool isEndOfFrame)
+WifiPhyStateHelper::SwitchFromRxEndError (Ptr<Packet> packet, double snr)
 {
-  NS_LOG_FUNCTION (this << packet << snr << isEndOfFrame);
+  NS_LOG_FUNCTION (this << packet << snr);
   m_rxErrorTrace (packet, snr);
   NotifyRxEndError ();
   DoSwitchFromRx ();
   if (!m_rxErrorCallback.IsNull ())
     {
-      m_rxErrorCallback (packet, snr, isEndOfFrame);
+      m_rxErrorCallback (packet, snr);
     }
 }
 

@@ -37,6 +37,10 @@ class PacketSinkHelper
 public:
   /**
    * Create a PacketSinkHelper to make it easier to work with PacketSinkApplications
+   */
+  PacketSinkHelper ();
+  /**
+   * Create a PacketSinkHelper to make it easier to work with PacketSinkApplications
    *
    * \param protocol the name of the protocol to use to receive traffic
    *        This string identifies the socket factory type used to create

@@ -1,20 +1,5 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -24,6 +9,7 @@
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/wifi-module.h"
+#include "common-functions.h"
 #include <string>
 
 /**
@@ -31,10 +17,10 @@
  * Network topology is simple and consists of One Access Point + One Station.
  *
  * To print the acheived throughput for each MCS type the following command:
- * ./waf --run "evaluate_beamforming"
+ * ./waf --run "evaluate_throughput"
  *
  * The script will print the achieved throughput in Mbps for each MCS starting from MCS1-MCS24.
- * Each DMG STA supports two level of aggregation (A-MSDU + A-MPDU)
+ * Each DMG STA supports two level of aggregation (A-MSDU + A-MPDU).
  */
 
 NS_LOG_COMPONENT_DEFINE ("EvaluateDmgThroughput");
@@ -44,51 +30,6 @@ using namespace std;
 
 Ptr<Node> apWifiNode;
 Ptr<Node> staWifiNode;
-
-void
-PopulateArpCache (void)
-{
-  Ptr<ArpCache> arp = CreateObject<ArpCache> ();
-  arp->SetAliveTimeout (Seconds (3600 * 24 * 365));
-
-  for (NodeList::Iterator i = NodeList::Begin (); i != NodeList::End (); ++i)
-    {
-      Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol> ();
-      NS_ASSERT (ip != 0);
-      ObjectVectorValue interfaces;
-      ip->GetAttribute ("InterfaceList", interfaces);
-      for (ObjectVectorValue::Iterator j = interfaces.Begin (); j != interfaces.End (); j ++)
-        {
-          Ptr<Ipv4Interface> ipIface = (j->second)->GetObject<Ipv4Interface> ();
-          NS_ASSERT (ipIface != 0);
-          Ptr<NetDevice> device = ipIface->GetDevice ();
-          NS_ASSERT (device != 0);
-          Mac48Address addr = Mac48Address::ConvertFrom(device->GetAddress ());
-          for (uint32_t k = 0; k < ipIface->GetNAddresses (); k++)
-            {
-              Ipv4Address ipAddr = ipIface->GetAddress (k).GetLocal ();
-              if (ipAddr == Ipv4Address::GetLoopback ())
-                continue;
-              ArpCache::Entry *entry = arp->Add (ipAddr);
-              entry->MarkWaitReply (0);
-              entry->MarkAlive (addr);
-            }
-        }
-    }
-
-  for (NodeList::Iterator i = NodeList::Begin (); i != NodeList::End (); ++i)
-    {
-      Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol> ();
-      NS_ASSERT (ip != 0);
-      ObjectVectorValue interfaces;
-      ip->GetAttribute("InterfaceList", interfaces);
-      for(ObjectVectorValue::Iterator j = interfaces.Begin (); j != interfaces.End (); j ++)
-        {
-          Ptr<Ipv4Interface> ipIface = (j->second)->GetObject<Ipv4Interface> ();
-          ipIface->SetAttribute ("ArpCache", PointerValue (arp));
-        }
-    }
-}
 
 int
 main(int argc, char *argv[])
@@ -108,31 +49,31 @@ main(int argc, char *argv[])
 
   /** MCS List **/
   /* SC PHY */
-  dataRateList.push_back ("385Mbps");           //MCS1
-  dataRateList.push_back ("770Mbps");           //MCS2
-  dataRateList.push_back ("962.5Mbps");         //MCS3
-  dataRateList.push_back ("1155Mbps");          //MCS4
+//  dataRateList.push_back ("385Mbps");           //MCS1
+//  dataRateList.push_back ("770Mbps");           //MCS2
+//  dataRateList.push_back ("962.5Mbps");         //MCS3
+//  dataRateList.push_back ("1155Mbps");          //MCS4
   dataRateList.push_back ("1251.25Mbps");       //MCS5
-  dataRateList.push_back ("1540Mbps");          //MCS6
-  dataRateList.push_back ("1925Mbps");          //MCS7
-  dataRateList.push_back ("2310Mbps");          //MCS8
-  dataRateList.push_back ("2502.5Mbps");        //MCS9
-  dataRateList.push_back ("3080Mbps");          //MCS10
-  dataRateList.push_back ("3850Mbps");          //MCS11
-  dataRateList.push_back ("4620Mbps");          //MCS12
-  /* OFDM PHY */
-  dataRateList.push_back ("693.00Mbps");        //MCS13
-  dataRateList.push_back ("866.25Mbps");        //MCS14
-  dataRateList.push_back ("1386.00Mbps");       //MCS15
-  dataRateList.push_back ("1732.50Mbps");       //MCS16
-  dataRateList.push_back ("2079.00Mbps");       //MCS17
-  dataRateList.push_back ("2772.00Mbps");       //MCS18
-  dataRateList.push_back ("3465.00Mbps");       //MCS19
-  dataRateList.push_back ("4158.00Mbps");       //MCS20
-  dataRateList.push_back ("4504.50Mbps");       //MCS21
-  dataRateList.push_back ("5197.50Mbps");       //MCS22
-  dataRateList.push_back ("6237.00Mbps");       //MCS23
-  dataRateList.push_back ("6756.75Mbps");       //MCS24
+//  dataRateList.push_back ("1540Mbps");          //MCS6
+//  dataRateList.push_back ("1925Mbps");          //MCS7
+//  dataRateList.push_back ("2310Mbps");          //MCS8
+//  dataRateList.push_back ("2502.5Mbps");        //MCS9
+//  dataRateList.push_back ("3080Mbps");          //MCS10
+//  dataRateList.push_back ("3850Mbps");          //MCS11
+//  dataRateList.push_back ("4620Mbps");          //MCS12
+//  /* OFDM PHY */
+//  dataRateList.push_back ("693.00Mbps");        //MCS13
+//  dataRateList.push_back ("866.25Mbps");        //MCS14
+//  dataRateList.push_back ("1386.00Mbps");       //MCS15
+//  dataRateList.push_back ("1732.50Mbps");       //MCS16
+//  dataRateList.push_back ("2079.00Mbps");       //MCS17
+//  dataRateList.push_back ("2772.00Mbps");       //MCS18
+//  dataRateList.push_back ("3465.00Mbps");       //MCS19
+//  dataRateList.push_back ("4158.00Mbps");       //MCS20
+//  dataRateList.push_back ("4504.50Mbps");       //MCS21
+//  dataRateList.push_back ("5197.50Mbps");       //MCS22
+//  dataRateList.push_back ("6237.00Mbps");       //MCS23
+//  dataRateList.push_back ("6756.75Mbps");       //MCS24
 
   /* Command line argument parser setup. */
   CommandLine cmd;
@@ -164,7 +105,7 @@ main(int argc, char *argv[])
 
   cout << "MCS" << '\t' << "Throughput (Mbps)" << endl;
 
-  uint i = 1; /* MCS Index */
+  uint i = 5; /* MCS Index */
   for (std::list<std::string>::const_iterator iter = dataRateList.begin (); iter != dataRateList.end (); iter++, i++) //MCS
     {
       /**** WifiHelper is a meta-helper: it helps creates helpers ****/
@@ -307,8 +248,8 @@ main(int argc, char *argv[])
       if (pcapTracing)
         {
           wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
-          wifiPhy.EnablePcap ("AccessPoint" + mcs.str (), apDevice, false);
-          wifiPhy.EnablePcap ("Station" + mcs.str (), staDevice, false);
+          wifiPhy.EnablePcap ("Traces/AccessPoint" + mcs.str (), apDevice, false);
+          wifiPhy.EnablePcap ("Traces/Station" + mcs.str (), staDevice, false);
         }
 
       Simulator::Stop (Seconds (simulationTime));

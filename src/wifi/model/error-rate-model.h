@@ -58,12 +58,11 @@ public:
    * are passed into this method.  The WifiTxVector may be from a signal that
    * contains multiple modes (e.g. PLCP header sent differently from PLCP
    * payload).  Consequently, the mode parameter is what the method uses
-   * to calculate the chunk error rate, and the txVector is used for
+   * to calculate the chunk error rate, and the txVector is used for 
    * other information as needed.
    *
    * \param mode the Wi-Fi mode applicable to this chunk
    * \param txvector TXVECTOR of the overall transmission
-   * \param txvector TXVECTOR of the transmission
    * \param snr the SNR of the chunk
    * \param nbits the number of bits in this chunk
    *

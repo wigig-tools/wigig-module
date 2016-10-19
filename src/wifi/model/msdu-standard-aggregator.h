@@ -56,6 +56,9 @@ public:
 
   virtual bool Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket, WifiMacHeader &hdr,
                           Mac48Address src, Mac48Address dest, Ptr<MacLow> maclow, Time duration);
+
+  virtual bool CanBeAggregated (uint32_t packetSize, Ptr<Packet> aggregatedPacket);
+
 private:
   /**
    * Calculates how much padding must be added to the end of aggregated packet,

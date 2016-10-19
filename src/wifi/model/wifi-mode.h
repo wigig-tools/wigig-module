@@ -158,19 +158,13 @@ public:
    */
   uint64_t GetDataRate (WifiTxVector txVector) const;
   /**
-   *
-   * \param nss the considered number of streams
-   *
    * \returns the coding rate of this transmission mode
    */
-  enum WifiCodeRate GetCodeRate (uint8_t nss) const;
+  enum WifiCodeRate GetCodeRate (void) const;
   /**
-   *
-   * \param nss the considered number of streams
-   *
    * \returns the size of the modulation constellation.
    */
-  uint16_t GetConstellationSize (uint8_t nss) const;
+  uint16_t GetConstellationSize (void) const;
   /**
    * \returns the MCS value.
    */
@@ -198,7 +192,7 @@ public:
    * \returns the Modulation Class (Section 9.7.8 "Modulation classes"; IEEE 802.11-2012)
    * to which this WifiMode belongs.
    */
-  enum WifiModulationClass GetModulationClass () const;
+  enum WifiModulationClass GetModulationClass () const;  
   /**
    * \returns the rate (in bps) of the non-HT Reference Rate
    * which corresponds to the HT MCS of this WifiMode.
@@ -207,7 +201,17 @@ public:
    * use the modulation and coding rate of the HT MCS
    * and lookup in Table 9-5 of IEEE 802.11-2012.
    */
-  uint64_t GetNonHtReferenceRate (uint8_t nss) const;
+  uint64_t GetNonHtReferenceRate (void) const;
+  /**
+   * \returns true if this WifiMode has a
+   * a code rate strictly higher than mode.
+   */
+  bool IsHigherCodeRate (WifiMode mode) const;
+  /**
+   * \returns true if this WifiMode has a
+   * a rate strictly higher than mode.
+   */
+  bool IsHigherDataRate (WifiMode mode) const;
 
   /**
    * Create an invalid WifiMode. Calling any method on the
@@ -239,17 +243,10 @@ public:
    * \returns the data bit rate of this signal.
    */
   uint64_t GetDataRate (void) const;
-  /**
-   * \returns the coding rate of this transmission mode
-   */
-  enum WifiCodeRate GetCodeRate (void) const;
-  /**
-   * \returns the size of the modulation constellation.
-   */
-  uint16_t GetConstellationSize (void) const;
 
 private:
   friend class WifiModeFactory;
+  friend class WifiPhyTag; // access the UID-based constructor
   /**
    * Create a WifiMode from a given unique ID.
    *
@@ -346,6 +343,7 @@ public:
   static WifiMode CreateWifiMcs (std::string uniqueName,
                                  uint8_t mcsValue,
                                  enum WifiModulationClass modClass);
+
 
 private:
   friend class WifiMode;

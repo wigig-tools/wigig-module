@@ -63,6 +63,9 @@ Ptr<OutputStreamWrapper> cWndStream;
 Ptr<OutputStreamWrapper> ssThreshStream;
 Ptr<OutputStreamWrapper> rttStream;
 Ptr<OutputStreamWrapper> rtoStream;
+Ptr<OutputStreamWrapper> nextTxStream;
+Ptr<OutputStreamWrapper> nextRxStream;
+Ptr<OutputStreamWrapper> inFlightStream;
 uint32_t cWndValue;
 uint32_t ssThreshValue;
 
@@ -123,6 +126,23 @@ RtoTracer (Time oldval, Time newval)
   *rtoStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval.GetSeconds () << std::endl;
 }
 
+static void
+NextTxTracer (SequenceNumber32 old, SequenceNumber32 nextTx)
+{
+  *nextTxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextTx << std::endl;
+}
+
+static void
+InFlightTracer (uint32_t old, uint32_t inFlight)
+{
+  *inFlightStream->GetStream () << Simulator::Now ().GetSeconds () << " " << inFlight << std::endl;
+}
+
+static void
+NextRxTracer (SequenceNumber32 old, SequenceNumber32 nextRx)
+{
+  *nextRxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextRx << std::endl;
+}
 
 static void
 TraceCwnd (std::string cwnd_tr_file_name)
@@ -156,6 +176,31 @@ TraceRto (std::string rto_tr_file_name)
   Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/RTO", MakeCallback (&RtoTracer));
 }
 
+static void
+TraceNextTx (std::string &next_tx_seq_file_name)
+{
+  AsciiTraceHelper ascii;
+  nextTxStream = ascii.CreateFileStream (next_tx_seq_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/NextTxSequence", MakeCallback (&NextTxTracer));
+}
+
+static void
+TraceInFlight (std::string &in_flight_file_name)
+{
+  AsciiTraceHelper ascii;
+  inFlightStream = ascii.CreateFileStream (in_flight_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/BytesInFlight", MakeCallback (&InFlightTracer));
+}
+
+
+static void
+TraceNextRx (std::string &next_rx_seq_file_name)
+{
+  AsciiTraceHelper ascii;
+  nextRxStream = ascii.CreateFileStream (next_rx_seq_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/2/$ns3::TcpL4Protocol/SocketList/1/RxBuffer/NextRxSequence", MakeCallback (&NextRxTracer));
+}
+
 int main (int argc, char *argv[])
 {
   std::string transport_prot = "TcpWestwood";
@@ -178,7 +223,8 @@ int main (int argc, char *argv[])
 
   CommandLine cmd;
   cmd.AddValue ("transport_prot", "Transport protocol to use: TcpNewReno, "
-                " TcpWestwood, TcpWestwoodPlus ", transport_prot);
+                "TcpHybla, TcpHighSpeed, TcpHtcp, TcpVegas, TcpScalable, TcpVeno, "
+                "TcpBic, TcpYeah, TcpIllinois, TcpWestwood, TcpWestwoodPlus ", transport_prot);
   cmd.AddValue ("error_p", "Packet error rate", error_p);
   cmd.AddValue ("bandwidth", "Bottleneck bandwidth", bandwidth);
   cmd.AddValue ("delay", "Bottleneck delay", delay);
@@ -229,6 +275,42 @@ int main (int argc, char *argv[])
     {
       Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpNewReno::GetTypeId ()));
     }
+  else if (transport_prot.compare ("TcpHybla") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpHybla::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpHighSpeed") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpHighSpeed::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpVegas") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpVegas::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpScalable") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpScalable::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpHtcp") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpHtcp::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpVeno") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpVeno::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpBic") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpBic::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpYeah") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpYeah::GetTypeId ()));
+    }
+  else if (transport_prot.compare ("TcpIllinois") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpIllinois::GetTypeId ()));
+    }
   else if (transport_prot.compare ("TcpWestwood") == 0)
     { // the default protocol type in ns3::TcpWestwood is WESTWOOD
       Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpWestwood::GetTypeId ()));
@@ -273,8 +355,7 @@ int main (int argc, char *argv[])
   stack.InstallAll ();
 
   TrafficControlHelper tchPfifo;
-  uint32_t handle = tchPfifo.SetRootQueueDisc ("ns3::PfifoFastQueueDisc");
-  tchPfifo.AddPacketFilter (handle, "ns3::PfifoFastIpv4PacketFilter");
+  tchPfifo.SetRootQueueDisc ("ns3::PfifoFastQueueDisc");
 
   TrafficControlHelper tchCoDel;
   tchCoDel.SetRootQueueDisc ("ns3::CoDelQueueDisc");
@@ -345,8 +426,13 @@ int main (int argc, char *argv[])
           || transport_prot.compare ("TcpWestwoodPlus") == 0
           || transport_prot.compare ("TcpHybla") == 0
           || transport_prot.compare ("TcpHighSpeed") == 0
+          || transport_prot.compare ("TcpHtcp") == 0
+          || transport_prot.compare ("TcpVegas") == 0
+          || transport_prot.compare ("TcpVeno") == 0
           || transport_prot.compare ("TcpBic") == 0
-          || transport_prot.compare ("TcpCubic") == 0)
+          || transport_prot.compare ("TcpScalable") == 0
+          || transport_prot.compare ("TcpYeah") == 0
+          || transport_prot.compare ("TcpIllinois") == 0)
         {
           Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (tcp_adu_size));
           BulkSendHelper ftp ("ns3::TcpSocketFactory", Address ());
@@ -384,6 +470,9 @@ int main (int argc, char *argv[])
       Simulator::Schedule (Seconds (0.00001), &TraceSsThresh, prefix_file_name + "-ssth.data");
       Simulator::Schedule (Seconds (0.00001), &TraceRtt, prefix_file_name + "-rtt.data");
       Simulator::Schedule (Seconds (0.00001), &TraceRto, prefix_file_name + "-rto.data");
+      Simulator::Schedule (Seconds (0.00001), &TraceNextTx, prefix_file_name + "-next-tx.data");
+      Simulator::Schedule (Seconds (0.00001), &TraceInFlight, prefix_file_name + "-inflight.data");
+      Simulator::Schedule (Seconds (0.1), &TraceNextRx, prefix_file_name + "-next-rx.data");
     }
 
   if (pcap)

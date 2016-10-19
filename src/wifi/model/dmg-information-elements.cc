@@ -1,22 +1,9 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Copyright (c) 2015, IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+
 #include "ns3/address-utils.h"
 #include "ns3/assert.h"
 #include "ns3/log.h"
@@ -1015,7 +1002,7 @@ AllocationField::Deserialize (Buffer::Iterator start)
 }
 
 void
-AllocationField::SetAllocationID (uint8_t id)
+AllocationField::SetAllocationID (AllocationID id)
 {
   m_allocationID = id;
 }
@@ -1056,7 +1043,7 @@ AllocationField::SetLpScUsed (bool value)
   m_lpScUsed = value;
 }
 
-uint8_t
+AllocationID
 AllocationField::GetAllocationID (void) const
 {
   return m_allocationID;
@@ -1432,21 +1419,28 @@ StaAvailabilityElement::DeserializeInformationField (Buffer::Iterator start, uin
 }
 
 void
-StaAvailabilityElement::AddStaAvailabilityElement (StaInfoField &field)
+StaAvailabilityElement::AddStaInfo (StaInfoField &field)
 {
   m_list.push_back (field);
 }
 
 void
-StaAvailabilityElement::SetAllocationFieldList (const StaInfoFieldList &list)
+StaAvailabilityElement::SetStaInfoList (const StaInfoFieldList &list)
 {
   m_list = list;
 }
 
 StaInfoFieldList
-StaAvailabilityElement::GetAllocationFieldList (void) const
+StaAvailabilityElement::GetStaInfoList (void) const
 {
   return m_list;
+}
+
+StaInfoField
+StaAvailabilityElement::GetStaInfoField (void) const
+{
+  NS_ASSERT (m_list.size () > 0);
+  return m_list[0];
 }
 
 ATTRIBUTE_HELPER_CPP (StaAvailabilityElement);
@@ -1464,12 +1458,450 @@ operator >> (std::istream &is, StaAvailabilityElement &element)
 }
 
 /***************************************************
+*             DMG Allocation Info Field
+****************************************************/
+
+DmgAllocationInfo::DmgAllocationInfo ()
+  : m_allocationID (0),
+    m_allocationType (SERVICE_PERIOD_ALLOCATION),
+    m_allocationFormat (ISOCHRONOUS),
+    m_pseudoStatic (false),
+    m_truncatable (false),
+    m_extendable (false),
+    m_lpScUsed (false),
+    m_up (0)
+{
+}
+
+void
+DmgAllocationInfo::Print (std::ostream &os) const
+{
+
+}
+
+uint32_t
+DmgAllocationInfo::GetSerializedSize (void) const
+{
+  return 3;
+}
+
+Buffer::Iterator
+DmgAllocationInfo::Serialize (Buffer::Iterator start) const
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  uint16_t val1 = 0;
+  uint8_t val2 = 0;
+
+  val1 |= m_allocationID & 0xF;
+  val1 |= (m_allocationType & 0x7) << 4;
+  val1 |= (m_allocationFormat & 0x1) << 7;
+  val1 |= (m_pseudoStatic & 0x1) << 8;
+  val1 |= (m_truncatable & 0x1) << 9;
+  val1 |= (m_extendable & 0x1) << 10;
+  val1 |= (m_lpScUsed & 0x1) << 11;
+  val1 |= (m_up & 0x7) << 12;
+  val1 |= (m_destAid & 0x1) << 15;
+  val2 |= (m_destAid >> 1);
+
+  i.WriteHtolsbU16 (val1);
+  i.WriteU8 (val2);
+
+  return i;
+}
+
+Buffer::Iterator
+DmgAllocationInfo::Deserialize (Buffer::Iterator start)
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  uint16_t val1 = i.ReadLsbtohU16 ();
+  uint8_t val2 = i.ReadU8 ();
+
+  m_allocationID = val1 & 0xF;
+  m_allocationType = (val1 >> 4) & 0x7;
+  m_allocationFormat = (val1 >> 7) & 0x1;
+  m_pseudoStatic = (val1 >> 7) & 0x1;
+  m_truncatable = (val1 >> 8) & 0x1;
+  m_extendable = (val1 >> 9) & 0x1;
+  m_lpScUsed = (val1 >> 11) & 0x1;
+  m_up = (val1 >> 12) & 0x7;
+  m_destAid |= (val1 >> 15) & 0x1;
+  m_destAid |= (val2 >> 1);
+
+  return i;
+}
+
+void
+DmgAllocationInfo::SetAllocationID (AllocationID id)
+{
+  m_allocationID = id;
+}
+
+void
+DmgAllocationInfo::SetAllocationType (AllocationType type)
+{
+  m_allocationType = static_cast<AllocationType> (type);
+}
+
+void
+DmgAllocationInfo::SetAllocationFormat (AllocationFormat format)
+{
+  m_allocationFormat = static_cast<AllocationFormat> (format);
+}
+
+void
+DmgAllocationInfo::SetAsPseudoStatic (bool value)
+{
+  m_pseudoStatic = value;
+}
+
+void
+DmgAllocationInfo::SetAsTruncatable (bool value)
+{
+  m_truncatable = value;
+}
+
+void
+DmgAllocationInfo::SetAsExtendable (bool value)
+{
+  m_extendable = value;
+}
+
+void
+DmgAllocationInfo::SetLpScUsed (bool value)
+{
+  m_lpScUsed = value;
+}
+
+void
+DmgAllocationInfo::SetUp (uint8_t value)
+{
+  m_up = value;
+}
+
+void
+DmgAllocationInfo::SetDestinationAid (uint8_t aid)
+{
+  m_destAid = aid;
+}
+
+AllocationID
+DmgAllocationInfo::GetAllocationID (void) const
+{
+  return m_allocationID;
+}
+
+AllocationType
+DmgAllocationInfo::GetAllocationType (void) const
+{
+  return static_cast<AllocationType> (m_allocationType);
+}
+
+AllocationFormat
+DmgAllocationInfo::GetAllocationFormat (void) const
+{
+  return static_cast<AllocationFormat> (m_allocationFormat);
+}
+
+bool
+DmgAllocationInfo::IsPseudoStatic (void) const
+{
+  return m_pseudoStatic;
+}
+
+bool
+DmgAllocationInfo::IsTruncatable (void) const
+{
+  return m_truncatable;
+}
+
+bool
+DmgAllocationInfo::IsExtendable (void) const
+{
+  return m_extendable;
+}
+
+bool
+DmgAllocationInfo::IsLpScUsed (void) const
+{
+  return m_lpScUsed;
+}
+
+uint8_t
+DmgAllocationInfo::GetUp (void) const
+{
+  return m_up;
+}
+
+uint8_t
+DmgAllocationInfo::GetDestinationAid (void) const
+{
+  return m_destAid;
+}
+
+/***************************************************
+*               Constraint Subfield
+****************************************************/
+
+ConstraintSubfield::ConstraintSubfield ()
+  : m_startTime (0),
+    m_duration (0),
+    m_period (0)
+{
+}
+
+uint32_t
+ConstraintSubfield::GetSerializedSize (void) const
+{
+  return 14;
+}
+
+Buffer::Iterator
+ConstraintSubfield::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteHtolsbU32 (m_startTime);
+  i.WriteHtolsbU16 (m_duration);
+  i.WriteHtolsbU16 (m_period);
+  WriteTo (i, m_address);
+  return i;
+}
+
+Buffer::Iterator
+ConstraintSubfield::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  m_startTime = i.ReadLsbtohU32 ();
+  m_duration = i.ReadLsbtohU16 ();
+  m_period = i.ReadLsbtohU16 ();
+  ReadFrom (i, m_address);
+  return i;
+}
+
+void
+ConstraintSubfield::SetStartStartTime (uint32_t time)
+{
+  m_startTime = time;
+}
+
+void
+ConstraintSubfield::SetDuration (uint16_t duration)
+{
+  m_duration = duration;
+}
+
+void
+ConstraintSubfield::SetPeriod (uint16_t period)
+{
+  m_period = period;
+}
+
+void
+ConstraintSubfield::SetInterfererAddress (Mac48Address address)
+{
+  m_address = address;
+}
+
+uint32_t
+ConstraintSubfield::GetStartStartTime (void) const
+{
+  return m_startTime;
+}
+
+uint16_t
+ConstraintSubfield::GetDuration (void) const
+{
+  return m_duration;
+}
+
+uint16_t
+ConstraintSubfield::GetPeriod (void) const
+{
+  return m_period;
+}
+
+Mac48Address
+ConstraintSubfield::GetInterfererAddress (void) const
+{
+  return m_address;
+}
+
+/***************************************************
+*             DMG TSPEC element 8.4.2.136
+****************************************************/
+
+DmgTspecElement::DmgTspecElement ()
+  : m_allocationPeriod (0),
+    m_minAllocation (0),
+    m_maxAllocation (0),
+    m_minDuration (0)
+{
+}
+
+WifiInformationElementId
+DmgTspecElement::ElementId () const
+{
+  return IE_DMG_TSPEC;
+}
+
+uint8_t
+DmgTspecElement::GetInformationFieldSize () const
+{
+  uint8_t size = 0;
+  size += 14 * (1 + m_constraintList.size ());
+  return size;
+}
+
+void
+DmgTspecElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i = m_dmgAllocationInfo.Serialize (i);
+  i = m_bfControlField.Serialize (i);
+  i.WriteHtolsbU16 (m_allocationPeriod);
+  i.WriteHtolsbU16 (m_minAllocation);
+  i.WriteHtolsbU16 (m_maxAllocation);
+  i.WriteHtolsbU16 (m_minDuration);
+  i.WriteU8 (m_constraintList.size ());
+  for (ConstraintListCI it = m_constraintList.begin (); it != m_constraintList.end (); it++)
+    {
+      i = it->Serialize (i);
+    }
+}
+
+uint8_t
+DmgTspecElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  uint8_t numberOfConstraints;
+
+  i = m_dmgAllocationInfo.Deserialize (i);
+  i = m_bfControlField.Deserialize (i);
+  m_allocationPeriod = i.ReadLsbtohU16 ();
+  m_minAllocation = i.ReadLsbtohU16 ();
+  m_maxAllocation = i.ReadLsbtohU16 ();
+  m_minDuration = i.ReadLsbtohU16 ();
+  numberOfConstraints = i.ReadU8 ();
+  while (numberOfConstraints != 0)
+    {
+      ConstraintSubfield constraint;
+      i = constraint.Deserialize (i);
+      m_constraintList.push_back (constraint);
+      numberOfConstraints--;
+    }
+
+  return length;
+}
+
+void
+DmgTspecElement::SetDmgAllocationInfo (DmgAllocationInfo &info)
+{
+  m_dmgAllocationInfo = info;
+}
+
+void
+DmgTspecElement::SetBfControl (BF_Control_Field &ctrl)
+{
+  m_bfControlField = ctrl;
+}
+
+void
+DmgTspecElement::SetAllocationPeriod (uint16_t period)
+{
+  m_allocationPeriod = period;
+}
+
+void
+DmgTspecElement::SetMinimumAllocation (uint16_t min)
+{
+  m_minAllocation = min;
+}
+
+void
+DmgTspecElement::SetMaximumAllocation (uint16_t max)
+{
+  m_maxAllocation = max;
+}
+
+void
+DmgTspecElement::SetMinimumDuration (uint16_t duration)
+{
+  m_minDuration = duration;
+}
+
+void
+DmgTspecElement::AddTrafficSchedulingConstraint (ConstraintSubfield &constraint)
+{
+  NS_ASSERT_MSG (m_constraintList.size () != 255, "Cannot add more than 255 contraints");
+  m_constraintList.push_back (constraint);
+}
+
+DmgAllocationInfo
+DmgTspecElement::GetDmgAllocationInfo (void) const
+{
+  return m_dmgAllocationInfo;
+}
+
+BF_Control_Field
+DmgTspecElement::GetBfControl (void) const
+{
+  return m_bfControlField;
+}
+
+uint16_t
+DmgTspecElement::GetAllocationPeriod (void) const
+{
+  return m_allocationPeriod;
+}
+
+uint16_t
+DmgTspecElement::GetMinimumAllocation (void) const
+{
+  return m_minAllocation;
+}
+
+uint16_t
+DmgTspecElement::GetMaximumAllocation (void) const
+{
+  return m_maxAllocation;
+}
+
+uint16_t
+DmgTspecElement::GetMinimumDuration (void) const
+{
+  return m_minDuration;
+}
+
+uint8_t
+DmgTspecElement::GetNumberOfConstraints (void) const
+{
+  return m_constraintList.size ();
+}
+
+ConstraintList
+DmgTspecElement::GetConstraintList (void) const
+{
+  return m_constraintList;
+}
+
+std::ostream &operator << (std::ostream &os, const DmgTspecElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, DmgTspecElement &element)
+{
+  return is;
+}
+
+/***************************************************
 *              Next DMG ATI 8.4.2.137
 ****************************************************/
 
 NextDmgAti::NextDmgAti ()
-  :  m_startTime (0),
-     m_atiDuration (0)
+  : m_startTime (0),
+    m_atiDuration (0)
 {
 }
 
@@ -1547,7 +1979,6 @@ std::ostream &
 operator << (std::ostream &os, const NextDmgAti &element)
 {
   os <<  element.GetStartTime () << "|" << element.GetAtiDuration ();
-
   return os;
 }
 
@@ -1801,9 +2232,13 @@ MultiBandElement::GetInformationFieldSize () const
 {
   uint8_t size = 22;
   if (m_staMacAddressPresent)
-    size += 6;
+    {
+      size += 6;
+    }
   if (m_pairWiseCipher)
-    size += 2;
+    {
+      size += 2;
+    }
   return size;
 }
 
@@ -1822,7 +2257,9 @@ MultiBandElement::SerializeInformationField (Buffer::Iterator start) const
   start.WriteU8 (m_fstSessionTimeout);
 
   if (m_staMacAddressPresent)
-    WriteTo (start, m_staMacAddress);
+    {
+      WriteTo (start, m_staMacAddress);
+    }
 }
 
 uint8_t
@@ -2585,9 +3022,9 @@ operator >> (std::istream &is, SwitchingStreamElement &element)
 ****************************************************/
 
 SessionTransitionElement::SessionTransitionElement ()
-  :  m_fstsID (0),
-     m_sessionType (SessionType_InfrastructureBSS),
-     m_switchIntent (0)
+  : m_fstsID (0),
+    m_sessionType (SessionType_InfrastructureBSS),
+    m_switchIntent (0)
 {
 }
 
@@ -2601,18 +3038,6 @@ uint8_t
 SessionTransitionElement::GetInformationFieldSize () const
 {
   return 11;
-}
-
-Buffer::Iterator
-SessionTransitionElement::Serialize (Buffer::Iterator i) const
-{
-  return WifiInformationElement::Serialize (i);
-}
-
-uint16_t
-SessionTransitionElement::GetSerializedSize () const
-{
-  return WifiInformationElement::GetSerializedSize ();
 }
 
 void

@@ -59,6 +59,13 @@ DcfState::SetAifsn (uint32_t aifsn)
 }
 
 void
+DcfState::SetTxopLimit (Time txopLimit)
+{
+  NS_ASSERT_MSG ((txopLimit.GetMicroSeconds () % 32 == 0), "The TXOP limit must be expressed in multiple of 32 microseconds!");
+  m_txopLimit = txopLimit;
+}
+
+void
 DcfState::SetCwMin (uint32_t minCw)
 {
   bool changed = (m_cwMin != minCw);
@@ -84,6 +91,12 @@ uint32_t
 DcfState::GetAifsn (void) const
 {
   return m_aifsn;
+}
+
+Time
+DcfState::GetTxopLimit (void) const
+{
+  return m_txopLimit;
 }
 
 uint32_t
@@ -122,8 +135,22 @@ DcfState::UpdateBackoffSlotsNow (uint32_t nSlots, Time backoffUpdateBound)
 void
 DcfState::StartBackoffNow (uint32_t nSlots)
 {
-  NS_ASSERT (m_backoffSlots == 0);
-  MY_DEBUG ("start backoff=" << nSlots << " slots");
+  if (m_backoffSlots != 0)
+    {
+      MY_DEBUG ("reset backoff from " << m_backoffSlots << " to " << nSlots << " slots");
+    }
+  else
+    {
+      MY_DEBUG ("start backoff=" << nSlots << " slots");
+    }
+  m_backoffSlots = nSlots;
+  m_backoffStart = Simulator::Now ();
+}
+
+void
+DcfState::ResetState (uint32_t nSlots)
+{
+  NS_LOG_FUNCTION (this << nSlots);
   m_backoffSlots = nSlots;
   m_backoffStart = Simulator::Now ();
 }
@@ -468,26 +495,39 @@ DcfManager::IsBusy (void) const
   // PHY busy
   if (m_rxing)
     {
-//      std::cout << "Rxing" << std::endl;
       return true;
     }
   Time lastTxEnd = m_lastTxStart + m_lastTxDuration;
   if (lastTxEnd > Simulator::Now ())
     {
-//      std::cout << "m_lastTxStart=" << m_lastTxStart << std::endl;
-//      std::cout << "m_lastTxDuration=" << m_lastTxDuration << std::endl;
-//      std::cout << "lastTxEnd=" << lastTxEnd << std::endl;
       return true;
     }
   // NAV busy
   Time lastNavEnd = m_lastNavStart + m_lastNavDuration;
   if (lastNavEnd > Simulator::Now ())
     {
-//      std::cout << "m_lastNavStart=" << m_lastNavStart << std::endl;
-//      std::cout << "m_lastNavDuration=" << m_lastNavDuration << std::endl;
-//      std::cout << "lastNavEnd=" << lastNavEnd << std::endl;
       return true;
     }
+  // CCA busy
+  Time lastCCABusyEnd = m_lastBusyStart + m_lastBusyDuration;
+  if (lastCCABusyEnd > Simulator::Now ())
+    {
+      return true;
+    }
+  return false;
+}
+
+bool
+DcfManager::IsWithinAifs (DcfState *state) const
+{
+  NS_LOG_FUNCTION (this << state);
+  Time ifsEnd = GetAccessGrantStart () + MicroSeconds (state->GetAifsn () * m_slotTimeUs);
+  if (ifsEnd > Simulator::Now ())
+    {
+      NS_LOG_DEBUG ("IsWithinAifs () true; ifsEnd is at " << ifsEnd.GetSeconds ());
+      return true;
+    }
+  NS_LOG_DEBUG ("IsWithinAifs () false; ifsEnd was at " << ifsEnd.GetSeconds ());
   return false;
 }
 
@@ -521,18 +561,37 @@ DcfManager::RequestAccess (DcfState *state)
   UpdateBackoff ();
   NS_ASSERT (!state->IsAccessRequested ());
   state->NotifyAccessRequested ();
+  // If currently transmitting; end of transmission (ACK or no ACK) will cause
+  // a later access request if needed from EndTxNoAck, GotAck, or MissedAck
+  Time lastTxEnd = m_lastTxStart + m_lastTxDuration;
+  if (lastTxEnd > Simulator::Now ())
+    {
+      NS_LOG_DEBUG ("Internal collision (currently transmitting)");
+      state->NotifyInternalCollision ();
+      DoRestartAccessTimeoutIfNeeded ();
+      return;
+    }
   /**
    * If there is a collision, generate a backoff
    * by notifying the collision to the user.
    */
-  if (state->GetBackoffSlots () == 0
-      && IsBusy ())
+  if (state->GetBackoffSlots () == 0)
     {
-      MY_DEBUG ("medium is busy: collision");
-      /* someone else has accessed the medium.
-       * generate a backoff.
-       */
-      state->NotifyCollision ();
+      if (IsBusy ())
+        {
+          MY_DEBUG ("medium is busy: collision");
+          // someone else has accessed the medium; generate a backoff.
+          state->NotifyCollision ();
+          DoRestartAccessTimeoutIfNeeded ();
+          return;
+        }
+      else if (IsWithinAifs (state))
+        {
+          MY_DEBUG ("busy within AIFS");
+          state->NotifyCollision ();
+          DoRestartAccessTimeoutIfNeeded ();
+          return;
+        }
     }
   DoGrantAccess ();
   DoRestartAccessTimeoutIfNeeded ();
@@ -654,6 +713,10 @@ DcfManager::GetBackoffStartFor (DcfState *state)
 Time
 DcfManager::GetBackoffEndFor (DcfState *state)
 {
+  NS_LOG_FUNCTION (this << state);
+  NS_LOG_DEBUG ("Backoff start: " << GetBackoffStartFor (state).As (Time::US) <<
+    " end: " << (GetBackoffStartFor (state) + 
+    MicroSeconds (state->GetBackoffSlots () * m_slotTimeUs)).As (Time::US)); 
   return GetBackoffStartFor (state) + MicroSeconds (state->GetBackoffSlots () * m_slotTimeUs);
 }
 
@@ -717,6 +780,7 @@ DcfManager::DoRestartAccessTimeoutIfNeeded (void)
             }
         }
     }
+  NS_LOG_DEBUG ("Access timeout needed: " << accessTimeoutNeeded);
   if (accessTimeoutNeeded)
     {
       MY_DEBUG ("expected backoff end=" << expectedBackoffEnd);
@@ -732,6 +796,12 @@ DcfManager::DoRestartAccessTimeoutIfNeeded (void)
                                                  &DcfManager::AccessTimeout, this);
         }
     }
+}
+
+bool
+DcfManager::IsReceiving (void) const
+{
+  return m_rxing;
 }
 
 void
@@ -771,13 +841,27 @@ DcfManager::NotifyTxStartNow (Time duration)
   NS_LOG_FUNCTION (this << duration);
   if (m_rxing)
     {
-      //this may be caused only if PHY has started to receive a packet
-      //inside SIFS, so, we check that lastRxStart was maximum a SIFS ago
-      NS_ASSERT (Simulator::Now () - m_lastRxStart <= m_sifs);
-      m_lastRxEnd = Simulator::Now ();
-      m_lastRxDuration = m_lastRxEnd - m_lastRxStart;
-      m_lastRxReceivedOk = true;
-      m_rxing = false;
+      if (Simulator::Now () - m_lastRxStart <= m_sifs)
+        {
+          //this may be caused if PHY has started to receive a packet
+          //inside SIFS, so, we check that lastRxStart was within a SIFS ago
+          m_lastRxEnd = Simulator::Now ();
+          m_lastRxDuration = m_lastRxEnd - m_lastRxStart;
+          m_lastRxReceivedOk = true;
+          m_rxing = false;
+        }
+      else
+        {
+          // Bug 2477:  It is possible for the DCF to fall out of 
+          //            sync with the PHY state if there are problems
+          //            receiving A-MPDUs.  PHY will cancel the reception
+          //            and start to transmit
+          NS_LOG_DEBUG ("Phy is transmitting despite DCF being in receive state");
+          m_lastRxEnd = Simulator::Now ();
+          m_lastRxDuration = m_lastRxEnd - m_lastRxStart;
+          m_lastRxReceivedOk = false;
+          m_rxing = false;
+        }
     }
   MY_DEBUG ("tx start for " << duration);
   UpdateBackoff ();
@@ -902,7 +986,6 @@ DcfManager::NotifyNavResetNow (Time duration)
   UpdateBackoff ();
   m_lastNavStart = Simulator::Now ();
   m_lastNavDuration = duration;
-  UpdateBackoff ();
   /**
    * If the nav reset indicates an end-of-nav which is earlier
    * than the previous end-of-nav, the expected end of backoff

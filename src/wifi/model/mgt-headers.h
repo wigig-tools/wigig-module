@@ -32,9 +32,12 @@
 #include "capability-information.h"
 #include "supported-rates.h"
 #include "ssid.h"
+#include "dsss-parameter-set.h"
 #include "ht-capabilities.h"
 #include "ht-operations.h"
+#include "vht-capabilities.h"
 #include "erp-information.h"
+#include "edca-parameter-set.h"
 #include "dmg-capabilities.h"
 #include "dmg-information-elements.h"
 #include "ctrl-headers.h"
@@ -325,7 +328,7 @@ public:
    * Category values - see 802.11-2012 Table 8-38
    */
 
-  enum CategoryValue //Table 8-38 staring from IEEE 802.11, Part11, (Year 2012)
+  enum CategoryValue //table 8-38 staring from IEEE 802.11, Part11, (Year 2012)
   {
     BLOCK_ACK = 3,
     PUBLIC = 4,
@@ -383,12 +386,6 @@ public:
     TBTT_ADJUSTMENT_RESPONSE = 10,        //Action Value:10 in Category 13: Mesh (not used so far)
   };
 
-  enum MultihopActionValue
-  {
-    PROXY_UPDATE = 0,                   //not used so far
-    PROXY_UPDATE_CONFIRMATION = 1,      //not used so far
-  };
-
   enum SelfProtectedActionValue //Category: 15 (Self Protected)
   {
     PEER_LINK_OPEN = 1,         //Mesh Peering Open
@@ -396,6 +393,12 @@ public:
     PEER_LINK_CLOSE = 3,        //Mesh Peering Close
     GROUP_KEY_INFORM = 4,       //Mesh Group Key Inform
     GROUP_KEY_ACK = 5,          //Mesh Group Key Acknowledge
+  };
+
+  enum MultihopActionValue
+  {
+    PROXY_UPDATE = 0,                   //not used so far
+    PROXY_UPDATE_CONFIRMATION = 1,      //not used so far
   };
 
   /**
@@ -1265,7 +1268,7 @@ private:
 
 };
 
-typedef std::vector<Ptr<ExtRelayCapableStaInfo> > RelayCapableStaList;
+typedef std::map<uint16_t, RelayCapabilitiesInfo> RelayCapableStaList;
 
 /**
  * \ingroup wifi
@@ -1290,7 +1293,7 @@ public:
 
   void SetDialogToken (uint8_t token);
   void SetStatusCode (uint16_t status);
-  void AddRelayCapableStaInfo (Ptr<ExtRelayCapableStaInfo> element);
+  void AddRelayCapableStaInfo (uint8_t aid, RelayCapabilitiesInfo &element);
   void SetRelayCapableList (RelayCapableStaList &list);
 
   uint8_t GetDialogToken (void) const;

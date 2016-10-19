@@ -71,8 +71,6 @@ int main (int argc, char *argv[])
       Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("0"));
     }
 
-  Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("990000"));
-
   //Set the maximum size for A-MPDU with regards to the payload size
   maxAmpduSize = nMpdus * (payloadSize + 200);
 
@@ -99,7 +97,6 @@ int main (int argc, char *argv[])
   Ssid ssid = Ssid ("simple-mpdu-aggregation");
   mac.SetType ("ns3::StaWifiMac",
                "Ssid", SsidValue (ssid),
-               "ActiveProbing", BooleanValue (false),
                "BE_MaxAmpduSize", UintegerValue (maxAmpduSize));
 
   NetDeviceContainer staDevices;
@@ -107,7 +104,6 @@ int main (int argc, char *argv[])
 
   mac.SetType ("ns3::ApWifiMac",
                "Ssid", SsidValue (ssid),
-               "BeaconInterval", TimeValue (MicroSeconds (102400)),
                "BeaconGeneration", BooleanValue (true),
                "BE_MaxAmpduSize", UintegerValue (maxAmpduSize));
 

@@ -25,6 +25,11 @@
 
 namespace ns3 {
 
+PacketSinkHelper::PacketSinkHelper ()
+{
+  m_factory.SetTypeId ("ns3::PacketSink");
+}
+
 PacketSinkHelper::PacketSinkHelper (std::string protocol, Address address)
 {
   m_factory.SetTypeId ("ns3::PacketSink");

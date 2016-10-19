@@ -40,10 +40,24 @@ class Ipv4Interface;
 class TcpSocketBase;
 class Ipv4EndPoint;
 class Ipv6EndPoint;
+class NetDevice;
+
+
+/**
+ * \ingroup internet
+ * \defgroup tcp TCP
+ *
+ * This is an implementation of various Transmission Control Protocol flavors.
+ *
+ * Each TCP flavors is studied to match a specific environment, and they
+ * differ mainly in the congestion control algorithms used.
+ *
+ * See \RFC{793} and others.
+ */
 
 /**
  * \ingroup tcp
- * \brief Tcp socket creation and multiplexing/demultiplexing
+ * \brief TCP socket creation and multiplexing/demultiplexing
  * 
  * A single instance of this class is held by one instance of class Node.
  *
@@ -88,15 +102,16 @@ public:
    * of the TCP protocol
    */
   Ptr<Socket> CreateSocket (void);
+
   /**
-   * \brief Create a TCP socket using the specified TypeId
+   * \brief Create a TCP socket using the specified congestion control algorithm TypeId
    *
    * \return A smart Socket pointer to a TcpSocket allocated by this instance
    * of the TCP protocol
    *
-   * \warning using a socketTypeId other than TCP is a bad idea.
+   * \warning using a congestionTypeId other than TCP is a bad idea.
    *
-   * \param socketTypeId the socket TypeId
+   * \param congestionTypeId the congestion control algorithm TypeId
    */
   Ptr<Socket> CreateSocket (TypeId congestionTypeId);
 

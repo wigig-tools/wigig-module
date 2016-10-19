@@ -30,10 +30,9 @@
 #include "ns3/nstime.h"
 #include "ns3/simple-ref-count.h"
 #include "ns3/wifi-tx-vector.h"
+#include "error-rate-model.h"
 
 namespace ns3 {
-
-class ErrorRateModel;
 
 /**
  * \ingroup wifi
@@ -202,6 +201,12 @@ private:
                                       enum WifiPreamble preamble,
                                       Time duration, double rxPower);
 
+  /**
+   * Add a non-Wifi signal to interference helper.
+   * \param duration the duration of the signal
+   * \param rxPower receive power (W)
+   */
+  void AddForeignSignal (Time duration, double rxPower);
   /**
    * Calculate the SNIR at the start of the TRN fields and accumulate
    * all SNIR changes in the snir vector.

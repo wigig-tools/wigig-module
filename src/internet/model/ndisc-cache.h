@@ -41,7 +41,8 @@ class Ipv6Interface;
 class Ipv6Header;
 
 /**
- * \class NdiscCache
+ * \ingroup ipv6
+ *
  * \brief IPv6 Neighbor Discovery cache.
  */
 class NdiscCache : public Object
@@ -83,10 +84,17 @@ public:
 
   /**
    * \brief Lookup in the cache.
-   * \param dst destination address
-   * \return the entry if found, 0 otherwise
+   * \param dst destination address.
+   * \return the entry if found, 0 otherwise.
    */
   NdiscCache::Entry* Lookup (Ipv6Address dst);
+
+  /**
+   * \brief Lookup in the cache for a MAC address.
+   * \param dst destination MAC address.
+   * \return a list of matching entries.
+   */
+  std::list<NdiscCache::Entry*> LookupInverse (Address dst);
 
   /**
    * \brief Add an entry.
@@ -138,8 +146,9 @@ public:
   typedef std::pair<Ptr<Packet>, Ipv6Header> Ipv6PayloadHeaderPair;
 
   /**
-   * \class Entry
-   * \brief A record that holds information about an NdiscCache entry.
+   * \ingroup ipv6
+   *
+   * \brief A record that holds information about a NdiscCache entry.
    */
   class Entry
   {
@@ -273,14 +282,14 @@ public:
     Time GetLastReachabilityConfirmation () const;
 
     /**
-     * \brief Update the time of last reachability confirmation.
-     */
-    void UpdateLastReachabilityconfirmation ();
-
-    /**
      * \brief Start the reachable timer.
      */
     void StartReachableTimer ();
+
+    /**
+     * \brief Update the reachable timer.
+     */
+    void UpdateReachableTimer ();
 
     /**
      * \brief Start retransmit timer.

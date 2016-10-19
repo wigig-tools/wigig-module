@@ -1,49 +1,39 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
-#include "ns3/cone-antenna.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/measured-2d-antenna.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/wifi-module.h"
+#include "common-functions.h"
 
 /**
- * This script is used to evaluate IEEE 802.11ad relay operation using Link Switching Type + Full Duplex Amplify and Forward.
+ * This script is used to evaluate IEEE 802.11ad relay operation using Link Switching Type + Full Duplex Amplify and Forward (FD-AF).
  * The scenario consists of 3 DMG STAs (Two REDS + 1 RDS) and one PCP/AP.
- * Note: The standard supports only unicast transmission for relay operation.
+ * Note: The standard supports only unicast transmission for relay operation. The relay (RDS) is responsible for protecting the
+ * period allocated between the source REDS and destinations REDS. In case, the source REDS does no receive Ack/BlockAck during link
+ * change interval, the source REDS will defer its transmission by data sensing time which will implicitly signal the destination REDS
+ * to switch to the relay link.
+ *
+ *                           DMG AP (0,1)
+ *
+ *
+ * Source REDS (-1.73,0)                        Destination REDS (1.73,0)
+ *
+ *
+ *                            RDS (0,-1)
  *
  * To use this script simply type the following run command:
- * ./waf --run "evaluate_relay_operation --dataRate=5Gbps --performRls=1
- * --packetLossThreshold=100 --packetDropProbability=0.25"
- *
- * To compare operation without relay support type the following run command:
- * ./waf --run "evaluate_relay_operation --dataRate=5Gbps --performRls=0
- * --packetLossThreshold=100 --packetDropProbability=0.25"
+ * ./waf --run "evaluate_fullduplex"
  *
  * The simulation generates four PCAP files for each node. You can check the traces which matches exactly
- * the procedure for relay establishment.
+ * the procedure for relay search and relay link establishment defined in the amendment.
  */
 
-NS_LOG_COMPONENT_DEFINE ("EvaluateRelayOperation");
+NS_LOG_COMPONENT_DEFINE ("EvaluateFullDuplexRelayOperation");
 
 using namespace ns3;
 using namespace std;
@@ -58,23 +48,16 @@ Ptr<DmgStaWifiMac> srcRedsMac;
 Ptr<DmgStaWifiMac> dstRedsMac;
 Ptr<DmgStaWifiMac> rdsMac;
 
-double m_packetDropProbability = 0.5;
-uint32_t m_packetLossCounter = 0;         /* Packet Loss Counter */
-uint32_t m_packetLossThreshold = 5;       /* Threshold to start RLS procedure*/
-
-Time m_rlsStarted;                        /* The time we started an RLS procedure */
-bool performRls = true;                   /* Flag to indicate whether we perfrom RLS procedure or not */
-
-Ptr<UniformRandomVariable> randomVariable;
+Ptr<YansWifiChannel> adChannel;
+Ptr<WifiPhy> srcWifiPhy;
+Ptr<WifiPhy> dstWifiPhy;
 
 /*** Access Point Variables ***/
 Ptr<PacketSink> sink;
 uint64_t lastTotalRx = 0;
 double averagethroughput = 0;
-
 uint8_t assoicatedStations = 0;           /* Total number of assoicated stations with the AP */
 uint8_t stationsTrained = 0;              /* Number of BF trained stations */
-bool scheduledStaticPeriods = false;      /* Flag to indicate whether we scheduled Static Service Periods or not */
 
 void
 CalculateThroughput ()
@@ -88,90 +71,14 @@ CalculateThroughput ()
 }
 
 void
-PopulateArpCache (void)
-{
-  Ptr<ArpCache> arp = CreateObject<ArpCache> ();
-  arp->SetAliveTimeout (Seconds (3600 * 24 * 365));
-
-  for (NodeList::Iterator i = NodeList::Begin (); i != NodeList::End (); ++i)
-    {
-      Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol> ();
-      NS_ASSERT (ip != 0);
-      ObjectVectorValue interfaces;
-      ip->GetAttribute ("InterfaceList", interfaces);
-      for (ObjectVectorValue::Iterator j = interfaces.Begin (); j != interfaces.End (); j ++)
-        {
-          Ptr<Ipv4Interface> ipIface = (j->second)->GetObject<Ipv4Interface> ();
-          NS_ASSERT (ipIface != 0);
-          Ptr<NetDevice> device = ipIface->GetDevice ();
-          NS_ASSERT (device != 0);
-          Mac48Address addr = Mac48Address::ConvertFrom(device->GetAddress ());
-          for (uint32_t k = 0; k < ipIface->GetNAddresses (); k++)
-            {
-              Ipv4Address ipAddr = ipIface->GetAddress (k).GetLocal ();
-              if (ipAddr == Ipv4Address::GetLoopback ())
-                continue;
-              ArpCache::Entry *entry = arp->Add (ipAddr);
-              entry->MarkWaitReply (0);
-              entry->MarkAlive (addr);
-            }
-        }
-    }
-
-  for (NodeList::Iterator i = NodeList::Begin (); i != NodeList::End (); ++i)
-    {
-      Ptr<Ipv4L3Protocol> ip = (*i)->GetObject<Ipv4L3Protocol> ();
-      NS_ASSERT (ip != 0);
-      ObjectVectorValue interfaces;
-      ip->GetAttribute("InterfaceList", interfaces);
-      for(ObjectVectorValue::Iterator j = interfaces.Begin (); j != interfaces.End (); j ++)
-        {
-          Ptr<Ipv4Interface> ipIface = (j->second)->GetObject<Ipv4Interface> ();
-          ipIface->SetAttribute ("ArpCache", PointerValue (arp));
-        }
-    }
-}
-
-bool
-GetPacketDropValue (void)
-{
-  return (randomVariable->GetValue () < m_packetDropProbability);
-}
-
-/**
- * Insert Packets Dropper
- * \return
- */
-void
-InsertPacketDropper (Ptr<YansWifiChannel> channel, Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy)
-{
-  std::cout << "Packet Dropper Inserted at " << Simulator::Now () << std::endl;
-  channel->AddPacketDropper (&GetPacketDropValue, srcWifiPhy, dstWifiPhy);
-}
-
-void
-TxFailed (Mac48Address address)
-{
-  if (address == dstRedsNetDevice->GetAddress ())
-    {
-      m_packetLossCounter++;
-      if ((m_packetLossCounter == m_packetLossThreshold) && performRls)
-        {
-          /* Initiate RLS */
-          std::cout << "Failed to receive Data ACK from " << address << " for "
-                    << m_packetLossThreshold << " times, so initiate RLS procedure." << std::endl;
-          Simulator::ScheduleNow (&DmgStaWifiMac::InitiateLinkSwitchingTypeProcedure, srcRedsMac,
-                                  Mac48Address::ConvertFrom (rdsNetDevice->GetAddress ()));
-          m_rlsStarted = Simulator::Now ();
-        }
-    }
-}
-
-void
 RlsCompleted (Mac48Address address)
 {
-  std::cout << "RLS Procedure is completed with " << address << std::endl;
-  std::cout << "RLS Procedure lasted for " << Simulator::Now () - m_rlsStarted << std::endl;
+  std::cout << "RLS Procedure is completed with " << address  << " at " << Simulator::Now ().As (Time::S) << std::endl;
+  /* Schedule an SP for the communication between the source REDS and destination REDS */
+  std::cout << "Allocating static service period for communication between " << srcRedsMac->GetAddress ()
+            << " and " << dstRedsMac->GetAddress () << std::endl;
+  apWifiMac->AddAllocationPeriod (1, SERVICE_PERIOD_ALLOCATION, true, srcRedsMac->GetAssociationID (),
+                                  dstRedsMac->GetAssociationID (), 0, 32767);
 }
 
 void
@@ -187,14 +94,14 @@ SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
           stationsTrained++;
           if (stationsTrained == 2)
             {
-              std::cout << "The RDS completed BF with both the source REDS and destination REDS" << std::endl;
+              std::cout << "The RDS completed BF Training with both the source REDS and the destination REDS" << std::endl;
               /* Send Channel Measurement Request to the RDS */
               srcRedsMac->SendChannelMeasurementRequest (Mac48Address::ConvertFrom (rdsNetDevice->GetAddress ()), 10);
             }
         }
       else if ((srcRedsMac->GetAddress () == staWifiMac->GetAddress ()) && (dstRedsMac->GetAddress () == address))
         {
-          std::cout << "The source REDS completed BF with the destination REDS" << std::endl;
+          std::cout << "The source REDS completed BF Training with the destination REDS" << std::endl;
           /* Send Channel Measurement Request to the destination REDS */
           srcRedsMac->SendChannelMeasurementRequest (Mac48Address::ConvertFrom (dstRedsNetDevice->GetAddress ()), 10);
         }
@@ -207,13 +114,88 @@ ChannelReportReceived (Mac48Address address)
   if (rdsMac->GetAddress () == address)
     {
       std::cout << "Received Channel Measurement Response from the RDS" << std::endl;
-      /* TxSS for the Link Between Source REDS + Destination REDS */
+      /* TxSS for the Link Between the Source REDS + the Destination REDS */
       apWifiMac->AllocateBeamformingServicePeriod (srcRedsMac->GetAssociationID (), dstRedsMac->GetAssociationID (), 0, true);
     }
   else if (dstRedsMac->GetAddress () == address)
     {
       std::cout << "Received Channel Measurement Response from the destination REDS" << std::endl;
       std::cout << "We are ready to execute RLS procedure" << std::endl;
+      /* Initiate Relay Link Switch Procedure */
+      Simulator::ScheduleNow (&DmgStaWifiMac::StartRlsProcedure, srcRedsMac);
+    }
+}
+
+void
+TransmissionLinkChanged (Mac48Address address, TransmissionLink link)
+{
+  if (link == RELAY_LINK)
+    {
+      std::cout << "DMG STA " << address << " has changed its current transmission link to the relay link" << std::endl;
+    }
+}
+
+uint8_t
+SelectRelay (ChannelMeasurementInfoList rdsMeasurements, ChannelMeasurementInfoList dstRedsMeasurements, Mac48Address &rdsAddress)
+{
+  rdsAddress = rdsMac->GetAddress ();
+  return rdsMac->GetAssociationID ();
+}
+
+void
+TearDownRelay (Ptr<YansWifiChannel> channel)
+{
+  srcRedsMac->TeardownRelay (rdsMac->GetAddress (), dstRedsMac->GetAddress (),
+                             srcRedsMac->GetAssociationID (),
+                             dstRedsMac->GetAssociationID (),
+                             rdsMac->GetAssociationID ());
+}
+
+/************* Functions related to implicit link switching signaling *********************/
+
+bool droppedPacket = false;
+bool insertPacketDropper = false;
+
+bool
+GetPacketDropValue (void)
+{
+  if (!droppedPacket)
+    {
+      std::cout << "Dropped packet from Destination REDS to source REDS" << std::endl;
+      droppedPacket = true;
+      return true;
+    }
+  else
+    {
+      return false;
+    }
+}
+
+void
+InsertPacketDropper ()
+{
+  std::cout << "Packet Dropper Inserted at " << Simulator::Now ().As (Time::S) << std::endl;
+  insertPacketDropper = true;
+}
+
+void
+ServicePeriodStarted (Mac48Address source, Mac48Address destination)
+{
+  if (insertPacketDropper)
+    {
+      std::cout << "Service Period for which we insert packet dropper has started at " << Simulator::Now () << std::endl;
+      Simulator::Schedule (MilliSeconds (1), &YansWifiChannel::AddPacketDropper, adChannel, &GetPacketDropValue, dstWifiPhy, srcWifiPhy);
+    }
+}
+
+void
+ServicePeriodEnded (Mac48Address source, Mac48Address destination)
+{
+  if (insertPacketDropper && droppedPacket)
+    {
+      std::cout << "Service Period for which we insert packet dropper has ended at " << Simulator::Now () << std::endl;
+      insertPacketDropper = false;
+      adChannel->RemovePacketDropper ();
     }
 }
 
@@ -221,8 +203,10 @@ int
 main (int argc, char *argv[])
 {
   uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
-  string dataRate = "100Mbps";                  /* Application Layer Data Rate. */
-  uint32_t queueSize = 1000;                    /* Wifi Mac Queue Size. */
+  string dataRate = "150Mbps";                  /* Application Layer Data Rate. */
+  uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
+  uint32_t queueSize = 10000;                   /* Wifi Mac Queue Size. */
+  uint32_t switchTime = 4;                      /* The time we switch to the relay link in Seconds */
   string phyMode = "DMG_MCS24";                 /* Type of the Physical Layer. */
   bool verbose = false;                         /* Print Logging Information. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
@@ -232,10 +216,8 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
   cmd.AddValue ("dataRate", "Payload size in bytes", dataRate);
+  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
-  cmd.AddValue ("performRls", "Flag to indicate whether to perform RLS when we exceed packetLossThreshold", performRls);
-  cmd.AddValue ("packetDropProbability", "The probability to drop a packet", m_packetDropProbability);
-  cmd.AddValue ("packetLossThreshold", "Number of packets allowed to loss to initaite RLS procedure", m_packetLossThreshold);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
   cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
@@ -257,7 +239,7 @@ main (int argc, char *argv[])
   if (verbose)
     {
       wifi.EnableLogComponents ();
-      LogComponentEnable ("EvaluateRelayOperation", LOG_LEVEL_ALL);
+      LogComponentEnable ("EvaluateFullDuplexRelayOperation", LOG_LEVEL_ALL);
     }
 
   /**** Set up Channel ****/
@@ -289,11 +271,11 @@ main (int argc, char *argv[])
   /* Give all nodes steerable antenna */
   wifiPhy.EnableAntenna (true, true);
   wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
+                      "Sectors", UintegerValue (12),
                       "Antennas", UintegerValue (1),
                       "AngleOffset", DoubleValue (0));
 
-  /* Make two nodes and set them up with the phy and the mac */
+  /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
   wifiNodes.Create (4);
   Ptr<Node> apNode = wifiNodes.Get (0);
@@ -301,7 +283,6 @@ main (int argc, char *argv[])
   Ptr<Node> srcNode = wifiNodes.Get (2);
   Ptr<Node> dstNode = wifiNodes.Get (3);
 
-  /**** Allocate a default Adhoc Wifi MAC ****/
   /* Add a DMG upper mac */
   DmgWifiMacHelper wifiMac = DmgWifiMacHelper::Default ();
 
@@ -309,12 +290,11 @@ main (int argc, char *argv[])
   Ssid ssid = Ssid ("test802.11ad");
   wifiMac.SetType("ns3::DmgApWifiMac",
                   "Ssid", SsidValue(ssid),
-                  "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true),
                   "BE_MaxAmpduSize", UintegerValue (0),
-                  "BE_MaxAmsduSize", UintegerValue (262143),
-                  "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
-                  "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                  "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
+                  "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                  "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (12),
+                  "BeaconInterval", TimeValue (MicroSeconds (100000)),
+                  "BeaconTransmissionInterval", TimeValue (MicroSeconds (800)),
                   "ATIDuration", TimeValue (MicroSeconds (1000)));
 
   NetDeviceContainer apDevice;
@@ -323,10 +303,10 @@ main (int argc, char *argv[])
   /* Install RDS Node */
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true),
                    "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (262143),
-                   "RDSActivated", BooleanValue (true), "REDSActivated", BooleanValue (false));
+                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "RDSActivated", BooleanValue (true), "REDSActivated", BooleanValue (false),
+                   "RDSLinkChangeInterval", UintegerValue (250));
 
   NetDeviceContainer rdsDevice;
   rdsDevice = wifi.Install (wifiPhy, wifiMac, rdsNode);
@@ -334,10 +314,11 @@ main (int argc, char *argv[])
   /* Install REDS Nodes */
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true),
                    "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (262143),
-                   "RDSActivated", BooleanValue (false), "REDSActivated", BooleanValue (true));
+                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "RDSActivated", BooleanValue (false), "REDSActivated", BooleanValue (true),
+                   "RDSDuplexMode", BooleanValue (true),
+                   "RDSLinkChangeInterval", UintegerValue (250), "RDSDataSensingTime", UintegerValue (200));
 
   NetDeviceContainer redsDevices;
   redsDevices = wifi.Install (wifiPhy, wifiMac, NodeContainer (srcNode, dstNode));
@@ -345,10 +326,10 @@ main (int argc, char *argv[])
   /* Setting mobility model */
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0.0, +1.0, 0.0));   /* PCP/AP */
-  positionAlloc->Add (Vector (0.0, -1.0, 0.0));   /* RDS */
-  positionAlloc->Add (Vector (-1.0, 0.0, 0.0));   /* Source REDS */
-  positionAlloc->Add (Vector (+1.0, 0.0, 0.0));   /* Destination REDS */
+  positionAlloc->Add (Vector (0.0, +1.0, 0.0));     /* PCP/AP */
+  positionAlloc->Add (Vector (0.0, -1.0, 0.0));     /* RDS */
+  positionAlloc->Add (Vector (-1.732, 0.0, 0.0));   /* Source REDS */
+  positionAlloc->Add (Vector (+1.732, 0.0, 0.0));   /* Destination REDS */
 
   mobility.SetPositionAllocator (positionAlloc);
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
@@ -387,16 +368,16 @@ main (int argc, char *argv[])
   src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
   src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate)));
   srcApp = src.Install (srcNode);
-  srcApp.Start (Seconds (5.0));
-  Simulator::Schedule (Seconds (5.1), &CalculateThroughput);
+  srcApp.Start (Seconds (2.0));
+  Simulator::Schedule (Seconds (2.1), &CalculateThroughput);
 
   /* Enable Traces */
   if (pcapTracing)
     {
       wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
-      wifiPhy.EnablePcap ("AccessPoint", apDevice, false);
-      wifiPhy.EnablePcap ("RDS", rdsDevice, false);
-      wifiPhy.EnablePcap ("REDS", redsDevices, false);
+      wifiPhy.EnablePcap ("Traces/AccessPoint", apDevice, false);
+      wifiPhy.EnablePcap ("Traces/RDS", rdsDevice, false);
+      wifiPhy.EnablePcap ("Traces/REDS", redsDevices, false);
     }
 
   /** Connect Trace Sources **/
@@ -410,33 +391,45 @@ main (int argc, char *argv[])
   dstRedsMac = StaticCast<DmgStaWifiMac> (dstRedsNetDevice->GetMac ());
   rdsMac = StaticCast<DmgStaWifiMac> (rdsNetDevice->GetMac ());
 
+  adChannel = StaticCast<YansWifiChannel> (srcRedsNetDevice->GetChannel ());
+  srcWifiPhy = srcRedsNetDevice->GetPhy ();
+  dstWifiPhy = dstRedsNetDevice->GetPhy ();
+
+  srcRedsMac->RegisterRelaySelectorFunction (MakeCallback (&SelectRelay));
+
+  /* For implicit signaling, we insert packet dropper at the start of the service period between the source and destination REDS */
+  srcRedsMac->TraceConnectWithoutContext ("ServicePeriodStarted", MakeCallback (&ServicePeriodStarted));
+  srcRedsMac->TraceConnectWithoutContext ("ServicePeriodEnded", MakeCallback (&ServicePeriodEnded));
+
+  srcRedsMac->TraceConnectWithoutContext ("RlsCompleted", MakeCallback (&RlsCompleted));
   srcRedsMac->TraceConnectWithoutContext ("ChannelReportReceived", MakeCallback (&ChannelReportReceived));
+
+  /* Traces related to Beamforming (TxSS)*/
   srcRedsMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, srcRedsMac));
   dstRedsMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, dstRedsMac));
   rdsMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, rdsMac));
 
-  Ptr<WifiRemoteStationManager> remoteStation = srcRedsNetDevice->GetRemoteStationManager ();
-  remoteStation->TraceConnectWithoutContext ("MacTxDataFailed", MakeCallback (&TxFailed));
-  srcRedsMac->TraceConnectWithoutContext ("RlsCompleted", MakeCallback (&RlsCompleted));
+  /* Traces related to link swtiching */
+  srcRedsMac->TraceConnectWithoutContext ("TransmissionLinkChanged", MakeCallback (&TransmissionLinkChanged));
+  dstRedsMac->TraceConnectWithoutContext ("TransmissionLinkChanged", MakeCallback (&TransmissionLinkChanged));
 
   /** Schedule Events **/
   /* Request the DMG Capabilities of other DMG STAs */
-  Simulator::Schedule (Seconds (1.0), &DmgStaWifiMac::RequestInformation, srcRedsMac, dstRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.1), &DmgStaWifiMac::RequestInformation, rdsMac, dstRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.2), &DmgStaWifiMac::RequestInformation, srcRedsMac, rdsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.05), &DmgStaWifiMac::RequestInformation, srcRedsMac, dstRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.06), &DmgStaWifiMac::RequestInformation, srcRedsMac, rdsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.07), &DmgStaWifiMac::RequestInformation, rdsMac, srcRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.08), &DmgStaWifiMac::RequestInformation, rdsMac, dstRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.09), &DmgStaWifiMac::RequestInformation, dstRedsMac, srcRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.10), &DmgStaWifiMac::RequestInformation, dstRedsMac, rdsMac->GetAddress ());
 
   /* Initiate Relay Discovery Procedure */
-  Simulator::Schedule (Seconds (1.4), &DmgStaWifiMac::DoRelayDiscovery, srcRedsMac, dstRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (3), &DmgStaWifiMac::StartRelayDiscovery, srcRedsMac, dstRedsMac->GetAddress ());
 
-  /* UDP Client will start transmission at this point, however we will add blockage to the link */
-  Ptr<YansWifiChannel> adChannel = StaticCast<YansWifiChannel> (srcRedsNetDevice->GetChannel ());
-  Ptr<WifiPhy> srcWifiPhy = srcRedsNetDevice->GetPhy ();
-  Ptr<WifiPhy> dstWifiPhy = dstRedsNetDevice->GetPhy ();
-  /* Initialzie Packets Dropper */
-  randomVariable = CreateObject<UniformRandomVariable> ();
-  randomVariable->SetAttribute ("Min", DoubleValue (0));
-  randomVariable->SetAttribute ("Max", DoubleValue (1));
-  Simulator::Schedule (Seconds (6), &InsertPacketDropper, adChannel, srcWifiPhy, dstWifiPhy);
+  /* Schedule link switch event */
+  Simulator::Schedule (Seconds (switchTime), &InsertPacketDropper);
+
+  /* Schedule tear down event */
+  Simulator::Schedule (Seconds (switchTime + 3), &TearDownRelay, adChannel);
 
   Simulator::Stop (Seconds (simulationTime));
   Simulator::Run ();

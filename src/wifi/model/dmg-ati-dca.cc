@@ -1,21 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Copyright (c) 2015, IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/assert.h"
 #include "ns3/packet.h"
@@ -112,6 +98,9 @@ public:
   virtual void MissedAck (void)
   {
     m_txop->MissedAck ();
+  }
+  virtual void StartNextFragment (void)
+  {
   }
   virtual void StartNext (void)
   {
@@ -476,6 +465,20 @@ DmgAtiDca::EndTxNoAck (void)
     }
 
   StartAccessIfNeeded ();
+}
+
+void
+DmgAtiDca::SetTxopLimit (Time txopLimit)
+{
+  NS_LOG_FUNCTION (this << txopLimit);
+  m_dcf->SetTxopLimit (txopLimit);
+}
+
+Time
+DmgAtiDca::GetTxopLimit (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return m_dcf->GetTxopLimit ();
 }
 
 } //namespace ns3

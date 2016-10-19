@@ -81,7 +81,12 @@ public:
    * \return the total bytes received in this sink app
    */
   uint64_t GetTotalRx () const;
+  /**
+   * \return the total number of received
+   */
+  uint64_t GetTotalReceivedPackets (void) const;
 
+  Time GetAverageDelay (void) const;
   /**
    * \return pointer to listening socket
    */
@@ -129,10 +134,11 @@ private:
   Address         m_local;        //!< Local address to bind to
   uint64_t        m_totalRx;      //!< Total bytes received
   TypeId          m_tid;          //!< Protocol TypeId
+  uint64_t        m_totalPackets; //!< Total received packets.
 
   /// Traced Callback: received packets, source address.
   TracedCallback<Ptr<const Packet>, const Address &> m_rxTrace;
-
+  Time accummulator;
 };
 
 } // namespace ns3

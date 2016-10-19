@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2008 INRIA
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015,2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,6 +19,7 @@
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *          Hany Assasa <hany.assasa@gmail.com>
  */
+
 #include "regular-wifi-mac.h"
 #include "ns3/log.h"
 #include "ns3/boolean.h"
@@ -44,7 +45,9 @@ NS_OBJECT_ENSURE_REGISTERED (RegularWifiMac);
 RegularWifiMac::RegularWifiMac () :
   m_htSupported (0),
   m_vhtSupported (0),
-  m_erpSupported (0)
+  m_erpSupported (0),
+  m_dsssSupported (0),
+  m_dmgSupported (0)
 {
   NS_LOG_FUNCTION (this);
   m_rxMiddle = new MacRxMiddle ();
@@ -190,6 +193,88 @@ RegularWifiMac::GetWifiRemoteStationManager () const
   return m_stationManager;
 }
 
+Ptr<HtCapabilities>
+RegularWifiMac::GetHtCapabilities (void) const
+{
+  Ptr<HtCapabilities> capabilities = Create<HtCapabilities> ();
+  capabilities->SetHtSupported (1);
+  if (m_htSupported)
+    {
+      capabilities->SetLdpc (m_phy->GetLdpc ());
+      capabilities->SetSupportedChannelWidth (m_phy->GetChannelWidth () == 40);
+      capabilities->SetShortGuardInterval20 (m_phy->GetGuardInterval ());
+      capabilities->SetShortGuardInterval40 (m_phy->GetChannelWidth () == 40 && m_phy->GetGuardInterval ());
+      capabilities->SetGreenfield (m_phy->GetGreenfield ());
+      capabilities->SetMaxAmsduLength (1); //hardcoded for now (TBD)
+      capabilities->SetLSigProtectionSupport (!m_phy->GetGreenfield ());
+      capabilities->SetMaxAmpduLength (3); //hardcoded for now (TBD)
+      uint64_t maxSupportedRate = 0; //in bit/s
+      for (uint8_t i = 0; i < m_phy->GetNMcs (); i++)
+        {
+          WifiMode mcs = m_phy->GetMcs (i);
+          if (mcs.GetModulationClass () != WIFI_MOD_CLASS_HT)
+            {
+              continue;
+            }
+          capabilities->SetRxMcsBitmask (mcs.GetMcsValue ());
+          uint8_t nss = (mcs.GetMcsValue () / 8) + 1;
+          NS_ASSERT (nss > 0 && nss < 5);
+          if (mcs.GetDataRate (m_phy->GetChannelWidth (), m_phy->GetGuardInterval (), nss) > maxSupportedRate)
+            {
+              maxSupportedRate = mcs.GetDataRate (m_phy->GetChannelWidth (), m_phy->GetGuardInterval (), nss);
+              NS_LOG_DEBUG ("Updating maxSupportedRate to " << maxSupportedRate);
+            }
+        }
+      capabilities->SetRxHighestSupportedDataRate (maxSupportedRate / 1e6); //in Mbit/s
+      capabilities->SetTxMcsSetDefined (m_phy->GetNMcs () > 0);
+      capabilities->SetTxMaxNSpatialStreams (m_phy->GetSupportedTxSpatialStreams ());
+    }
+  return capabilities;
+}
+
+Ptr<VhtCapabilities>
+RegularWifiMac::GetVhtCapabilities (void) const
+{
+  Ptr<VhtCapabilities> capabilities = Create<VhtCapabilities> ();
+  capabilities->SetVhtSupported (1);
+  if (m_vhtSupported)
+    {
+      if (m_phy->GetChannelWidth () == 160)
+        {
+          capabilities->SetSupportedChannelWidthSet (1);
+        }
+      else
+        {
+          capabilities->SetSupportedChannelWidthSet (0);
+        }
+      capabilities->SetMaxMpduLength (2); //hardcoded for now (TBD)
+      capabilities->SetRxLdpc (m_phy->GetLdpc ());
+      capabilities->SetShortGuardIntervalFor80Mhz ((m_phy->GetChannelWidth () == 80) && m_phy->GetGuardInterval ());
+      capabilities->SetShortGuardIntervalFor160Mhz ((m_phy->GetChannelWidth () == 160) && m_phy->GetGuardInterval ());
+      capabilities->SetMaxAmpduLengthExponent (7); //hardcoded for now (TBD)
+      uint8_t maxMcs = 0;
+      for (uint8_t i = 0; i < m_phy->GetNMcs (); i++)
+        {
+          WifiMode mcs = m_phy->GetMcs (i);
+          if ((mcs.GetModulationClass () == WIFI_MOD_CLASS_VHT)
+              && (mcs.GetMcsValue () > maxMcs))
+            {
+              maxMcs = mcs.GetMcsValue ();
+            }
+        }
+      // Support same MaxMCS for each spatial stream
+      for (uint8_t nss = 1; nss <= m_phy->GetSupportedRxSpatialStreams (); nss++)
+        {
+          capabilities->SetRxMcsMap (maxMcs, nss);
+        }
+      for (uint8_t nss = 1; nss <= m_phy->GetSupportedTxSpatialStreams (); nss++)
+        {
+          capabilities->SetTxMcsMap (maxMcs, nss);
+        }
+    }
+  return capabilities;
+}
+
 void
 RegularWifiMac::SetVoMaxAmsduSize (uint32_t size)
 {
@@ -257,28 +342,28 @@ RegularWifiMac::SetBkMaxAmpduSize (uint32_t size)
 void
 RegularWifiMac::SetVoBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << threshold);
+  NS_LOG_FUNCTION (this << (uint16_t) threshold);
   GetVOQueue ()->SetBlockAckThreshold (threshold);
 }
 
 void
 RegularWifiMac::SetViBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << threshold);
+  NS_LOG_FUNCTION (this << (uint16_t) threshold);
   GetVIQueue ()->SetBlockAckThreshold (threshold);
 }
 
 void
 RegularWifiMac::SetBeBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << threshold);
+  NS_LOG_FUNCTION (this << (uint16_t) threshold);
   GetBEQueue ()->SetBlockAckThreshold (threshold);
 }
 
 void
 RegularWifiMac::SetBkBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << threshold);
+  NS_LOG_FUNCTION (this << (uint16_t) threshold);
   GetBKQueue ()->SetBlockAckThreshold (threshold);
 }
 
@@ -520,7 +605,24 @@ void
 RegularWifiMac::SetErpSupported (bool enable)
 {
   NS_LOG_FUNCTION (this);
+  if (enable)
+    {
+      SetDsssSupported (true);
+    }
   m_erpSupported = enable;
+}
+
+void
+RegularWifiMac::SetDsssSupported (bool enable)
+{
+  NS_LOG_FUNCTION (this);
+  m_dsssSupported = enable;
+}
+
+bool
+RegularWifiMac::GetDsssSupported () const
+{
+  return m_dsssSupported;
 }
 
 void
@@ -553,7 +655,6 @@ RegularWifiMac::GetSlot (void) const
 void
 RegularWifiMac::SetSifs (Time sifs)
 {
-  NS_LOG_FUNCTION (this << sifs);
   m_dcfManager->SetSifs (sifs);
   m_low->SetSifs (sifs);
 }
@@ -694,6 +795,12 @@ RegularWifiMac::GetBssid (void) const
   return m_low->GetBssid ();
 }
 
+enum MacState
+RegularWifiMac::GetMacState (void) const
+{
+  return m_state;
+}
+
 void
 RegularWifiMac::SetPromisc (void)
 {
@@ -761,13 +868,11 @@ RegularWifiMac::SetupFSTSession (Mac48Address staAddress)
   m_fstId++;
 
   SessionTransitionElement sessionTransition;
-  Band newBand;
+  Band newBand, oldBand;
   newBand.Band_ID = Band_4_9GHz;
   newBand.Setup = 1;
   newBand.Operation = 1;
   sessionTransition.SetNewBand (newBand);
-
-  Band oldBand;
   oldBand.Band_ID = Band_60GHz;
   oldBand.Setup = 1;
   oldBand.Operation = 1;
@@ -775,6 +880,7 @@ RegularWifiMac::SetupFSTSession (Mac48Address staAddress)
   sessionTransition.SetFstsID (m_fstId);
   sessionTransition.SetSessionControl (SessionType_InfrastructureBSS, false);
 
+  requestHdr.SetSessionTransition (sessionTransition);
   requestHdr.SetLlt (m_llt);
   requestHdr.SetMultiBand (GetMultiBandElement ());
   requestHdr.SetDialogToken (10);
@@ -966,9 +1072,7 @@ RegularWifiMac::TxOk (Ptr<const Packet> currentPacket, const WifiMacHeader &hdr)
               }
             case WifiActionHeader::FST_ACK_RESPONSE:
               {
-                /* We are the Responder of the FST session */
-                ExtFstAckRequest requestHdr;
-                packet->RemoveHeader (requestHdr);
+                /* We are the Responder of the FST session and we got ACK for FST ACK Response */
                 NS_LOG_LOGIC ("FST Responder: Transmitted FST ACK Response successfully, so transit to FST_TRANSITION_CONFIRMED_STATE");
                 FstSession *fstSession = &m_fstSessionMap[hdr.GetAddr1 ()];
                 fstSession->CurrentState = FST_TRANSITION_CONFIRMED_STATE;
@@ -1429,6 +1533,11 @@ RegularWifiMac::GetTypeId (void)
                    PointerValue (),
                    MakePointerAccessor (&RegularWifiMac::GetBKQueue),
                    MakePointerChecker<EdcaTxopN> ())
+    .AddAttribute ("MacLow",
+                   "Access the mac low layer responsible for packet transmition.",
+                   PointerValue (),
+                   MakePointerAccessor (&RegularWifiMac::m_low),
+                   MakePointerChecker<MacLow> ())
     .AddTraceSource ("TxOkHeader",
                      "The header of successfully transmitted packet.",
                      MakeTraceSourceAccessor (&RegularWifiMac::m_txOkCallback),
@@ -1457,10 +1566,14 @@ RegularWifiMac::FinishConfigureStandard (enum WifiPhyStandard standard)
     case WIFI_PHY_STANDARD_80211ac:
       SetVhtSupported (true);
     case WIFI_PHY_STANDARD_80211n_5GHZ:
+      SetHtSupported (true);
+      cwmin = 15;
+      cwmax = 1023;
+      break;
     case WIFI_PHY_STANDARD_80211n_2_4GHZ:
       SetHtSupported (true);
     case WIFI_PHY_STANDARD_80211g:
-      m_erpSupported = true;
+      SetErpSupported (true);
     case WIFI_PHY_STANDARD_holland:
     case WIFI_PHY_STANDARD_80211a:
     case WIFI_PHY_STANDARD_80211_10MHZ:
@@ -1469,6 +1582,7 @@ RegularWifiMac::FinishConfigureStandard (enum WifiPhyStandard standard)
       cwmax = 1023;
       break;
     case WIFI_PHY_STANDARD_80211b:
+      SetDsssSupported (true);
       cwmin = 31;
       cwmax = 1023;
       break;
@@ -1482,14 +1596,15 @@ RegularWifiMac::FinishConfigureStandard (enum WifiPhyStandard standard)
 void
 RegularWifiMac::ConfigureContentionWindow (uint32_t cwMin, uint32_t cwMax)
 {
+  bool isDsssOnly = m_dsssSupported && !m_erpSupported;
   //The special value of AC_BE_NQOS which exists in the Access
   //Category enumeration allows us to configure plain old DCF.
-  ConfigureDcf (m_dca, cwMin, cwMax, AC_BE_NQOS);
+  ConfigureDcf (m_dca, cwMin, cwMax, isDsssOnly, AC_BE_NQOS);
 
   //Now we configure the EDCA functions
   for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
   {
-    ConfigureDcf (i->second, cwMin, cwMax, i->first);
+    ConfigureDcf (i->second, cwMin, cwMax, isDsssOnly, i->first);
   }
 }
 

@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2008 INRIA
- * Copyright (c) 2015 IMDEA Networks Institute
+ * Copyright (c) 2015,2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -193,7 +193,7 @@ WifiMac::GetTypeId (void)
                    MakeTimeAccessor (&WifiMac::SetPifs,
                                      &WifiMac::GetPifs),
                    MakeTimeChecker ())
-    .AddAttribute ("Rifs", "The value of the RIFS constant.",
+    .AddAttribute ("Rifs", "The value of the RIFS constant (not supported yet!).",
                    TimeValue (GetDefaultRifs ()),
                    MakeTimeAccessor (&WifiMac::SetRifs,
                                      &WifiMac::GetRifs),
@@ -422,7 +422,7 @@ WifiMac::Configure80211n_5Ghz (void)
 void
 WifiMac::Configure80211ac (void)
 {
-  Configure80211n_5Ghz();
+  Configure80211n_5Ghz ();
 }
 
 /*
@@ -448,7 +448,7 @@ WifiMac::Configure80211ad (void)
 }
 
 void
-WifiMac::ConfigureDcf (Ptr<Dcf> dcf, uint32_t cwmin, uint32_t cwmax, enum AcIndex ac)
+WifiMac::ConfigureDcf (Ptr<Dcf> dcf, uint32_t cwmin, uint32_t cwmax, bool isDsss, enum AcIndex ac)
 {
   /* see IEEE802.11 section 7.3.2.29 */
   switch (ac)
@@ -457,26 +457,45 @@ WifiMac::ConfigureDcf (Ptr<Dcf> dcf, uint32_t cwmin, uint32_t cwmax, enum AcInde
       dcf->SetMinCw ((cwmin + 1) / 4 - 1);
       dcf->SetMaxCw ((cwmin + 1) / 2 - 1);
       dcf->SetAifsn (2);
+      if (isDsss)
+        {
+          dcf->SetTxopLimit (MicroSeconds (3264));
+        }
+      else
+        {
+          dcf->SetTxopLimit (MicroSeconds (1504));
+        }
       break;
     case AC_VI:
       dcf->SetMinCw ((cwmin + 1) / 2 - 1);
       dcf->SetMaxCw (cwmin);
       dcf->SetAifsn (2);
+      if (isDsss)
+        {
+          dcf->SetTxopLimit (MicroSeconds (6016));
+        }
+      else
+        {
+          dcf->SetTxopLimit (MicroSeconds (3008));
+        }
       break;
     case AC_BE:
       dcf->SetMinCw (cwmin);
       dcf->SetMaxCw (cwmax);
       dcf->SetAifsn (3);
+      dcf->SetTxopLimit (MicroSeconds (0));
       break;
     case AC_BK:
       dcf->SetMinCw (cwmin);
       dcf->SetMaxCw (cwmax);
       dcf->SetAifsn (7);
+      dcf->SetTxopLimit (MicroSeconds (0));
       break;
     case AC_BE_NQOS:
       dcf->SetMinCw (cwmin);
       dcf->SetMaxCw (cwmax);
       dcf->SetAifsn (2);
+      dcf->SetTxopLimit (MicroSeconds (0));
       break;
     case AC_UNDEF:
       NS_FATAL_ERROR ("I don't know what to do with this");

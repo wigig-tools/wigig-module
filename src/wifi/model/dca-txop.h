@@ -30,6 +30,7 @@
 #include "ns3/wifi-mode.h"
 #include "ns3/wifi-remote-station-manager.h"
 #include "ns3/dcf.h"
+#include "ctrl-headers.h"
 
 namespace ns3 {
 
@@ -128,6 +129,7 @@ public:
    * packet transmission was completed unsuccessfully.
    */
   void SetTxFailedCallback (TxFailed callback);
+
   /**
    * Return the packet queue associated with this DcaTxop.
    *
@@ -135,13 +137,15 @@ public:
    */
   Ptr<WifiMacQueue> GetQueue () const;
 
-  //Inherited
   virtual void SetMinCw (uint32_t minCw);
   virtual void SetMaxCw (uint32_t maxCw);
   virtual void SetAifsn (uint32_t aifsn);
+  virtual void SetTxopLimit (Time txopLimit);
   virtual uint32_t GetMinCw (void) const;
   virtual uint32_t GetMaxCw (void) const;
   virtual uint32_t GetAifsn (void) const;
+  virtual Time GetTxopLimit (void) const;
+  void ResetState (void);
 
   /**
    * \param packet packet to send
@@ -153,10 +157,14 @@ public:
   void Queue (Ptr<const Packet> packet, const WifiMacHeader &hdr);
   /**
    * Initiate Transmission in this CBAP period.
+   * \param allocationID The unique ID of this allocation.
    * \param cbapDuration The duration of this service period in microseconds.
    */
-  void InitiateTransmission (Time cbapDuration);
-
+  void InitiateTransmission (AllocationID allocationID, Time cbapDuration);
+  /**
+   * End Current CBAP Period.
+   */
+  void EndCurrentContentionPeriod (void);
   /**
    * Assign a fixed random variable stream number to the random variables
    * used by this model.  Return the number of streams (possibly zero) that
@@ -249,7 +257,7 @@ private:
    * Start transmission for the next fragment.
    * This is called for fragment only.
    */
-  void StartNext (void);
+  void StartNextFragment (void);
   /**
    * Cancel the transmission.
    */
@@ -268,6 +276,7 @@ private:
    * Request access from DCF manager if needed.
    */
   void StartAccessIfNeeded (void);
+
   /**
    * Check if RTS should be re-transmitted if CTS was missed.
    *
@@ -350,6 +359,13 @@ private:
   WifiMacHeader m_currentHdr;
   uint8_t m_fragmentNumber;
 
+  /* Store packet and header for service period */
+  typedef std::pair<Ptr<const Packet>, WifiMacHeader> PacketInformation;
+  typedef std::map<AllocationID, PacketInformation> StoredPackets;
+  typedef StoredPackets::const_iterator StoredPacketsCI;
+  StoredPackets m_storedPackets;
+
+  AllocationID m_allocationID;      /* Allocation ID for the current contention period */
   Time m_transmissionStarted;   /* The time of the initiation of transmission */
   Time m_cbapDuration;          /* The remaining duration till the end of this CBAP allocation*/
 };

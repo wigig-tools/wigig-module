@@ -1,22 +1,9 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
+ * Copyright (c) 2015, IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+
 #ifndef MULTI_BAND_NET_DEVICE_H
 #define MULTI_BAND_NET_DEVICE_H
 
@@ -46,6 +33,9 @@ typedef struct {
 } WifiTechnology;
 
 typedef std::map<enum WifiPhyStandard, WifiTechnology> WifiTechnologyList;
+
+/* Typedef to map each station with specific access technology */
+typedef std::map<Mac48Address, Ptr<WifiMac> > TransmissionTechnologyMap;
 
 /**
  * \brief Hold together all Wifi-related objects.
@@ -79,8 +69,8 @@ public:
   /**
    * Switch the current Wifi Technology.
    * \param standard The new standard to use for communication.
-   * \param
-   * \param isInitiator
+   * \param address The address of the peer station.
+   * \param isInitiator Initiator of the FST session.
    */
   void BandChanged (enum WifiPhyStandard standard, Mac48Address address, bool isInitiator);
   /**
@@ -88,6 +78,21 @@ public:
    * \param address The address of the station to execute FST operation with.
    */
   void EstablishFastSessionTransferSession (Mac48Address address);
+  /**
+   * \param standard The standard for which the returned Station Manager correspondes to.
+   * \return
+   */
+  Ptr<WifiRemoteStationManager> GetCurrentRemoteStationManager (enum WifiPhyStandard standard) const;
+  /**
+   * \param standard The standard for which the returned WifiMac correspondes to.
+   * \return
+   */
+  Ptr<WifiMac> GetTechnologyMac (enum WifiPhyStandard standard);
+  /**
+   * \param standard The standard for which the returned WifiPhy correspondes to.
+   * \return
+   */
+  Ptr<WifiPhy> GetTechnologyPhy (enum WifiPhyStandard standard);
   /**
    * \returns the mac we are currently using.
    */
@@ -170,8 +175,8 @@ private:
   TracedCallback<> m_linkChanges;
   bool m_configComplete;
 
-  Ptr<WifiPhy> m_phy;
-  Ptr<WifiMac> m_mac;
+  Ptr<WifiPhy> m_phy;                               //!< Current Active PHY layer.
+  Ptr<WifiMac> m_mac;                               //!< Current Active MAC layer.
   Ptr<WifiRemoteStationManager> m_stationManager;   //!< Current Active Station Manager.
   enum WifiPhyStandard m_standard;                  //!< Current Active standard.
 
@@ -180,10 +185,11 @@ private:
   TracedCallback<Ptr<const Packet>, Mac48Address> m_rxLogger;
   TracedCallback<Ptr<const Packet>, Mac48Address> m_txLogger;
 
-  Ptr<Node> m_node;                 //!< Node to which this device is attached to.
-  mutable uint16_t m_mtu;           //!< Common MTU Size supported by underlying devices.
-  WifiTechnologyList m_list;        //!< List of bands supported by this device.
-  Mac48Address m_address;           //!< Address of this Multi-Band Device (Mac48Address)
+  Ptr<Node> m_node;                           //!< Node to which this device is attached to.
+  mutable uint16_t m_mtu;                     //!< Common MTU Size supported by underlying devices.
+  WifiTechnologyList m_list;                  //!< List of technologies supported by this device.
+  TransmissionTechnologyMap m_technologyMap;  //!< Map between peer station and the corresponding transmission technology.
+  Mac48Address m_address;                     //!< Address of this Multi-Band Device (Mac48Address).
 
 };
 

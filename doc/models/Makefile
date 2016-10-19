@@ -57,6 +57,7 @@ SOURCES = \
 	$(SRC)/network/doc/sockets-api.rst \
 	$(SRC)/network/doc/simple.rst \
 	$(SRC)/network/doc/queue.rst \
+	$(SRC)/network/doc/queue-limits.rst \
 	$(SRC)/internet/doc/internet-stack.rst \
 	$(SRC)/internet/doc/ipv4.rst \
 	$(SRC)/internet/doc/ipv6.rst \
@@ -80,6 +81,8 @@ SOURCES = \
 	$(SRC)/traffic-control/doc/pfifo-fast.rst \
 	$(SRC)/traffic-control/doc/red.rst \
 	$(SRC)/traffic-control/doc/codel.rst \
+	$(SRC)/traffic-control/doc/fq-codel.rst \
+	$(SRC)/traffic-control/doc/pie.rst \
 	$(SRC)/spectrum/doc/spectrum.rst \
 	$(SRC)/stats/doc/adaptor.rst \
 	$(SRC)/stats/doc/aggregator.rst \
@@ -113,6 +116,7 @@ SOURCEFIGS = \
 	$(SRC)/internet/doc/internet-node-recv.dia \
 	$(SRC)/internet/doc/routing.dia \
 	$(SRC)/internet/doc/routing-specialization.dia \
+	$(SRC)/internet/doc/figures/tcp-state-machine.png \
 	$(SRC)/wifi/doc/source/figures/WifiArchitecture.dia \
 	$(SRC)/wifi/doc/source/figures/snir.dia \
 	$(SRC)/wifi/doc/source/figures/clear-channel.eps \

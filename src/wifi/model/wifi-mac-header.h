@@ -2,7 +2,6 @@
 /*
  * Copyright (c) 2006, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -17,10 +16,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
- *          Mirko Banchi <mk.banchi@gmail.com>
- *          Hany Assasa <hany.assasa@gmail.com>
+ * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
+ * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
+
 #ifndef WIFI_MAC_HEADER_H
 #define WIFI_MAC_HEADER_H
 
@@ -35,13 +34,15 @@ namespace ns3 {
 /**
  * Combination of valid MAC header type/subtype.
  */
-enum WifiMacType {
-  WIFI_MAC_CTL_RTS = 0,
+enum WifiMacType
+{
+  WIFI_MAC_CTL_CTLWRAPPER = 0,
+  WIFI_MAC_CTL_RTS,
   WIFI_MAC_CTL_CTS,
   WIFI_MAC_CTL_ACK,
   WIFI_MAC_CTL_BACKREQ,
   WIFI_MAC_CTL_BACKRESP,
-  WIFI_MAC_CTL_CTLWRAPPER,
+
   // New Control Frames for 802.11ad.
   WIFI_MAC_CTL_DMG_POLL,
   WIFI_MAC_CTL_DMG_SPR,
@@ -272,6 +273,14 @@ public:
    * Un-set the Retry bit in the Frame Control field.
    */
   void SetNoRetry (void);
+  /**
+   * Set the More Data bit in the Frame Control field.
+   */
+  void SetMoreData (void);
+  /**
+   * Un-set the More Data bit in the Frame Control field.
+   */
+  void SetNoMoreData (void);
   /**
    * Set the TID for the QoS header.
    *
@@ -613,6 +622,12 @@ public:
    */
   bool IsRetry (void) const;
   /**
+   * Return if the More Data bit is set.
+   *
+   * \return true if the More Data bit is set, false otherwise
+   */
+  bool IsMoreData (void) const;
+  /**
    * Return if the More Fragment bit is set.
    *
    * \return true if the More Fragment bit is set, false otherwise
@@ -819,6 +834,6 @@ private:
   uint8_t m_trainingFieldLength;
 };
 
-} // namespace ns3
+} //namespace ns3
 
 #endif /* WIFI_MAC_HEADER_H */

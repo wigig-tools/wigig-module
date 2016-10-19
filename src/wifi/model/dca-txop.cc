@@ -119,9 +119,12 @@ public:
   {
     m_txop->MissedAck ();
   }
+  virtual void StartNextFragment (void)
+  {
+    m_txop->StartNextFragment ();
+  }
   virtual void StartNext (void)
   {
-    m_txop->StartNext ();
   }
   virtual void Cancel (void)
   {
@@ -261,6 +264,13 @@ DcaTxop::SetAifsn (uint32_t aifsn)
   m_dcf->SetAifsn (aifsn);
 }
 
+void
+DcaTxop::SetTxopLimit (Time txopLimit)
+{
+  NS_LOG_FUNCTION (this << txopLimit);
+  m_dcf->SetTxopLimit (txopLimit);
+}
+
 uint32_t
 DcaTxop::GetMinCw (void) const
 {
@@ -280,6 +290,21 @@ DcaTxop::GetAifsn (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_dcf->GetAifsn ();
+}
+
+Time
+DcaTxop::GetTxopLimit (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return m_dcf->GetTxopLimit ();
+}
+
+void
+DcaTxop::ResetState (void)
+{
+  NS_LOG_FUNCTION (this);
+  m_dcf->ResetCw ();
+  m_dcf->StartBackoffNow (m_rng->GetNext (0, m_dcf->GetCw ()));
 }
 
 void
@@ -326,12 +351,32 @@ DcaTxop::StartAccessIfNeeded (void)
 }
 
 void
-DcaTxop::InitiateTransmission (Time cbapDuration)
+DcaTxop::InitiateTransmission (AllocationID allocationID, Time cbapDuration)
 {
   NS_LOG_FUNCTION (this << cbapDuration);
+  m_allocationID = allocationID;
   m_cbapDuration = cbapDuration;
   m_transmissionStarted = Simulator::Now ();
+
+  /* Check if we have stored packet for this CBAP period (MSDU/A-MSDU) */
+  StoredPacketsCI it = m_storedPackets.find (allocationID);
+  if (it != m_storedPackets.end ())
+    {
+      PacketInformation info = it->second;
+      m_currentPacket = info.first;
+      m_currentHdr = info.second;
+    }
+
   StartAccessIfNeeded ();
+}
+
+void
+DcaTxop::EndCurrentContentionPeriod (void)
+{
+  NS_LOG_FUNCTION (this);
+  /* Store parameters related to this service period which include MSDU */
+  m_storedPackets[m_allocationID] = std::make_pair (m_currentPacket, m_currentHdr);
+  m_currentPacket = 0;
 }
 
 Ptr<MacLow>
@@ -451,7 +496,10 @@ DcaTxop::NotifyAccessGranted (void)
     {
       m_cbapDuration = m_cbapDuration - (Simulator::Now () - m_transmissionStarted);
       if (m_cbapDuration <= Seconds (0))
-        return;
+        {
+          NS_LOG_DEBUG ("No more time in the current CBAP Allocation");
+          return;
+        }
     }
 
   if (m_currentPacket == 0)
@@ -533,7 +581,6 @@ void
 DcaTxop::NotifyCollision (void)
 {
   NS_LOG_FUNCTION (this);
-  NS_LOG_DEBUG ("collision");
   m_dcf->StartBackoffNow (m_rng->GetNext (0, m_dcf->GetCw ()));
   RestartAccessIfNeeded ();
 }
@@ -651,7 +698,7 @@ DcaTxop::MissedAck (void)
 }
 
 void
-DcaTxop::StartNext (void)
+DcaTxop::StartNextFragment (void)
 {
   NS_LOG_FUNCTION (this);
   NS_LOG_DEBUG ("start next packet fragment");

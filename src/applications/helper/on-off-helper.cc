@@ -29,6 +29,11 @@
 
 namespace ns3 {
 
+OnOffHelper::OnOffHelper ()
+{
+  m_factory.SetTypeId ("ns3::OnOffApplication");
+}
+
 OnOffHelper::OnOffHelper (std::string protocol, Address address)
 {
   m_factory.SetTypeId ("ns3::OnOffApplication");

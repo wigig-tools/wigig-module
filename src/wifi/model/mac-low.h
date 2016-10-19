@@ -2,7 +2,6 @@
 /*
  * Copyright (c) 2005, 2006 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -17,9 +16,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
- *          Mirko Banchi <mk.banchi@gmail.com>
- *          Hany Assasa <Hany.assasa@gmail.com>
+ * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
+ * Author: Mirko Banchi <mk.banchi@gmail.com>
  */
 #ifndef MAC_LOW_H
 #define MAC_LOW_H
@@ -47,6 +45,7 @@
 #include "wifi-tx-vector.h"
 #include "mpdu-aggregator.h"
 #include "msdu-aggregator.h"
+#include "ns3/traced-value.h"
 
 class TwoLevelAggregationTest;
 class AmpduAggregationTest;
@@ -128,7 +127,13 @@ public:
    * Invoked when ns3::MacLow wants to start a new transmission
    * as configured by MacLowTransmissionParameters::EnableNextData.
    * The listener is expected to call again MacLow::StartTransmission
-   * with the "next" data to send.
+   * with the "next" fragment to send.
+   */
+  virtual void StartNextFragment (void) = 0;
+  /**
+   * Invoked when ns3::MacLow wants to continue the TXOP.
+   * The listener is expected to call again MacLow::StartTransmission
+   * with the "next" packet to send.
    */
   virtual void StartNext (void) = 0;
   /**
@@ -144,9 +149,6 @@ public:
    *
    */
   virtual void EndTxNoAck (void) = 0;
-
-//  virtual void SuspendTransmission (Ptr<Packet> packet, WifiActionHeader &hdr,
-//                                    bool ampdu, MacLowTransmissionParameters &params, WifiTxVector &vector);
 };
 
 
@@ -364,7 +366,7 @@ public:
    *
    * Add the transmission duration of the next data to the
    * durationId of the outgoing packet and call
-   * MacLowTransmissionListener::StartNext at the end of
+   * MacLowTransmissionListener::StartNextFragment at the end of
    * the current transmission + SIFS.
    */
   void EnableNextData (uint32_t size);
@@ -766,6 +768,14 @@ public:
                                   const WifiMacHeader* hdr,
                                   const MacLowTransmissionParameters& parameters) const;
 
+  Time CalculateOverallTxTime (Ptr<const Packet> packet,
+                               const WifiMacHeader* hdr,
+                               const MacLowTransmissionParameters &params) const;
+
+  virtual void FutureTransmission (Ptr<const Packet> packet,
+                                  const WifiMacHeader* hdr,
+                                  MacLowTransmissionParameters parameters,
+                                  MacLowTransmissionListener *listener);
   /**
    * \param packet packet to send
    * \param hdr 802.11 header for packet to send
@@ -788,26 +798,40 @@ public:
    * \param listener listen to transmission events.
    *
    * Start the transmission of the input packet and notify the listener
-   * of transmission events.
+   * of transmission events. This function is used for management frame transmission in BTI and ATI.
    */
   void TransmitSingleFrame (Ptr<const Packet> packet,
                             const WifiMacHeader* hdr,
                             MacLowTransmissionParameters params,
                             MacLowTransmissionListener *listener);
   /**
-   * Update Maximum Transmission Duration.
-   * \param duration The remaining duration in the current allocation.
+   * Resume Transmission for the current allocation if transmission has been suspended.
+   * \param overrideDuration Flagt to indicate if we want to override duration field
+   * \param duration The duration of the current Allocation
+   * \param listener
    */
-  void UpdateMaximumTransmissionDuration (Time duration);
+//  void ResumeTransmission (bool overrideDuration, Time duration, MacLowTransmissionListener *listener);
   /**
-   * \brief Resume Transmission for 802.11ad DTI Period.
+   * Resume Transmission for the current allocation if transmission has been suspended.
+   * \param listener
    */
-  void ResumeTransmission (MacLowTransmissionListener *listener);
+  void ResumeTransmission (Time duration, MacLowTransmissionListener *listener);
+
   /**
-   * Check whether a transmission has been suspended due to time constraints.
-   * \return
+   * Restore Allocation Parameters for specific allocation SP or CBAP.
+   * \param allocationId The ID of the allocation.
+   */
+  void RestoreAllocationParameters (AllocationID allocationId);
+
+  void StoreAllocationParameters (void);
+  /**
+   * Check whether a transmission has been suspended due to time constraints for the restored allocation.
+   * \return True if transmission has been suspended otherwise false.
    */
   bool IsTransmissionSuspended (void) const;
+
+  bool RestoredSuspendedTransmission (void) const;
+
   /**
    * \param packet packet to send
    * \param hdr 802.11 header for packet to send
@@ -840,7 +864,7 @@ public:
    * This method is typically invoked by the lower PHY layer to notify
    * the MAC layer that a packet was unsuccessfully received.
    */
-  void ReceiveError (Ptr<Packet> packet, double rxSnr, bool isEndOfFrame);
+  void ReceiveError (Ptr<Packet> packet, double rxSnr);
   /**
    * \param duration switching delay duration.
    *
@@ -919,7 +943,7 @@ public:
    * This function decides if a given packet can be added to an A-MPDU or not
    *
    */
-  bool StopMpduAggregation (Ptr<const Packet> peekedPacket, WifiMacHeader peekedHdr, Ptr<Packet> aggregatedPacket, uint16_t size);
+  bool StopMpduAggregation (Ptr<const Packet> peekedPacket, WifiMacHeader peekedHdr, Ptr<Packet> aggregatedPacket, uint16_t size) const;
   /**
    *
    * This function is called to flush the aggregate queue, which is used for A-MPDU
@@ -949,7 +973,6 @@ public:
    */
   Time CalculateDmgTransactionDuration (Ptr<Packet> packet, WifiMacHeader &hdr);
 
-protected:
   /**
    * Return a TXVECTOR for the DATA frame given the destination.
    * The function consults WifiRemoteStationManager, which controls the rate
@@ -1062,8 +1085,11 @@ private:
    * \return TXVECTOR for the ACK
    */
   WifiTxVector GetAckTxVector (Mac48Address to, WifiMode dataTxMode) const;
-
-  WifiTxVector GetDmgControlTxVector (Mac48Address to) const;
+  /**
+   * Get DMG Control TxVector
+   * \return
+   */
+  WifiTxVector GetDmgControlTxVector () const;
   /**
    * Return a TXVECTOR for the Block ACK frame given the destination and the mode of the DATA
    * used by the sender.
@@ -1173,9 +1199,6 @@ private:
    */
   bool NeedCtsToSelf (void);
 
-  Time CalculateOverallTxTime (Ptr<const Packet> packet,
-                               const WifiMacHeader* hdr,
-                               const MacLowTransmissionParameters &params) const;
   void NotifyNav (Ptr<const Packet> packet,const WifiMacHeader &hdr, WifiPreamble preamble);
   /**
    * Reset NAV with the given duration.
@@ -1293,11 +1316,14 @@ private:
    * \param duration
    */
   void SendDataAfterCts (Mac48Address source, Time duration);
+
   /**
    * Event handler that is usually scheduled to fired at the appropriate time
    * after completing transmissions.
    */
+  void WaitSifsAfterEndTxFragment (void);
   void WaitSifsAfterEndTx (void);
+
   /**
    * A transmission that does not require an ACK has completed.
    */
@@ -1359,7 +1385,7 @@ private:
   bool IsInWindow (uint16_t seq, uint16_t winstart, uint16_t winsize);
   /**
    * This method updates the reorder buffer and the scoreboard when an MPDU is received in an HT station
-   * and sotres the MPDU if needed when an MPDU is received in an non-HT Station (implements HT
+   * and stores the MPDU if needed when an MPDU is received in an non-HT Station (implements HT
    * immediate block Ack)
    */
   bool ReceiveMpdu (Ptr<Packet> packet, WifiMacHeader hdr);
@@ -1506,8 +1532,6 @@ private:
   Time m_mbifs;                         //!< Medium Beamformnig Interframe Space.
   Time m_lbifs;                         //!< Long Beamformnig Interframe Space.
   Time m_brifs;                         //!< Beam Refinement Protocol Interframe Spacing.
-  uint32_t m_failedRssAttempts;         //!< Counter for Failed RSS Attempts during A-BFT.
-  uint32_t m_dot11RssBackoff;           //!< Maximum RSS Backoff value.
 
   Time m_lastNavStart;     //!< The time when the latest NAV started
   Time m_lastNavDuration;  //!< The duration of the latest NAV
@@ -1541,20 +1565,49 @@ private:
   uint8_t m_sentMpdus;                //!< Number of transmitted MPDUs in an A-MPDU that have not been acknowledged yet
   Ptr<WifiMacQueue> m_aggregateQueue; //!< Queue used for MPDU aggregation
   WifiTxVector m_currentTxVector;     //!< TXVECTOR used for the current packet transmission
-  bool m_receivedAtLeastOneMpdu;      //!< Flag whether an MPDU has already been successfully received while receiving an A-MPDU
   std::vector<Item> m_txPackets;      //!< Contain temporary items to be sent with the next A-MPDU transmission, once RTS/CTS exchange has succeeded. It is not used in other cases.
-  uint32_t m_nTxMpdus;                //!<Holds the number of transmitted MPDUs in the last A-MPDU transmission
+  uint32_t m_nTxMpdus;                //!< Holds the number of transmitted MPDUs in the last A-MPDU transmission
   double mpduSnr;
   TransmissionOkCallback m_transmissionCallback;
   Ptr<WifiMac> m_mac;
 
-  /* Variables for Suspended DataTransmission */
-  bool m_transmissionSuspended;       //!< Flag to indicate that we have suspended transmission applicable for 802.11ad only.
-  Ptr<Packet> m_suspendedPacket;
-  WifiMacHeader m_suspendedHdr;
-  bool m_suspendedAmpdu;
-  MacLowTransmissionParameters m_suspendedTxParams;
-  WifiTxVector m_suspendedTxVector;
+  typedef struct {
+    WifiPreamble preamble;
+    mpduType type;
+    Ptr<Packet> packet;
+    Time mpduDuration;
+  } mpduInfo;
+
+  /**
+   * TracedCallback signature for transmitting MPDUs.
+   *
+   * \param number The number of MPDUs being transmitted
+   */
+  typedef void (* TransmittedMpdus)(uint32_t number);
+  /**
+   * The trace source fired when packets coming into the device
+   * are dropped at the Wifi MAC layer.
+   *
+   * \see class CallBackTraceSource
+   */
+  TracedCallback<uint32_t> m_transmittedMpdus;
+
+  /* Variables for suspended data transmission for different allocation periods */
+  typedef struct {
+    Ptr<Packet> packet;
+    WifiMacHeader hdr;
+    bool isAmpdu;
+    MacLowTransmissionParameters txParams;
+    WifiTxVector txVector;
+  } AllocationParameters;
+
+  typedef std::map<AllocationID, AllocationParameters> AllocationPeriodsTable;
+  typedef AllocationPeriodsTable::const_iterator AllocationPeriodsTableCI;
+  AllocationPeriodsTable m_allocationPeriodsTable;
+  AllocationID m_currentAllocationID;
+  AllocationParameters m_currentAllocation;
+  bool m_transmissionSuspended;               //!< Flag to indicate that we have suspended transmission applicable for 802.11ad only.
+  bool m_restoredSuspendedTransmission;       //!< Flag to indicate that we have more time to traansmit more packets.
 
 };
 

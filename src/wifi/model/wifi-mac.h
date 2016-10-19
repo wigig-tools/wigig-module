@@ -70,21 +70,6 @@ public:
    */
   virtual void SetRifs (Time rifs) = 0;
   /**
-   * \param sfifs the value of Short Beamforming Interframe Space (sbifs)
-   */
-  void SetSbifs (Time sbifs);
-  /**
-   * \param sfifs the value of Medium Beamforming Interframe Space (sbifs)
-   */
-  void Setmbifs (Time sbifs);
-  /**
-   * \param sfifs the value of Long Beamforming Interframe Space (sbifs)
-   */
-  void Setlbifs (Time sbifs);
-
-  Time GetSbifs () const;
-
-  /**
    * \param ctsTimeout the duration of a CTS timeout.
    */
   virtual void SetCtsTimeout (Time ctsTimeout) = 0;
@@ -328,11 +313,12 @@ protected:
    * \param dcf the DCF to be configured
    * \param cwmin the minimum congestion window for the DCF
    * \param cwmax the maximum congestion window for the DCF
+   * \param isDsss flag to indicate whether PHY is DSSS or HR/DSSS
    * \param ac the access category for the DCF
    *
    * Configure the DCF with appropriate values depending on the given access category.
    */
-  void ConfigureDcf (Ptr<Dcf> dcf, uint32_t cwmin, uint32_t cwmax, enum AcIndex ac);
+  void ConfigureDcf (Ptr<Dcf> dcf, uint32_t cwmin, uint32_t cwmax, bool isDsss, enum AcIndex ac);
 
   /**
    * This method sets 802.11ad 60 GHz standards-compliant defaults for following attributes:
@@ -467,10 +453,10 @@ private:
    * Sifs, Rifs, Slot, EifsNoDifs, Pifs, CtsTimeout, and AckTimeout.
    */
   void Configure80211n_5Ghz (void);
-   /**
-   * This method sets 802.11ac standards-compliant defaults for following attributes:
-   * Sifs, Slot, EifsNoDifs, Pifs, CtsTimeout, and AckTimeout.
-   */
+  /**
+  * This method sets 802.11ac standards-compliant defaults for following attributes:
+  * Sifs, Slot, EifsNoDifs, Pifs, CtsTimeout, and AckTimeout.
+  */
   void Configure80211ac (void);
 
   /**

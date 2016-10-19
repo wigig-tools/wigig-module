@@ -1,8 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2006, 2009 INRIA
+ * Copyright (c) 2005, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,13 +18,13 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *          Mirko Banchi <mk.banchi@gmail.com>
- *          Hany Assasa <hany.assasa@gmail.com>
  */
 
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
+#include "ns3/enum.h"
 #include "wifi-mac-queue.h"
 #include "qos-blocked-destinations.h"
 
@@ -56,9 +55,18 @@ WifiMacQueue::GetTypeId (void)
                    MakeUintegerAccessor (&WifiMacQueue::m_maxSize),
                    MakeUintegerChecker<uint32_t> ())
     .AddAttribute ("MaxDelay", "If a packet stays longer than this delay in the queue, it is dropped.",
-                   TimeValue (MilliSeconds (5000.0)),
+                   TimeValue (MilliSeconds (500.0)),
                    MakeTimeAccessor (&WifiMacQueue::m_maxDelay),
                    MakeTimeChecker ())
+    .AddAttribute ("DropPolicy", "Upon enqueue with full queue, drop oldest (DropOldest) or newest (DropNewest) packet",
+                   EnumValue (DROP_NEWEST),
+                   MakeEnumAccessor (&WifiMacQueue::m_dropPolicy),
+                   MakeEnumChecker (WifiMacQueue::DROP_OLDEST, "DropOldest",
+                                    WifiMacQueue::DROP_NEWEST, "DropNewest"))
+    .AddTraceSource ("SizeChanged",
+                     "The number of packets in the queue changed",
+                     MakeTraceSourceAccessor (&WifiMacQueue::m_size),
+                     "ns3::TracedValue::Uint32Callback")
     .AddTraceSource ("PacketDropped",
                      "A packet has been dropped in the MAC layer.",
                      MakeTraceSourceAccessor (&WifiMacQueue::m_queueDropTrace),
@@ -113,9 +121,15 @@ WifiMacQueue::Enqueue (Ptr<const Packet> packet, const WifiMacHeader &hdr)
   Cleanup ();
   if (m_size == m_maxSize)
     {
-      m_queueDropTrace (packet, QueueFull);
-      NS_LOG_DEBUG ("Drop packet Wifi MAC Queue is full");
-      return;
+      if (m_dropPolicy == DROP_NEWEST)
+        {
+          return;
+        }
+      else if (m_dropPolicy == DROP_OLDEST)
+        {
+          m_queue.pop_front ();
+          m_size--;
+        }
     }
   Time now = Simulator::Now ();
   m_queue.push_back (Item (packet, hdr, now));
@@ -132,7 +146,7 @@ WifiMacQueue::Cleanup (void)
 
   Time now = Simulator::Now ();
   uint32_t n = 0;
-  for (PacketQueueI i = m_queue.begin (); i != m_queue.end ();)
+  for (PacketQueueI i = m_queue.begin (); i != m_queue.end (); )
     {
       if (i->tstamp + m_maxDelay > now)
         {
@@ -339,6 +353,7 @@ WifiMacQueue::IsEmpty (void)
 uint32_t
 WifiMacQueue::GetSize (void)
 {
+  Cleanup ();
   return m_size;
 }
 
@@ -357,12 +372,34 @@ WifiMacQueue::TransferPacketsByAddress (Mac48Address addr, Ptr<WifiMacQueue> des
 }
 
 void
+WifiMacQueue::ChangePacketsReceiverAddress (Mac48Address OriginalAddress, Mac48Address newAddress)
+{
+  for (PacketQueueI it = m_queue.begin (); it != m_queue.end (); it++)
+    {
+      if (it->hdr.IsData () && (it->hdr.GetAddr1 () == OriginalAddress))
+        {
+          it->hdr.SetAddr1 (newAddress);
+        }
+    }
+}
+
+void
 WifiMacQueue::PrintPacketInformation ()
 {
   uint32_t j = 1;
   for (PacketQueueI it = m_queue.begin (); it != m_queue.end (); it++, j++)
     {
-      NS_LOG_DEBUG ("Packet [" << j << "] is addressed to " << it->hdr.GetAddr1 ());
+      std::cout << "Packet [" << j << "] is addressed to " << it->hdr.GetAddr1 () << std::endl;
+    }
+}
+
+void
+WifiMacQueue::PrintPacketsPayload ()
+{
+  for (PacketQueueI it = m_queue.begin (); it != m_queue.end (); it++)
+    {
+      it->packet->Print (std::cout);
+      std::cout << std::endl;
     }
 }
 
@@ -413,8 +450,11 @@ WifiMacQueue::PushFront (Ptr<const Packet> packet, const WifiMacHeader &hdr)
   Cleanup ();
   if (m_size == m_maxSize)
     {
-      NS_LOG_DEBUG ("Drop packet Wifi MAC Queue is full");
-      return;
+      /* Change the behaviour for now, isntead of dropping this packet we drop the packet at the back of the queue */
+      NS_LOG_DEBUG ("Drop packet at the end since Wifi MAC Queue is full");
+      m_queue.pop_back ();
+      m_size--;
+//      return;
     }
   Time now = Simulator::Now ();
   m_queue.push_front (Item (packet, hdr, now));
@@ -526,6 +566,24 @@ WifiMacQueue::PeekFirstAvailableByAddress (WifiMacHeader *hdr, Time &timestamp,
         }
     }
   return packet;
+}
+
+bool
+WifiMacQueue::HasPacketsForReceiver (Mac48Address addr)
+{
+  Cleanup ();
+  if (!m_queue.empty ())
+    {
+      PacketQueueI it;
+      for (it = m_queue.begin (); it != m_queue.end (); it++)
+        {
+          if (GetAddressForPacket (WifiMacHeader::AddressType::ADDR1, it) == addr)
+            {
+              return true;
+            }
+        }
+    }
+  return false;
 }
 
 } //namespace ns3

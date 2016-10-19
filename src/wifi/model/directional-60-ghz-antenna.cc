@@ -1,22 +1,9 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+
 #include "ns3/log.h"
 #include "directional-60-ghz-antenna.h"
 
@@ -78,7 +65,9 @@ Directional60GhzAntenna::IsPeerNodeInTheCurrentSector (double angle) const
   NS_LOG_FUNCTION (this << angle);
   double virtualAngle;
   if (angle < 0)
-    angle = 2 * M_PI + angle;
+    {
+      angle = 2 * M_PI + angle;
+    }
   virtualAngle = std::abs (angle - (m_angleOffset + m_mainLobeWidth * double (m_txSectorId - 1)));
   if ((0 <= virtualAngle) && (virtualAngle <= GetHalfPowerBeamWidth () / 2))
     {
@@ -96,7 +85,9 @@ Directional60GhzAntenna::GetGainDbi (double angle, uint8_t sectorId, uint8_t ant
   NS_LOG_FUNCTION (this << angle << sectorId << antennaId);
   double gain;
   if (angle < 0)
-    angle = 2 * M_PI + angle;
+    {
+      angle = 2 * M_PI + angle;
+    }
   /* The virtual angle is to calculate where does the angle fall in */
   double virtualAngle;// = abs (angle - m_antennaAperature * (m_antennaId - 1) - m_mainLobeWidth * (m_sectorId - 1));
   virtualAngle = std::abs (angle - (m_angleOffset + m_mainLobeWidth * double (sectorId - 1)));

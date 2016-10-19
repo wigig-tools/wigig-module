@@ -1,9 +1,7 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2010
- *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
+ * it under the terms of the GNU General Public License version 2 as 
  * published by the Free Software Foundation;
  *
  * This program is distributed in the hope that it will be useful,
@@ -15,7 +13,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Author: Daniel Halperin <dhalperi@cs.washington.edu>
  */
 #ifndef SENSITIVITY_MODEL_60_GHZ
 #define SENSITIVITY_MODEL_60_GHZ

@@ -253,6 +253,12 @@ UanPhyDual::EnergyDepletionHandler ()
 }
 
 void
+UanPhyDual::EnergyRechargeHandler ()
+{
+  NS_LOG_DEBUG ("Not Implemented");
+}
+
+void
 UanPhyDual::SendPacket (Ptr<Packet> pkt, uint32_t modeNum)
 {
   if (modeNum <= m_phy1->GetNModes () - 1)
@@ -335,7 +341,6 @@ UanPhyDual::SetTxPowerDbPhy2 (double txpwr)
 void
 UanPhyDual::SetRxThresholdDb (double thresh)
 {
-  NS_LOG_WARN ("SetRxThresholdDb is deprecated and has no effect.  Look at PER Functor attribute");
   m_phy1->SetRxThresholdDb (thresh);
   m_phy2->SetRxThresholdDb (thresh);
 }

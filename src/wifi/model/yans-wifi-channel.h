@@ -1,7 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2006,2007 INRIA
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,8 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Mathieu Lacage, <mathieu.lacage@sophia.inria.fr>
- *          Hany Assasa <hany.assasa@gmail.com>
+ * Author: Mathieu Lacage, <mathieu.lacage@sophia.inria.fr>
  */
 
 #ifndef YANS_WIFI_CHANNEL_H
@@ -128,7 +126,9 @@ public:
    * \param dstWifiPhy
    */
   void AddBlockage (double (*blockage)(), Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy);
+  void RemoveBlockage (void);
   void AddPacketDropper (bool (*dropper)(), Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy);
+  void RemovePacketDropper (void);
 
 private:
   /**

@@ -1,22 +1,9 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Copyright (c) 2015, IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
+
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
@@ -47,15 +34,11 @@ DmgWifiMac::GetTypeId (void)
                     MakeBooleanAccessor (&DmgWifiMac::GetPcpHandoverSupport,
                                          &DmgWifiMac::SetPcpHandoverSupport),
                     MakeBooleanChecker ())
-    .AddAttribute ("ATIDuration", "The duration of the ATI Period.",
-                    TimeValue (MicroSeconds (500)),
-                    MakeTimeAccessor (&DmgWifiMac::m_atiDuration),
-                    MakeTimeChecker ())
     .AddAttribute ("SupportRDP", "Whether the DMG STA supports Reverse Direction Protocol (RDP)",
                     BooleanValue (false),
                     MakeBooleanAccessor (&DmgWifiMac::m_supportRdp),
                     MakeBooleanChecker ())
-    /* Relay support */
+      /* DMG Relay Capabilities common between PCP/AP and DMG STA */
     .AddAttribute ("REDSActivated", "Whether the DMG STA is REDS.",
                     BooleanValue (false),
                     MakeBooleanAccessor (&DmgWifiMac::m_redsActivated),
@@ -64,16 +47,30 @@ DmgWifiMac::GetTypeId (void)
                     BooleanValue (false),
                     MakeBooleanAccessor (&DmgWifiMac::m_rdsActivated),
                     MakeBooleanChecker ())
+    .AddAttribute ("RelayDuplexMode", "The duplex mode of the relay.",
+                    EnumValue (RELAY_BOTH),
+                    MakeEnumAccessor (&DmgWifiMac::m_relayDuplexMode),
+                    MakeEnumChecker (RELAY_FD_AF, "Full Duplex",
+                                     RELAY_HD_DF, "Half Duplex",
+                                     RELAY_BOTH, "Both"))
 //    .AddAttribute ("RelayDuplexMode", "Set relay duplex mode.",
 //                    BooleanValue (false),
 //                    MakeBooleanAccessor (&DmgWifiMac::RelayDuplexMode),
 //                    MakeBooleanChecker ())
+
+    .AddTraceSource ("ServicePeriodStarted", "A service period between two DMG STAs has started.",
+                     MakeTraceSourceAccessor (&DmgWifiMac::m_servicePeriodStartedCallback),
+                     "ns3::DmgWifiMac::ServicePeriodTracedCallback")
+    .AddTraceSource ("ServicePeriodEnded", "A service period between two DMG STAs has ended.",
+                     MakeTraceSourceAccessor (&DmgWifiMac::m_servicePeriodEndedCallback),
+                     "ns3::DmgWifiMac::ServicePeriodTracedCallback")
+
+    .AddTraceSource ("SLSCompleted", "SLS phase is completed",
+                     MakeTraceSourceAccessor (&DmgWifiMac::m_slsCompleted),
+                     "ns3::Mac48Address::TracedCallback")
     .AddTraceSource ("RlsCompleted",
                      "The RLS procedure has been completed successfully",
                      MakeTraceSourceAccessor (&DmgWifiMac::m_rlsCompleted),
-                     "ns3::Mac48Address::TracedCallback")
-    .AddTraceSource ("SLSCompleted", "SLS phase is completed",
-                     MakeTraceSourceAccessor (&DmgWifiMac::m_slsCompleted),
                      "ns3::Mac48Address::TracedCallback")
   ;
   return tid;
@@ -84,14 +81,9 @@ DmgWifiMac::DmgWifiMac ()
   NS_LOG_FUNCTION (this);
 
   /* DMG Managment DCA-TXOP */
-  m_dca = CreateObject<DcaTxop> ();
-  m_dca->SetLow (m_low);
-  m_dca->SetManager (m_dcfManager);
-  m_dca->SetTxMiddle (m_txMiddle);
-  m_dca->SetTxOkCallback (MakeCallback (&DmgWifiMac::TxOk, this));
   m_dca->SetTxOkNoAckCallback (MakeCallback (&DmgWifiMac::ManagementTxOk, this));
 
-  /* DMG Beacon DCF Manager */
+  /* DMG ATI Access Period Initialization */
   m_dmgAtiDca = CreateObject<DmgAtiDca> ();
   m_dmgAtiDca->SetAifsn (0);
   m_dmgAtiDca->SetMinCw (0);
@@ -106,11 +98,8 @@ DmgWifiMac::DmgWifiMac ()
   m_sp = Create<ServicePeriod> ();
   m_sp->SetLow (m_low);
   m_sp->SetTxMiddle (m_txMiddle);
-  m_sp->SetTxOkCallback (MakeCallback (&DmgWifiMac::TxOk, this));
   m_sp->SetTxFailedCallback (MakeCallback (&DmgWifiMac::TxFailed, this));
   m_sp->CompleteConfig ();
-
-  m_relayMode = false;
 }
 
 DmgWifiMac::~DmgWifiMac ()
@@ -131,7 +120,6 @@ void
 DmgWifiMac::DoInitialize (void)
 {
   m_requestedBrpTraining = false;
-  m_rdsOperational = false;
   m_dmgAtiDca->Initialize ();
   m_dca->Initialize ();
   m_sp->Initialize ();
@@ -139,6 +127,13 @@ DmgWifiMac::DoInitialize (void)
   /* At initialization stage, a DMG STA should be in Omni receiving mode */
   m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
   RegularWifiMac::DoInitialize ();
+}
+
+void
+DmgWifiMac::SetAddress (Mac48Address address)
+{
+  NS_LOG_FUNCTION (this << address);
+  RegularWifiMac::SetAddress (address);
 }
 
 void
@@ -204,30 +199,6 @@ Time
 DmgWifiMac::GetBrpifs (void) const
 {
   return m_brpifs;
-}
-
-void
-DmgWifiMac::SetDMGAntennaCount (uint8_t antennas)
-{
-  m_antennaCount = antennas;
-}
-
-void
-DmgWifiMac::SetDMGSectorCount (uint8_t sectors)
-{
-  m_sectorCount = sectors;
-}
-
-uint8_t
-DmgWifiMac::GetDMGAntennaCount (void) const
-{
-  return m_antennaCount;
-}
-
-uint8_t
-DmgWifiMac::GetDMGSectorCount (void) const
-{
-  return m_sectorCount;
 }
 
 void
@@ -299,7 +270,7 @@ void
 DmgWifiMac::SendAddBaResponse (const MgtAddBaRequestHeader *reqHdr, Mac48Address originator)
 {
   NS_LOG_FUNCTION (this);
-  if (m_currentAllocation == CBAP_ALLOCATION)
+  if ((m_currentAllocation == CBAP_ALLOCATION) || (GetTypeOfStation () == DMG_ADHOC))
     {
       RegularWifiMac::SendAddBaResponse (reqHdr, originator);
     }
@@ -310,51 +281,119 @@ DmgWifiMac::SendAddBaResponse (const MgtAddBaRequestHeader *reqHdr, Mac48Address
 }
 
 void
-DmgWifiMac::StartContentionPeriod (Time contentionDuration)
+DmgWifiMac::MapAidToMacAddress (uint16_t aid, Mac48Address address)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (this << aid << address);
+  m_aidMap[aid] = address;
+  m_macMap[address] = aid;
+}
+
+void
+DmgWifiMac::SetupBlockAck (uint8_t tid, Mac48Address recipient)
+{
+  m_sp->SetupBlockAck (tid, recipient);
+}
+
+ChannelAccessPeriod
+DmgWifiMac::GetCurrentAccessPeriod (void) const
+{
+  return m_accessPeriod;
+}
+
+AllocationType
+DmgWifiMac::GetCurrentAllocation (void) const
+{
+  return m_currentAllocation;
+}
+
+void
+DmgWifiMac::StartContentionPeriod (AllocationID allocationID, Time contentionDuration)
+{
+  NS_LOG_FUNCTION (this << contentionDuration);
   m_currentAllocation = CBAP_ALLOCATION;
+  /* Restore previously suspended transmission */
+  m_low->RestoreAllocationParameters (allocationID);
+  /* Allow Contention Access */
   m_dcfManager->AllowChannelAccess ();
-  /* Signal Management DCA to start channel access*/
-  m_dca->InitiateTransmission (contentionDuration);
+  /* Signal Management DCA to start channel access */
+  m_dca->InitiateTransmission (allocationID, contentionDuration);
   /* Signal EDCA queues to start channel access */
   for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
-      i->second->InitiateTransmission (contentionDuration);
+      i->second->InitiateTransmission (allocationID, contentionDuration);
     }
 }
 
 void
-DmgWifiMac::StartServicePeriod (Time length, Mac48Address peerStation, bool isSource)
+DmgWifiMac::EndContentionPeriod (void)
 {
-  NS_LOG_FUNCTION (this << length << peerStation << isSource);
+  NS_LOG_FUNCTION (this);
+  m_dcfManager->DisableChannelAccess ();
+  /* Signal Management DCA to suspend current transmission */
+  m_dca->EndCurrentContentionPeriod ();
+  /* Signal EDCA queues to suspend current transmission */
+  for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+    {
+      i->second->EndCurrentContentionPeriod ();
+    }
+  /* Inform MAC Low to store parameters related to this service period (MPDU/A-MPDU) */
+  if (!m_low->IsTransmissionSuspended ())
+    {
+      m_low->StoreAllocationParameters ();
+    }
+}
+
+void
+DmgWifiMac::StartServicePeriod (AllocationID allocationID, Time length, uint8_t peerAid, Mac48Address peerAddress, bool isSource)
+{
+  NS_LOG_FUNCTION (this << length << uint32_t (peerAid) << peerAddress << isSource);
+  m_currentAllocationID = allocationID;
   m_currentAllocation = SERVICE_PERIOD_ALLOCATION;
   m_currentAllocationLength = length;
   m_allocationStarted = Simulator::Now ();
+  m_peerStationAid = peerAid;
+  m_peerStationAddress = peerAddress;
+  m_servicePeriodStartedCallback (GetAddress (), peerAddress);
+  SteerAntennaToward (peerAddress);
+  m_sp->StartServicePeriod (allocationID, peerAddress, length);
   if (isSource)
     {
-      m_sp->InitiateTransmission (peerStation, length);
-    }
-  else
-    {
-      ANTENNA_CONFIGURATION_RX antennaConfigRx = m_bestAntennaConfig[peerStation].second;
-      if ((antennaConfigRx.first != 0) && (antennaConfigRx.second != 0))
-        {
-          m_phy->GetDirectionalAntenna ()->SetCurrentRxSectorID (antennaConfigRx.first);
-          m_phy->GetDirectionalAntenna ()->SetCurrentRxAntennaID (antennaConfigRx.second);
-        }
-      else
-        {
-          m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
-        }
+      m_sp->InitiateTransmission ();
     }
 }
 
 void
-DmgWifiMac::EndServicePeriod ()
+DmgWifiMac::ResumeServicePeriodTransmission (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_ASSERT (m_currentAllocation == SERVICE_PERIOD_ALLOCATION);
+  m_currentAllocationLength = GetRemainingAllocationTime ();
+  m_sp->ResumeTransmission (m_currentAllocationLength);
+}
+
+void
+DmgWifiMac::SuspendServicePeriodTransmission (void)
+{
+  NS_LOG_FUNCTION (this);
+  NS_ASSERT (m_currentAllocation == SERVICE_PERIOD_ALLOCATION);
   m_sp->DisableChannelAccess ();
+  m_suspendedPeriodDuration = GetRemainingAllocationTime ();
+}
+
+void
+DmgWifiMac::EndServicePeriod (void)
+{
+  NS_LOG_FUNCTION (this);
+  NS_ASSERT (m_currentAllocation == SERVICE_PERIOD_ALLOCATION);
+  m_servicePeriodEndedCallback (GetAddress (), m_peerStationAddress);
+  m_sp->DisableChannelAccess ();
+  m_sp->EndCurrentServicePeriod ();
+}
+
+Time
+DmgWifiMac::GetRemainingAllocationTime (void) const
+{
+  return m_currentAllocationLength - (Simulator::Now () - m_allocationStarted);
 }
 
 void
@@ -402,291 +441,10 @@ DmgWifiMac::MapRxSnr (Mac48Address address, SECTOR_ID sectorID, ANTENNA_ID anten
     }
 }
 
-/**
- * Functions for Relay Discovery/Selection/RLS/Tear Down
- */
-Ptr<RelayCapabilitiesElement>
-DmgWifiMac::GetRelayCapabilities (void) const
-{
-  Ptr<RelayCapabilitiesElement> relayElement = Create<RelayCapabilitiesElement> ();
-  RelayCapabilitiesInfo info;
-  info.SetRelaySupportability (m_rdsActivated);
-  info.SetRelayUsability (m_redsActivated);
-  info.SetRelayPermission (true);
-  info.SetAcPower (true);
-  info.SetRelayPreference (true);
-  info.SetDuplex (RELAY_FD_AF);
-  info.SetCooperation (false);  /* Only Link Switching Type */
-  relayElement->SetRelayCapabilitiesInfo (info);
-  return relayElement;
-}
-
-Ptr<RelayTransferParameterSetElement>
-DmgWifiMac::GetRelayTransferParameterSet (void) const
-{
-  Ptr<RelayTransferParameterSetElement> element = Create<RelayTransferParameterSetElement> ();
-  element->SetDuplexMode (true);         /* FD-AF Mode */
-  element->SetCooperationMode (false);   /* Link Switching Type */
-  element->SetTxMode (false);            /* Normal mode */
-  return element;
-}
-
-void
-DmgWifiMac::SendRelaySearchRequest (uint8_t token, uint16_t destinationAid)
-{
-  NS_LOG_FUNCTION (this << token << destinationAid);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (GetBssid ());
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetBssid ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  ExtRelaySearchRequestHeader requestHdr;
-  requestHdr.SetDialogToken (token);
-  requestHdr.SetDestinationRedsAid (destinationAid);
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_RELAY_SEARCH_REQUEST;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (requestHdr);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::SendRelaySearchResponse (Mac48Address to, uint8_t token)
-{
-  NS_LOG_FUNCTION (this << to << token);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (to);
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetAddress ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  ExtRelaySearchResponseHeader responseHdr;
-  responseHdr.SetDialogToken (token);
-  responseHdr.SetStatusCode (0);
-  responseHdr.SetRelayCapableList (m_rdsList);
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_RELAY_SEARCH_RESPONSE;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (responseHdr);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::SendChannelMeasurementRequest (Mac48Address to, uint8_t token)
-{
-  NS_LOG_FUNCTION (this << to << token);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (to);
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetBssid ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  ExtMultiRelayChannelMeasurementRequest requestHdr;
-  requestHdr.SetDialogToken (token);
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_MULTI_RELAY_CHANNEL_MEASUREMENT_REQUEST;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (requestHdr);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::SendChannelMeasurementReport (Mac48Address to, uint8_t token, ChannelMeasurementInfoList &measurementList)
-{
-  NS_LOG_FUNCTION (this);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (to);
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetBssid ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  ExtMultiRelayChannelMeasurementReport responseHdr;
-  responseHdr.SetDialogToken (token);
-  responseHdr.SetChannelMeasurementList (measurementList);
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_MULTI_RELAY_CHANNEL_MEASUREMENT_REPORT;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (responseHdr);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::SetupRls (Mac48Address to, uint8_t token, uint16_t source_aid, uint16_t relay_aid, uint16_t destination_aid)
-{
-  NS_LOG_FUNCTION (this);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (to);
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetBssid ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  ExtRlsRequest requestHdr;
-  requestHdr.SetDialogToken (token);
-  requestHdr.SetSourceAid (source_aid);
-  requestHdr.SetRelayAid (relay_aid);
-  requestHdr.SetDestinationAid (destination_aid);
-
-  RelayCapabilitiesInfo info;
-  requestHdr.SetSourceCapabilityInformation (info);
-  requestHdr.SetRelayCapabilityInformation (info);
-  requestHdr.SetDestinationCapabilityInformation (info);
-  requestHdr.SetRelayTransferParameterSet (GetRelayTransferParameterSet ());
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_RLS_REQUEST;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (requestHdr);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::SendRlsResponse (Mac48Address to, uint8_t token)
-{
-  NS_LOG_FUNCTION (this);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (to);
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetBssid ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  ExtRlsResponse reponseHdr;
-  reponseHdr.SetDialogToken (token);
-  reponseHdr.SetDestinationStatusCode (0);
-  reponseHdr.SetRelayStatusCode (0);
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_RLS_RESPONSE;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (reponseHdr);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::SendRlsAnnouncment (Mac48Address to, uint16_t destination_aid, uint16_t relay_aid, uint16_t source_aid)
-{
-  NS_LOG_FUNCTION (this);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (to);
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetBssid ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  ExtRlsAnnouncment announcmentHdr;
-  announcmentHdr.SetStatusCode (0);
-  announcmentHdr.SetDestinationAid (destination_aid);
-  announcmentHdr.SetRelayAid (relay_aid);
-  announcmentHdr.SetSourceAid (source_aid);
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_RLS_ANNOUNCEMENT;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (announcmentHdr);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::SendRelayTeardown (Mac48Address to, uint16_t source_aid, uint16_t destination_aid, uint16_t relay_aid)
-{
-  NS_LOG_FUNCTION (this << to << source_aid << destination_aid << relay_aid);
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (to);
-  hdr.SetAddr2 (GetAddress ());
-  hdr.SetAddr3 (GetBssid ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-
-  ExtRlsTearDown frame;
-  frame.SetSourceAid (source_aid);
-  frame.SetDestinationAid (destination_aid);
-  frame.SetRelayAid (relay_aid);
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.dmgAction = WifiActionHeader::DMG_RLS_TEARDOWN;
-  actionHdr.SetAction (WifiActionHeader::DMG, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (frame);
-  packet->AddHeader (actionHdr);
-
-  m_dca->Queue (packet, hdr);
-}
-
-void
-DmgWifiMac::TeardownRelay (Mac48Address to, Mac48Address apAddress, Mac48Address destinationAddress,
-                           uint16_t source_aid, uint16_t destination_aid, uint16_t relay_aid)
-{
-  SendRelayTeardown (to, source_aid, destination_aid, relay_aid);
-  SendRelayTeardown (apAddress, source_aid, destination_aid, relay_aid);
-  SendRelayTeardown (destinationAddress, source_aid, destination_aid, relay_aid);
-}
-
 void
 DmgWifiMac::SendSswFbckAfterRss (Mac48Address receiver)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (this << receiver);
   /* send a SSW Feedback when you receive a SSW Slot after MBIFS. */
   WifiMacHeader hdr;
   hdr.SetType (WIFI_MAC_CTL_DMG_SSW_FBCK);
@@ -714,7 +472,7 @@ DmgWifiMac::SendSswFbckAfterRss (Mac48Address receiver)
   request.SetTX_TRN_REQ (false);
 
   BF_Link_Maintenance_Field maintenance;
-  maintenance.SetIsMaster (true); /* Master of data transfer */
+  maintenance.SetAsMaster (true); /* Master of data transfer */
 
   fbck.SetSswFeedbackField (feedback);
   fbck.SetBrpRequestField (request);
@@ -745,7 +503,7 @@ DmgWifiMac::SendSswFbckAfterRss (Mac48Address receiver)
 void
 DmgWifiMac::SendInformationRequest (Mac48Address to, ExtInformationRequest &requestHdr)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (this << to);
   WifiMacHeader hdr;
   hdr.SetAction ();
   hdr.SetAddr1 (to);
@@ -768,9 +526,9 @@ DmgWifiMac::SendInformationRequest (Mac48Address to, ExtInformationRequest &requ
 }
 
 void
-DmgWifiMac::SendInformationRsponse (Mac48Address to, ExtInformationResponse &responseHdr)
+DmgWifiMac::SendInformationResponse (Mac48Address to, ExtInformationResponse &responseHdr)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (this << to);
   WifiMacHeader hdr;
   hdr.SetAction ();
   hdr.SetAddr1 (to);
@@ -793,52 +551,92 @@ DmgWifiMac::SendInformationRsponse (Mac48Address to, ExtInformationResponse &res
 }
 
 void
-DmgWifiMac::ChangeActiveTxSector (Mac48Address address)
+DmgWifiMac::SteerAntennaToward (Mac48Address address)
 {
   NS_LOG_FUNCTION (this << address);
   STATION_ANTENNA_CONFIG_MAP::iterator it = m_bestAntennaConfig.find (address);
   if (it != m_bestAntennaConfig.end ())
     {
-      if (m_relayMode && !m_rdsActivated)
-        {
-          address = m_selectedRelayAddress;
-        }
       ANTENNA_CONFIGURATION_TX antennaConfigTx = m_bestAntennaConfig[address].first;
+      ANTENNA_CONFIGURATION_RX antennaConfigRx = m_bestAntennaConfig[address].second;
+
+      /* Change Tx Antenna Configuration */
       m_phy->GetDirectionalAntenna ()->SetCurrentTxSectorID (antennaConfigTx.first);
       m_phy->GetDirectionalAntenna ()->SetCurrentTxAntennaID (antennaConfigTx.second);
       NS_LOG_DEBUG ("Change Transmit Antenna Sector Config to SectorID=" << uint32_t (antennaConfigTx.first)
                     << ", AntennaID=" << uint32_t (antennaConfigTx.second));
+
+      /* Change Rx Antenna Configuration */
+      if ((antennaConfigRx.first != NO_ANTENNA_CONFIG) && (antennaConfigRx.second != NO_ANTENNA_CONFIG))
+        {
+          m_phy->GetDirectionalAntenna ()->SetInDirectionalReceivingMode ();
+          m_phy->GetDirectionalAntenna ()->SetCurrentRxSectorID (antennaConfigRx.first);
+          m_phy->GetDirectionalAntenna ()->SetCurrentRxAntennaID (antennaConfigRx.second);
+          NS_LOG_DEBUG ("Change Receive Antenna Sector Config to SectorID=" << uint32_t (antennaConfigRx.first)
+                        << ", AntennaID=" << uint32_t (antennaConfigRx.second));
+        }
+      else
+        {
+          m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+        }
     }
   else
     {
-      NS_LOG_DEBUG ("No training information available with " << address);
+      NS_LOG_DEBUG ("No antenna configuration available for DMG STA=" << address);
     }
 }
 
-void
-DmgWifiMac::ChangeActiveRxSector (Mac48Address address)
+RelayCapabilitiesInfo
+DmgWifiMac::GetRelayCapabilitiesInfo (void) const
 {
-  NS_LOG_FUNCTION (this << address);
-  STATION_ANTENNA_CONFIG_MAP::iterator it = m_bestAntennaConfig.find (address);
-  if (it != m_bestAntennaConfig.end ())
-    {
-      ANTENNA_CONFIGURATION_RX antennaConfigRx = m_bestAntennaConfig[address].first;
-      m_phy->GetDirectionalAntenna ()->SetInDirectionalReceivingMode ();
-      m_phy->GetDirectionalAntenna ()->SetCurrentRxSectorID (antennaConfigRx.first);
-      m_phy->GetDirectionalAntenna ()->SetCurrentRxAntennaID (antennaConfigRx.second);
-      NS_LOG_DEBUG ("Change Receive Antenna Sector Config to SectorID=" << uint32_t (antennaConfigRx.first)
-                    << ", AntennaID=" << uint32_t (antennaConfigRx.second));
-    }
-  else
-    {
-      NS_LOG_DEBUG ("No training information available with " << address);
-    }
+  RelayCapabilitiesInfo info;
+  info.SetRelaySupportability (m_rdsActivated);
+  info.SetRelayUsability (m_redsActivated);
+  info.SetRelayPermission (true);     /* Used by PCP/AP only */
+  info.SetAcPower (true);
+  info.SetRelayPreference (true);
+  info.SetDuplex (m_relayDuplexMode);
+  info.SetCooperation (false);        /* Only Link Switching Type supported */
+  return info;
+}
+
+Ptr<RelayCapabilitiesElement>
+DmgWifiMac::GetRelayCapabilitiesElement (void) const
+{
+  Ptr<RelayCapabilitiesElement> relayElement = Create<RelayCapabilitiesElement> ();
+  RelayCapabilitiesInfo info = GetRelayCapabilitiesInfo ();
+  relayElement->SetRelayCapabilitiesInfo (info);
+  return relayElement;
 }
 
 void
-DmgWifiMac::StayInOmniReceiveMode (void)
+DmgWifiMac::SendRelaySearchResponse (Mac48Address to, uint8_t token)
 {
-  m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+  NS_LOG_FUNCTION (this << to << token);
+  WifiMacHeader hdr;
+  hdr.SetAction ();
+  hdr.SetAddr1 (to);
+  hdr.SetAddr2 (GetAddress ());
+  hdr.SetAddr3 (GetAddress ());
+  hdr.SetDsNotFrom ();
+  hdr.SetDsNotTo ();
+  hdr.SetNoOrder ();
+
+  ExtRelaySearchResponseHeader responseHdr;
+  responseHdr.SetDialogToken (token);
+  responseHdr.SetStatusCode (0);
+  responseHdr.SetRelayCapableList (m_rdsList);
+
+  WifiActionHeader actionHdr;
+  WifiActionHeader::ActionValue action;
+  action.dmgAction = WifiActionHeader::DMG_RELAY_SEARCH_RESPONSE;
+  actionHdr.SetAction (WifiActionHeader::DMG, action);
+
+  Ptr<Packet> packet = Create<Packet> ();
+  packet->AddHeader (responseHdr);
+  packet->AddHeader (actionHdr);
+
+  m_dca->Queue (packet, hdr);
 }
 
 /**
@@ -1018,58 +816,10 @@ DmgWifiMac::ManagementTxOk (const WifiMacHeader &hdr)
 }
 
 void
-DmgWifiMac::TxOk (Ptr<const Packet> currentPacket, const WifiMacHeader &hdr)
-{
-  NS_LOG_FUNCTION (this);
-  if (hdr.IsAction ())
-    {
-      WifiActionHeader actionHdr;
-      Ptr<Packet> packet = currentPacket->Copy ();
-      packet->RemoveHeader (actionHdr);
-      switch (actionHdr.GetCategory ())
-        {
-        case WifiActionHeader::DMG:
-          switch (actionHdr.GetAction ().dmgAction)
-            {
-            case WifiActionHeader::DMG_RLS_RESPONSE:
-              {
-                if (m_rdsActivated)
-                  {
-                    /* We are the RDS, so inform the PHY layer to work in Full Duplex Mode */
-                    ANTENNA_CONFIGURATION_TX antennaConfigTxSrc = m_bestAntennaConfig[Mac48Address ("00:00:00:00:00:03")].first;
-                    ANTENNA_CONFIGURATION_TX antennaConfigTxDst = m_bestAntennaConfig[Mac48Address ("00:00:00:00:00:04")].first;
-                    m_phy->ActivateRdsOpereation (antennaConfigTxSrc.first, antennaConfigTxSrc.second,
-                                                  antennaConfigTxDst.first, antennaConfigTxDst.second);
-                    m_rdsOperational = true;
-                  }
-                return;
-              }
-            case WifiActionHeader::DMG_RLS_ANNOUNCEMENT:
-              {
-                /* We are the Source REDS, so we steer our antenna to RDS */
-                ExtRlsAnnouncment rlsAnnouncement;
-                packet->RemoveHeader (rlsAnnouncement);
-                if (rlsAnnouncement.GetStatusCode () == 0)
-                  {
-                    ChangeActiveTxSector (m_selectedRelayAddress);
-                    m_rlsCompleted (m_selectedRelayAddress);
-                  }
-                return;
-              }
-            default:
-              break;
-            }
-        default:
-          break;
-        }
-    }
-  RegularWifiMac::TxOk (currentPacket, hdr);
-}
-
-void
 DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 {
   NS_LOG_FUNCTION (this << packet << hdr);
+  Mac48Address from = hdr->GetAddr2 ();
 
   if (hdr->IsAction () || hdr->IsActionNoAck ())
     {
@@ -1078,6 +828,53 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 
       switch (actionHdr.GetCategory ())
         {
+        case WifiActionHeader::BLOCK_ACK:
+          {
+            if (m_currentAllocation == CBAP_ALLOCATION)
+              {
+                packet->AddHeader (actionHdr);
+                RegularWifiMac::Receive (packet, hdr);
+                return;
+              }
+            else
+              {
+                switch (actionHdr.GetAction ().blockAck)
+                  {
+                  case WifiActionHeader::BLOCK_ACK_ADDBA_REQUEST:
+                    {
+                      MgtAddBaRequestHeader reqHdr;
+                      packet->RemoveHeader (reqHdr);
+                      m_sp->SendAddBaResponse (&reqHdr, from);
+                      return;
+                    }
+                  case WifiActionHeader::BLOCK_ACK_ADDBA_RESPONSE:
+                    {
+                      MgtAddBaResponseHeader respHdr;
+                      packet->RemoveHeader (respHdr);
+                      m_sp->GotAddBaResponse (&respHdr, from);
+                      return;
+                    }
+                  case WifiActionHeader::BLOCK_ACK_DELBA:
+                    {
+                      MgtDelBaHeader delBaHdr;
+                      packet->RemoveHeader (delBaHdr);
+                      if (delBaHdr.IsByOriginator ())
+                        {
+                          m_low->DestroyBlockAckAgreement (from, delBaHdr.GetTid ());
+                        }
+                      else
+                        {
+                          m_sp->GotDelBaFrame (&delBaHdr, from);
+                        }
+                      return;
+                    }
+                  default:
+                    NS_FATAL_ERROR ("Unsupported Action field in Block Ack Action frame");
+                    return;
+                  }
+              }
+          }
+
         case WifiActionHeader::DMG:
           switch (actionHdr.GetAction ().dmgAction)
             {
@@ -1119,14 +916,14 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                 BeamRefinementElement element;
                 element = brpFrame.GetBeamRefinementElement ();
 
-                if (!m_isBrpSetupCompleted[hdr->GetAddr2 ()])
+                if (!m_isBrpSetupCompleted[from])
                   {
                     /* We are in BRP Setup Subphase */
                     if (element.IsBeamRefinementInitiator () && element.IsCapabilityRequest ())
                       {
                         /* We are the Responder of the BRP Setup */
-                        m_isBrpResponder[hdr->GetAddr2 ()] = true;
-                        m_isBrpSetupCompleted[hdr->GetAddr2 ()] = false;
+                        m_isBrpResponder[from] = true;
+                        m_isBrpSetupCompleted[from] = false;
 
                         /* Reply back to the Initiator */
                         BRP_Request_Field replyRequestField;
@@ -1138,7 +935,7 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                         replyElement.SetCapabilityRequest (false);
 
                         /* Set the antenna config to the best TX config */
-                        m_feedbackAntennaConfig = GetBestAntennaConfiguration (hdr->GetAddr2 (), true);
+                        m_feedbackAntennaConfig = GetBestAntennaConfiguration (from, true);
                         m_phy->GetDirectionalAntenna ()->SetCurrentTxSectorID (m_feedbackAntennaConfig.first);
                         m_phy->GetDirectionalAntenna ()->SetCurrentTxAntennaID (m_feedbackAntennaConfig.second);
 
@@ -1146,7 +943,7 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                                       << " at " << Simulator::Now ());
 
                         /* Send BRP Frame terminating the setup phase from the responder side */
-                        SendBrpFrame (hdr->GetAddr2 (), replyRequestField, replyElement);
+                        SendBrpFrame (from, replyRequestField, replyElement);
                       }
                     else if (!element.IsBeamRefinementInitiator () && !element.IsCapabilityRequest ())
                       {
@@ -1160,23 +957,23 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                                       << " at " << Simulator::Now ());
 
                         /* Send BRP Frame terminating the setup phase from the initiator side */
-                        SendBrpFrame (hdr->GetAddr2 (), replyRequestField, replyElement);
+                        SendBrpFrame (from, replyRequestField, replyElement);
 
                         /* BRP Setup is terminated */
-                        m_isBrpSetupCompleted[hdr->GetAddr2 ()] = true;
+                        m_isBrpSetupCompleted[from] = true;
                       }
                     else if (element.IsBeamRefinementInitiator () && !element.IsCapabilityRequest ())
                       {
                         /* BRP Setup subphase is terminated by initiator */
-                        m_isBrpSetupCompleted[hdr->GetAddr2 ()] = true;
+                        m_isBrpSetupCompleted[from] = true;
 
-                        NS_LOG_LOGIC ("BRP Setup Subphase between Initiator=" << hdr->GetAddr2 ()
+                        NS_LOG_LOGIC ("BRP Setup Subphase between Initiator=" << from
                                       << " and Responder=" << GetAddress () << " is terminated at " << Simulator::Now ());
                       }
                   }
                 else
                   {
-                    NS_LOG_INFO ("Received BRP Transaction Frame from " << hdr->GetAddr2 () << " at " << Simulator::Now ());
+                    NS_LOG_INFO ("Received BRP Transaction Frame from " << from << " at " << Simulator::Now ());
                     /* BRP Setup Subphase is completed we are in Transaction state */
                     BRP_Request_Field replyRequestField;
                     BeamRefinementElement replyElement;
@@ -1190,18 +987,18 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                         replyElement.SetRxTrainResponse (true);
                       }
 
-                    if (m_isBrpResponder[hdr->GetAddr2 ()])
+                    if (m_isBrpResponder[from])
                       {
                         /* Request for Rx-Train Request */
                         replyRequestField.SetL_RX (m_phy->GetDirectionalAntenna ()->GetNumberOfSectors ());
                         /* Get the address of the peer station we are training our Rx sectors with */
-                        m_peerStation = hdr->GetAddr2 ();
+                        m_peerStation = from;
                       }
 
                     if (replyElement.IsRxTrainResponse ())
                       {
                         m_requestedBrpTraining = true;
-                        SendBrpFrame (hdr->GetAddr2 (), replyRequestField, replyElement, true, TRN_R, requestField.GetL_RX ());
+                        SendBrpFrame (from, replyRequestField, replyElement, true, TRN_R, requestField.GetL_RX ());
                       }
 
                   }
@@ -1222,7 +1019,7 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 
   // Invoke the receive handler of our parent class to deal with any
   // other frames. Specifically, this will handle Block Ack-related
-  // Management Action frames.
+  // Management Action and FST frames.
   RegularWifiMac::Receive (packet, hdr);
 }
 

@@ -934,7 +934,7 @@ MinstrelHtWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
         }
 
       return WifiTxVector (GetMcsSupported (station, mcsIndex), GetDefaultTxPowerLevel (), GetLongRetryCount (station),
-                           group.sgi, group.streams, GetNess (station), group.chWidth, !station->m_isSampling, GetStbc (station));
+                           group.sgi, group.streams, GetNess (station), group.chWidth, GetAggregation (station) && !station->m_isSampling, GetStbc (station));
     }
 }
 
@@ -976,8 +976,7 @@ MinstrelHtWifiManager::DoGetRtsTxVector (WifiRemoteStation *st)
       uint32_t mcsIndex = station->m_groupsTable[groupId].m_ratesTable[rateId].mcsIndex;
 
       WifiMode lastRate = GetMcsSupported (station, mcsIndex);
-      uint8_t streams = m_minstrelGroups[groupId].streams;
-      uint64_t lastDataRate = lastRate.GetNonHtReferenceRate (streams);
+      uint64_t lastDataRate = lastRate.GetNonHtReferenceRate ();
       uint32_t nBasicRates = GetNBasicModes ();
 
       WifiMode rtsRate;
@@ -1196,7 +1195,7 @@ MinstrelHtWifiManager::FindRate (MinstrelHtWifiRemoteStation *station)
               NS_LOG_DEBUG ("Use sample rate? SampleDuration= " << sampleDuration << " maxTp2Duration= " << maxTp2Duration <<
                             " maxProbDuration= " << maxProbDuration << " sampleStreams= " << (uint32_t)sampleStreams <<
                             " maxTpStreams= " << (uint32_t)maxTpStreams);
-              if (sampleDuration < maxTp2Duration || (sampleStreams <= maxTpStreams - 1 && sampleDuration < maxProbDuration))
+              if (sampleDuration < maxTp2Duration || (sampleStreams < maxTpStreams && sampleDuration < maxProbDuration))
                 {
                   /// Set flag that we are currently sampling.
                   station->m_isSampling = true;
@@ -1431,7 +1430,8 @@ MinstrelHtWifiManager::SetBestProbabilityRate (MinstrelHtWifiRemoteStation *stat
         {
           station->m_maxProbRate = index;
         }
-      if (rate.ewmaProb > group->m_ratesTable[group->m_maxProbRate].ewmaProb)
+      maxGPRateId = GetRateId (group->m_maxProbRate);
+      if (rate.ewmaProb > group->m_ratesTable[maxGPRateId].ewmaProb)
         {
           group->m_maxProbRate = index;
         }
@@ -1910,3 +1910,8 @@ MinstrelHtWifiManager::GetHtDeviceMcsList (void) const
 }
 
 } // namespace ns3
+
+
+
+
+

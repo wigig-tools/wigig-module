@@ -1,7 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2006,2007 INRIA
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,8 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Mathieu Lacage, <mathieu.lacage@sophia.inria.fr>
- *          Hany Assasa <hany.assasa@gmail.com>
+ * Author: Mathieu Lacage, <mathieu.lacage@sophia.inria.fr>
  */
 
 #include "ns3/packet.h"
@@ -91,11 +89,27 @@ YansWifiChannel::AddBlockage (double (*blockage)(), Ptr<WifiPhy> srcWifiPhy, Ptr
 }
 
 void
+YansWifiChannel::RemoveBlockage (void)
+{
+  m_blockage = 0;
+  m_srcWifiPhy = 0;
+  m_dstWifiPhy = 0;
+}
+
+void
 YansWifiChannel::AddPacketDropper (bool (*dropper)(), Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy)
 {
   m_packetDropper = dropper;
   m_srcWifiPhy = srcWifiPhy;
   m_dstWifiPhy = dstWifiPhy;
+}
+
+void
+YansWifiChannel::RemovePacketDropper (void)
+{
+  m_packetDropper = 0;
+  m_srcWifiPhy = 0;
+  m_dstWifiPhy = 0;
 }
 
 void
@@ -123,9 +137,7 @@ YansWifiChannel::Send (Ptr<YansWifiPhy> sender, Ptr<const Packet> packet, double
             }
 
           /* Packet Dropper */
-          if ((m_packetDropper != 0) &&
-             (((m_srcWifiPhy == sender) && (m_dstWifiPhy == (*i))) ||
-             ((m_srcWifiPhy == (*i)) && (m_dstWifiPhy == sender))))
+          if ((m_packetDropper != 0) && ((m_srcWifiPhy == sender) && (m_dstWifiPhy == (*i))))
             {
               if (m_packetDropper ())
                 {

@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015 HANY ASSASA
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -472,6 +472,18 @@ void
 WifiMacHeader::SetNoRetry (void)
 {
   m_ctrlRetry = 0;
+}
+
+void
+WifiMacHeader::SetMoreData (void)
+{
+  m_ctrlMoreData = 1;
+}
+
+void
+WifiMacHeader::SetNoMoreData (void)
+{
+  m_ctrlMoreData = 0;
 }
 
 void
@@ -981,6 +993,12 @@ bool
 WifiMacHeader::IsRetry (void) const
 {
   return (m_ctrlRetry == 1);
+}
+
+bool
+WifiMacHeader::IsMoreData (void) const
+{
+  return (m_ctrlMoreData == 1);
 }
 
 bool

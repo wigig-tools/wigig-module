@@ -975,6 +975,32 @@ void Ipv6L3Protocol::Receive (Ptr<NetDevice> device, Ptr<const Packet> p, uint16
       packet->RemoveAtEnd (packet->GetSize () - hdr.GetPayloadLength ());
     }
 
+  // the packet is valid, we update the NDISC cache entry (if present)
+  Ptr<NdiscCache> ndiscCache = ipv6Interface->GetNdiscCache ();
+  if (ndiscCache)
+    {
+      // case one, it's a a direct routing.
+      NdiscCache::Entry *entry = ndiscCache->Lookup (hdr.GetSourceAddress ());
+      if (entry)
+        {
+          entry->UpdateReachableTimer ();
+        }
+      else
+        {
+          // It's not in the direct routing, so it's the router, and it could have multiple IP addresses.
+          // In doubt, update all of them.
+          // Note: it's a confirmed behavior for Linux routers.
+          std::list<NdiscCache::Entry *> entryList = ndiscCache->LookupInverse (from);
+          std::list<NdiscCache::Entry *>::iterator iter;
+          for (iter = entryList.begin (); iter != entryList.end (); iter ++)
+            {
+              (*iter)->UpdateReachableTimer ();
+            }
+        }
+    }
+
+
+
   /* forward up to IPv6 raw sockets */
   for (SocketList::iterator it = m_sockets.begin (); it != m_sockets.end (); ++it)
     {
@@ -1204,7 +1230,7 @@ void Ipv6L3Protocol::IpForward (Ptr<const NetDevice> idev, Ptr<Ipv6Route> rtentr
   NS_LOG_LOGIC ("Forwarding logic for node: " << m_node->GetId ());
 
   // Drop RFC 3849 packets: 2001:db8::/32
-  if (header.GetDestinationAddress().IsDocumentation())
+  if (header.GetDestinationAddress().IsDocumentation ())
     {
       NS_LOG_WARN ("Received a packet for 2001:db8::/32 (documentation class).  Drop.");
       m_dropTrace (header, p, DROP_ROUTE_ERROR, m_node->GetObject<Ipv6> (), 0);
@@ -1274,6 +1300,9 @@ void Ipv6L3Protocol::IpForward (Ptr<const NetDevice> idev, Ptr<Ipv6Route> rtentr
           icmpv6->SendRedirection (copy, linkLocal, src, target, dst, Address ());
         }
     }
+  // in case the packet still has a priority tag attached, remove it
+  SocketPriorityTag priorityTag;
+  packet->RemovePacketTag (priorityTag);
   int32_t interface = GetInterfaceForDevice (rtentry->GetOutputDevice ());
   m_unicastForwardTrace (ipHeader, packet, interface);
   SendRealOut (rtentry, packet, ipHeader);

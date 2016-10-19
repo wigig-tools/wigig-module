@@ -83,6 +83,16 @@ public:
    * \param v9 the value of the attribute to set
    * \param n10 the name of the attribute to set
    * \param v10 the value of the attribute to set
+   * \param n11 the name of the attribute to set
+   * \param v11 the value of the attribute to set
+   * \param n12 the name of the attribute to set
+   * \param v12 the value of the attribute to set
+   * \param n13 the name of the attribute to set
+   * \param v13 the value of the attribute to set
+   * \param n14 the name of the attribute to set
+   * \param v14 the value of the attribute to set
+   * \param n15 the name of the attribute to set
+   * \param v15 the value of the attribute to set
    *
    * All the attributes specified in this method should exist
    * in the requested mac.
@@ -98,7 +108,12 @@ public:
                         std::string n7 = "", const AttributeValue &v7 = EmptyAttributeValue (),
                         std::string n8 = "", const AttributeValue &v8 = EmptyAttributeValue (),
                         std::string n9 = "", const AttributeValue &v9 = EmptyAttributeValue (),
-                        std::string n10 = "", const AttributeValue &v10 = EmptyAttributeValue ());
+                        std::string n10 = "", const AttributeValue &v10 = EmptyAttributeValue (),
+                        std::string n11 = "", const AttributeValue &v11 = EmptyAttributeValue (),
+                        std::string n12 = "", const AttributeValue &v12 = EmptyAttributeValue (),
+                        std::string n13 = "", const AttributeValue &v13 = EmptyAttributeValue (),
+                        std::string n14 = "", const AttributeValue &v14 = EmptyAttributeValue (),
+                        std::string n15 = "", const AttributeValue &v15 = EmptyAttributeValue ());
   /**
    * Set the class, type and attributes for the Msdu aggregator
    *

@@ -126,6 +126,21 @@ MsduStandardAggregator::Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggrega
   return false;
 }
 
+bool
+MsduStandardAggregator::CanBeAggregated (uint32_t packetSize, Ptr<Packet> aggregatedPacket)
+{
+  uint32_t padding = CalculatePadding (aggregatedPacket);
+  uint32_t actualSize = aggregatedPacket->GetSize ();
+  if ((14 + packetSize + actualSize + padding) <= m_maxAmsduLength)
+    {
+      return true;
+    }
+  else
+    {
+      return false;
+    }
+}
+
 uint32_t
 MsduStandardAggregator::CalculatePadding (Ptr<const Packet> packet)
 {

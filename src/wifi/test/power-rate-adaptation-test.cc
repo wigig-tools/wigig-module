@@ -203,7 +203,7 @@ PowerRateAdaptationTest::TestParf ()
     }
   manager->ReportDataOk (remoteAddress, &packetHeader, 0, ackMode, 0);
 
-  txVector = manager->GetDataTxVector (remoteAddress,&packetHeader,packet,packet->GetSize ());
+  txVector = manager->GetDataTxVector (remoteAddress, &packetHeader, packet);
   mode = txVector.GetMode ();
   power = (int) txVector.GetTxPowerLevel ();
 
@@ -320,7 +320,7 @@ PowerRateAdaptationTest::TestParf ()
 
   for (int i = 0; i < 2; i++)
     {
-      manager->ReportDataFailed (remoteAddress, &packetHeader);
+      manager->ReportDataFailed (remoteAddress,&packetHeader);
     }
 
   txVector = manager->GetDataTxVector (remoteAddress, &packetHeader, packet);
@@ -330,11 +330,7 @@ PowerRateAdaptationTest::TestParf ()
   NS_TEST_ASSERT_MSG_EQ (mode.GetDataRate (txVector.GetChannelWidth (), txVector.IsShortGuardInterval (), 1), 54000000, "PARF: Incorrect vale of data rate");
   NS_TEST_ASSERT_MSG_EQ (power, 17, "PARF: Incorrect value of power level");
 
-  Simulator::Stop (Seconds (10.0));
-
-  Simulator::Run ();
   Simulator::Destroy ();
-
 }
 
 void
@@ -348,8 +344,8 @@ PowerRateAdaptationTest::TestAparf ()
   /*
    * Configure thresholds for rate and power control.
    */
-  manager->SetAttribute ("SuccessThreshold 1",UintegerValue (3));
-  manager->SetAttribute ("SuccessThreshold 2",UintegerValue (10));
+  manager->SetAttribute ("SuccessThreshold1",UintegerValue (3));
+  manager->SetAttribute ("SuccessThreshold2",UintegerValue (10));
   manager->SetAttribute ("FailThreshold",UintegerValue (1));
   manager->SetAttribute ("PowerThreshold",UintegerValue (10));
 
@@ -477,7 +473,7 @@ PowerRateAdaptationTest::TestAparf ()
    * After one fail the rate is decreased or the power increased.
    * As we are at minimal power, the power should be increased.
    */
-  manager->ReportDataFailed (remoteAddress, &packetHeader);
+  manager->ReportDataFailed (remoteAddress,&packetHeader);
 
   txVector = manager->GetDataTxVector (remoteAddress, &packetHeader, packet);
   mode = txVector.GetMode ();
@@ -494,7 +490,7 @@ PowerRateAdaptationTest::TestAparf ()
    */
   for (int i = 0; i < 16; i++)
     {
-      manager->ReportDataFailed (remoteAddress, &packetHeader);
+      manager->ReportDataFailed (remoteAddress,&packetHeader);
     }
 
   txVector = manager->GetDataTxVector (remoteAddress, &packetHeader, packet);
@@ -511,7 +507,7 @@ PowerRateAdaptationTest::TestAparf ()
    * As we are at maximal power, the rate should be decreased.
    * Set critical rate to 54 Mbps.
    */
-  manager->ReportDataFailed (remoteAddress, &packetHeader);
+  manager->ReportDataFailed (remoteAddress,&packetHeader);
 
   txVector = manager->GetDataTxVector (remoteAddress, &packetHeader, packet);
   mode = txVector.GetMode ();
@@ -570,11 +566,7 @@ PowerRateAdaptationTest::TestAparf ()
   NS_TEST_ASSERT_MSG_EQ (mode.GetDataRate (txVector.GetChannelWidth (), txVector.IsShortGuardInterval (), 1), 54000000, "APARF: Incorrect vale of data rate");
   NS_TEST_ASSERT_MSG_EQ (power, 17, "APARF: Incorrect value of power level");
 
-  Simulator::Stop (Seconds (10.0));
-
-  Simulator::Run ();
   Simulator::Destroy ();
-
 }
 
 void

@@ -97,7 +97,7 @@ public:
   // The value 2 indicates that the maximum MCS for that spatial stream is 9.
   //
   // The maps may be set all at once by passing in a 16-bit field corresponding
-  // to the above, or incrementally for each NSS separately, where the
+  // to the above, or incrementally for each NSS separately, where the 
   // MCS value must be in the range 7-9.
   /**
    * \param map The 16-bit encoding of Max MCS for each of 8 spatial streams

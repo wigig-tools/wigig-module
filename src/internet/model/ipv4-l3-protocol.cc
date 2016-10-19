@@ -36,6 +36,7 @@
 
 #include "loopback-net-device.h"
 #include "arp-l3-protocol.h"
+#include "arp-cache.h"
 #include "ipv4-l3-protocol.h"
 #include "icmpv4-l4-protocol.h"
 #include "ipv4-interface.h"
@@ -56,12 +57,6 @@ Ipv4L3Protocol::GetTypeId (void)
     .SetParent<Ipv4> ()
     .SetGroupName ("Internet")
     .AddConstructor<Ipv4L3Protocol> ()
-    .AddAttribute ("DefaultTos",
-                   "The TOS value set by default on "
-                   "all outgoing packets generated on this node.",
-                   UintegerValue (0),
-                   MakeUintegerAccessor (&Ipv4L3Protocol::m_defaultTos),
-                   MakeUintegerChecker<uint8_t> ())
     .AddAttribute ("DefaultTtl",
                    "The TTL value set by default on "
                    "all outgoing packets generated on this node.",
@@ -598,6 +593,36 @@ Ipv4L3Protocol::Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t p
       return;
     }
 
+  // the packet is valid, we update the ARP cache entry (if present)
+  Ptr<ArpCache> arpCache = ipv4Interface->GetArpCache ();
+  if (arpCache)
+    {
+      // case one, it's a a direct routing.
+      ArpCache::Entry *entry = arpCache->Lookup (ipHeader.GetSource ());
+      if (entry)
+        {
+          if (entry->IsAlive ())
+            {
+              entry->UpdateSeen ();
+            }
+        }
+      else
+        {
+          // It's not in the direct routing, so it's the router, and it could have multiple IP addresses.
+          // In doubt, update all of them.
+          // Note: it's a confirmed behavior for Linux routers.
+          std::list<ArpCache::Entry *> entryList = arpCache->LookupInverse (from);
+          std::list<ArpCache::Entry *>::iterator iter;
+          for (iter = entryList.begin (); iter != entryList.end (); iter ++)
+            {
+              if ((*iter)->IsAlive ())
+                {
+                  (*iter)->UpdateSeen ();
+                }
+            }
+        }
+    }
+
   for (SocketList::iterator i = m_sockets.begin (); i != m_sockets.end (); ++i)
     {
       NS_LOG_LOGIC ("Forwarding to raw socket"); 
@@ -710,7 +735,7 @@ Ipv4L3Protocol::Send (Ptr<Packet> packet,
       ttl = tag.GetTtl ();
     }
 
-  uint8_t tos = m_defaultTos;
+  uint8_t tos = 0;
   SocketIpTosTag ipTosTag;
   found = packet->RemovePacketTag (ipTosTag);
   if (found)
@@ -1017,6 +1042,17 @@ Ipv4L3Protocol::IpForward (Ptr<Ipv4Route> rtentry, Ptr<const Packet> p, const Ip
       m_dropTrace (header, packet, DROP_TTL_EXPIRED, m_node->GetObject<Ipv4> (), interface);
       return;
     }
+  // in case the packet still has a priority tag attached, remove it
+  SocketPriorityTag priorityTag;
+  packet->RemovePacketTag (priorityTag);
+  uint8_t priority = Socket::IpTos2Priority (ipHeader.GetTos ());
+  // add a priority tag if the priority is not null
+  if (priority)
+    {
+      priorityTag.SetPriority (priority);
+      packet->AddPacketTag (priorityTag);
+    }
+
   m_unicastForwardTrace (ipHeader, packet, interface);
   SendRealOut (rtentry, packet, ipHeader);
 }
@@ -1039,7 +1075,7 @@ Ipv4L3Protocol::LocalDeliver (Ptr<const Packet> packet, Ipv4Header const&ip, uin
         }
       NS_LOG_LOGIC ("Got last fragment, Packet is complete " << *p );
       ipHeader.SetFragmentOffset (0);
-      ipHeader.SetPayloadSize (p->GetSize () + ipHeader.GetSerializedSize ());
+      ipHeader.SetPayloadSize (p->GetSize ());
     }
 
   m_localDeliverTrace (ipHeader, p, iif);
@@ -1365,6 +1401,8 @@ Ipv4L3Protocol::RouteInputError (Ptr<const Packet> p, const Ipv4Header & ipHeade
   NS_LOG_FUNCTION (this << p << ipHeader << sockErrno);
   NS_LOG_LOGIC ("Route input failure-- dropping packet to " << ipHeader << " with errno " << sockErrno); 
   m_dropTrace (ipHeader, p, DROP_ROUTE_ERROR, m_node->GetObject<Ipv4> (), 0);
+
+  // \todo Send an ICMP no route.
 }
 
 void

@@ -29,7 +29,8 @@
 namespace ns3 {
 
 /**
- * \ingroup internet
+ * \ingroup ipv4
+ * \ingroup traffic-control
  *
  * Ipv4QueueDiscItem is a subclass of QueueDiscItem which stores IPv4 packets.
  * Header and payload are kept separate to allow the queue disc to manipulate
@@ -69,6 +70,15 @@ public:
    */
   virtual void Print (std::ostream &os) const;
 
+  /*
+   * The values for the fields of the Ipv4 header are taken from m_header and
+   * thus might differ from those present in the packet in case the header is
+   * modified after being added to the packet. However, this function is likely
+   * to be called before the header is added to the packet (i.e., before the
+   * packet is dequeued from the queue disc)
+   */
+  virtual bool GetUint8Value (Uint8Values field, uint8_t &value) const;
+
 private:
   /**
    * \brief Default constructor
@@ -90,8 +100,8 @@ private:
    */
   Ipv4QueueDiscItem &operator = (const Ipv4QueueDiscItem &);
 
-  Ipv4Header m_header;
-  bool m_headerAdded;
+  Ipv4Header m_header;  //!< The IPv4 header.
+  bool m_headerAdded;   //!< True if the header has already been added to the packet.
 };
 
 } // namespace ns3

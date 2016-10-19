@@ -1,21 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Hany Assasa <Hany.assasa@gmail.com>
+ * Copyright (c) 2015, IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/address-utils.h"
 #include "ns3/fatal-error.h"
@@ -159,79 +145,6 @@ ExtChannelMeasurementInfo::GetReserved (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_reserved;
-}
-
-/******************************************
-*     Relay Capable STA Info (8.4.1.44)
-*******************************************/
-
-ExtRelayCapableStaInfo::ExtRelayCapableStaInfo ()
-  : m_aid (0)
-{
-
-}
-
-ExtRelayCapableStaInfo::~ExtRelayCapableStaInfo ()
-{
-
-}
-
-uint32_t
-ExtRelayCapableStaInfo::GetSerializedSize (void) const
-{
-  return 3;
-}
-
-void
-ExtRelayCapableStaInfo::Print (std::ostream &os) const
-{
-
-}
-
-Buffer::Iterator
-ExtRelayCapableStaInfo::Serialize (Buffer::Iterator start) const
-{
-  NS_LOG_FUNCTION (this << &start);
-  start.WriteU8 (m_aid);
-  start = m_capabilities.Serialize (start);
-  return start;
-}
-
-Buffer::Iterator
-ExtRelayCapableStaInfo::Deserialize (Buffer::Iterator start)
-{
-  NS_LOG_FUNCTION (this << &start);
-  m_aid = start.ReadU8 ();
-  start = m_capabilities.Deserialize (start);
-  return start;
-}
-
-void
-ExtRelayCapableStaInfo::SetStaAid (uint8_t aid)
-{
-  NS_LOG_FUNCTION (this << aid);
-  m_aid = aid;
-}
-
-void
-ExtRelayCapableStaInfo::SetStaCapabilitiesInfo (RelayCapabilitiesInfo &element)
-{
-  NS_LOG_FUNCTION (this);
-  m_capabilities = element;
-}
-
-uint8_t
-ExtRelayCapableStaInfo::GetStaAid (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_aid;
-}
-
-RelayCapabilitiesInfo
-ExtRelayCapableStaInfo::GetStaCapabilitiesInfo (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_capabilities;
 }
 
 /******************************************
@@ -411,20 +324,20 @@ ExtDMGParameters::Get_Reserved (void) const
 NS_OBJECT_ENSURE_REGISTERED (ExtDMGBeaconIntervalCtrlField);
 
 ExtDMGBeaconIntervalCtrlField::ExtDMGBeaconIntervalCtrlField ()
-  :   m_ccPresent (false),
-      m_discoveryMode (false),
-      m_nextBeacon (1),
-      m_ATI_Present (true),
-      m_ABFT_Length (0),
-      m_FSS (0),
-      m_isResponderTXSS (false),
-      m_next_ABFT (0),
-      m_fragmentedTXSS (false),
-      m_TXSS_Span (0),
-      m_N_BI (0),
-      m_ABFT_Count (0),
-      m_N_ABFT_Ant (0),
-      m_pcpAssociationReady (false)
+  : m_ccPresent (false),
+    m_discoveryMode (false),
+    m_nextBeacon (1),
+    m_ATI_Present (true),
+    m_ABFT_Length (0),
+    m_FSS (0),
+    m_isResponderTXSS (false),
+    m_next_ABFT (0),
+    m_fragmentedTXSS (false),
+    m_TXSS_Span (0),
+    m_N_BI (0),
+    m_ABFT_Count (0),
+    m_N_ABFT_Ant (0),
+    m_pcpAssociationReady (false)
 {
 }
 
@@ -688,144 +601,6 @@ ExtDMGBeaconIntervalCtrlField::GetPCPAssoicationReady (void) const
 }
 
 /******************************************
-* Beacon Clustering Control Field (8-34c&d)
-*******************************************/
-
-NS_OBJECT_ENSURE_REGISTERED (ExtDMGClusteringControlField);
-
-ExtDMGClusteringControlField::ExtDMGClusteringControlField ()
-  : m_discoveryMode (false)
-{
-}
-
-ExtDMGClusteringControlField::~ExtDMGClusteringControlField ()
-{
-}
-
-TypeId
-ExtDMGClusteringControlField::GetTypeId (void)
-{
-  static TypeId tid = TypeId ("ns3::ExtDMGClusteringControlField")
-    .SetParent<Header> ()
-    .AddConstructor<ExtDMGClusteringControlField> ()
-  ;
-  return tid;
-}
-
-TypeId
-ExtDMGClusteringControlField::GetInstanceTypeId (void) const
-{
-  return GetTypeId ();
-}
-
-uint32_t
-ExtDMGClusteringControlField::GetSerializedSize (void) const
-{
-  return 8;
-}
-
-void
-ExtDMGClusteringControlField::Print (std::ostream &os) const
-{
-  if (m_discoveryMode)
-    {
-
-    }
-  else
-    {
-
-    }
-}
-
-Buffer::Iterator
-ExtDMGClusteringControlField::Serialize (Buffer::Iterator start) const
-{
-  NS_LOG_FUNCTION (this << &start);
-  Buffer::Iterator i = start;
-
-  if (m_discoveryMode)
-    {
-      WriteTo (i, m_responderAddress);
-      i.WriteHtolsbU16 (m_reserved);
-    }
-  else
-    {
-      uint64_t value = 0;
-
-      value |= m_beaconSpDuration;
-      value |= (m_clusterID & 0xFFFFFFFFFFFF) << 8;
-      value |= uint64_t(m_clusterMemberRole & 0x3) << 56;
-      value |= uint64_t(m_clusterMaxMem & 0x1F) << 58;
-      value |= uint64_t(m_reserved) << 63;
-
-      i.WriteHtolsbU64 (value);
-    }
-
-  return i;
-}
-
-Buffer::Iterator
-ExtDMGClusteringControlField::Deserialize (Buffer::Iterator start)
-{
-  NS_LOG_FUNCTION (this << &start);
-  Buffer::Iterator i = start;
-
-  if (m_discoveryMode)
-    {
-      ReadFrom (i, m_responderAddress);
-      m_reserved = i.ReadLsbtohU16 ();
-    }
-  else
-    {
-      uint64_t value = i.ReadLsbtohU64 ();
-
-      m_beaconSpDuration = value & 0xFF;
-      m_clusterID = (value >> 8) & 0xFFFFFFFFFFFF;
-      m_clusterMemberRole = (value >> 56) & 0x3;
-      m_clusterMaxMem = (value >> 58) & 0x1F;
-      m_reserved = (value >> 63) & 0x1;
-    }
-
-  return i;
-}
-
-void
-ExtDMGClusteringControlField::SetDiscoveryMode (bool value)
-{
-  m_discoveryMode = value;
-}
-
-bool
-ExtDMGClusteringControlField::GetDiscoveryMode (void) const
-{
-  return m_discoveryMode;
-}
-
-void
-ExtDMGClusteringControlField::SetABFT_ResponderAddress (Mac48Address address)
-{
-  m_responderAddress = address;
-}
-
-void
-ExtDMGClusteringControlField::SetReserved (uint16_t value)
-{
-  m_reserved = value;
-}
-
-Mac48Address
-ExtDMGClusteringControlField::GetABFT_ResponderAddress (void) const
-{
-  return m_responderAddress;
-}
-
-uint16_t
-ExtDMGClusteringControlField::GetReserved () const
-{
-  return m_reserved;
-}
-
-/******************************************
 *	   DMG Beacon (8.3.4.1)
 *******************************************/
 
@@ -866,6 +641,7 @@ ExtDMGBeacon::GetSerializedSize (void) const
   size += 2;                                          // Beacon Interval (See 8.4.1.3)
   size += m_beaconIntervalCtrl.GetSerializedSize ();  // Beacon Interval Control (See 8.4.1.3)
   size += m_dmgParameters.GetSerializedSize ();       // DMG Parameters (See 8.4.1.46)
+  size += m_ssid.GetSerializedSize ();
   size += GetInformationElementsSerializedSize ();
   return size;
 }
@@ -887,15 +663,12 @@ ExtDMGBeacon::Serialize (Buffer::Iterator start) const
   // 5. DMG Parameters.
   /* Other Information Elements */
   Buffer::Iterator i = start;
-
   i.WriteHtolsbU64 (Simulator::Now ().GetMicroSeconds ());
   i = m_ssw.Serialize (i);
   i.WriteHtolsbU16 (m_beaconInterval / 1024);
   i = m_beaconIntervalCtrl.Serialize (i);
   i = m_dmgParameters.Serialize (i);
-  if (m_beaconIntervalCtrl.IsCCPresent ())
-    i = m_cluster.Serialize (i);
-
+  i = m_ssid.Serialize (i);
   i = SerializeInformationElements (i);
 }
 
@@ -903,18 +676,14 @@ uint32_t
 ExtDMGBeacon::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
-
   m_timestamp = i.ReadLsbtohU64 ();
   i = m_ssw.Deserialize (i);
   m_beaconInterval = i.ReadLsbtohU16 ();
   m_beaconInterval *= 1024;
   i = m_beaconIntervalCtrl.Deserialize (i);
   i = m_dmgParameters.Deserialize (i);
-  if (m_beaconIntervalCtrl.IsCCPresent ())
-    i = m_cluster.Deserialize (i);
-
+  i = m_ssid.Deserialize (i);
   i = DeserializeInformationElements (i);
-
   return i.GetDistanceFrom (start);
 }
 
@@ -965,10 +734,9 @@ ExtDMGBeacon::SetDMGParameters (ExtDMGParameters &parameters)
 }
 
 void
-ExtDMGBeacon::SetClusterControlField (ExtDMGClusteringControlField &cluster)
+ExtDMGBeacon::SetSsid (Ssid ssid)
 {
-  NS_LOG_FUNCTION (this << &cluster);
-  m_cluster = cluster;
+  m_ssid = ssid;
 }
 
 Mac48Address
@@ -1013,11 +781,10 @@ ExtDMGBeacon::GetDMGParameters (void) const
   return m_dmgParameters;
 }
 
-ExtDMGClusteringControlField
-ExtDMGBeacon::GetClusterControlField (void) const
+Ssid
+ExtDMGBeacon::GetSsid (void) const
 {
-  NS_LOG_FUNCTION (this);
-  return m_cluster;
+  return m_ssid;
 }
 
 } // namespace ns3
