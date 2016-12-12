@@ -181,6 +181,9 @@ public:
    * \param stbc enable or disable STBC
    */
   void SetStbc (bool stbc);
+
+  /* DMG Tx Vector*/
+
   /**
    * Set BRP Packet Type.
    * \param type The type of BRP packet.
@@ -209,6 +212,28 @@ public:
    * \return True if Beam Tracking requested, otherwise false.
    */
   bool IsBeamTrackingRequested (void);
+  /**
+   * In the TXVECTOR, LAST_RSSI indicates the received power level of
+   * the last packet with a valid PHY header that was received a SIFS period
+   * before transmission of the current packet; otherwise, it is 0.
+   *
+   * In the RXVECTOR, LAST_RSSI indicates the value of the LAST_RSSI
+   * field from the PCLP header of the received packet. Valid values are
+   * integers in the range of 0 to 15:
+   * — Values of 2 to 14 represent power levels (–71+value×2) dBm.
+   * — A value of 15 represents power greater than or equal to –42 dBm.
+   * — A value of 1 represents power less than or equal to –68 dBm.
+   * — A value of 0 indicates that the previous packet was not received a
+   * SIFS period before the current transmission.
+   *
+   * \param length The length of the training field.
+   */
+  void SetLastRssi (uint8_t level);
+  /**
+   * Get the level of Last RSSI.
+   * \return The level of Last RSSI.
+   */
+  uint8_t GetLastRssi (void) const;
 
 private:
   WifiMode    m_mode;               /**< The DATARATE parameter in Table 15-4.
@@ -226,12 +251,13 @@ private:
   bool        m_aggregation;        /** Flag whether the PSDU contains A-MPDU. */
   bool        m_stbc;               /**< STBC used or not */
 
-  bool        m_modeInitialized;         //*< Internal initialization flag */
-  bool        m_txPowerLevelInitialized; //*< Internal initialization flag */
+  bool        m_modeInitialized;         //*!< Internal initialization flag */
+  bool        m_txPowerLevelInitialized; //*!< Internal initialization flag */
 
   PacketType  m_packetType;
   uint8_t     m_traingFieldLength;
-  bool        m_beamTrackingRequest;      //*< Flag to indicate the need for beam tracking */
+  bool        m_beamTrackingRequest;      //*!< Flag to indicate the need for beam tracking. */
+  uint8_t     m_lastRssi;                 //*!< Last Received Signal Strength Indicator. */
 
 };
 

@@ -12,6 +12,11 @@
 
 namespace ns3 {
 
+#define dot11MaxBFTime                  10
+#define dot11BFTXSSTime                 10
+#define dot11MaximalSectorScan          10
+#define dot11ABFTRTXSSSwitch            10
+#define dot11BFRetryLimit               10
 // Frames duration precalculated using MCS0 and reported in nanoseconds
 #define sswTxTime     NanoSeconds (4291) + NanoSeconds (4654) + NanoSeconds (5964)
 #define sswFbckTxTime NanoSeconds (4291) + NanoSeconds (4654) + NanoSeconds (9310)
@@ -326,6 +331,15 @@ protected:
   virtual void FrameTxOk (const WifiMacHeader &hdr) = 0;
   virtual void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
   virtual void BrpSetupCompleted (Mac48Address address) = 0;
+  /**
+   * The packet we sent was successfully received by the receiver
+   * (i.e. we received an ACK from the receiver).  If the packet
+   * was an association response to the receiver, we record that
+   * the receiver is now associated with us.
+   *
+   * \param hdr the header of the packet that we successfully sent
+   */
+  virtual void TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr);
 
 protected:
   STATION_SNR_PAIR_MAP m_stationSnrMap;           //!< Map between stations and their SNR Table.
@@ -402,6 +416,7 @@ protected:
   uint8_t m_peerStationAid;                     //!< The AID of the peer DMG STA in the current SP.
   Mac48Address m_peerStationAddress;            //!< The MAC address of the peer DMG STA in the current SP.
   Time m_suspendedPeriodDuration;               //!< The remaining duration of the suspended SP.
+  bool m_spSource;                              //!< Flag to indicate if we are the source of the SP.
   bool m_beamformingTxss;                       //!< Flag to inidicate if we perform TxSS during the beamforming service period.
 
   /* Service Period Channel Access */

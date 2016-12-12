@@ -279,6 +279,12 @@ YansWifiPhy::StartReceivePreambleAndHeader (Ptr<Packet> packet,
   Time endRx = Simulator::Now () + totalDuration;
   Time preambleAndHeaderDuration = CalculatePlcpPreambleAndHeaderDuration (txVector, preamble);
 
+  if (txVector.GetMode ().GetModulationClass () == WIFI_MOD_CLASS_HT
+      && (txVector.GetNss () != (1 + (txVector.GetMode ().GetMcsValue () / 8))))
+    {
+      NS_FATAL_ERROR ("MCS value does not match NSS value: MCS = " << (uint16_t)txVector.GetMode ().GetMcsValue () << ", NSS = " << (uint16_t)txVector.GetNss ());
+    }
+
   Ptr<InterferenceHelper::Event> event;
   event = m_interference.Add (packet->GetSize (),
                               txVector,
@@ -378,7 +384,7 @@ YansWifiPhy::StartReceivePreambleAndHeader (Ptr<Packet> packet,
                 {
                   //received the first MPDU in an A-MPDU
                   m_mpdusNum = ampduTag.GetRemainingNbOfMpdus ();
-              	  m_rxMpduReferenceNumber++;
+                  m_rxMpduReferenceNumber++;
                 }
               else if (preamble == WIFI_PREAMBLE_NONE && packet->PeekPacketTag (ampduTag) && m_mpdusNum > 0)
                 {
@@ -396,7 +402,7 @@ YansWifiPhy::StartReceivePreambleAndHeader (Ptr<Packet> packet,
               else if (preamble != WIFI_PREAMBLE_NONE && packet->PeekPacketTag (ampduTag) && m_mpdusNum > 0)
                 {
                   NS_LOG_DEBUG ("New A-MPDU started while " << m_mpdusNum << " MPDUs from previous are lost");
-              	  m_mpdusNum = ampduTag.GetRemainingNbOfMpdus ();
+                  m_mpdusNum = ampduTag.GetRemainingNbOfMpdus ();
                 }
               else if (preamble != WIFI_PREAMBLE_NONE && m_mpdusNum > 0 )
                 {
@@ -520,7 +526,7 @@ YansWifiPhy::SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, WifiPr
 void
 YansWifiPhy::SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, WifiPreamble preamble, enum mpduType mpdutype)
 {
-  NS_LOG_FUNCTION (this << packet << txVector.GetMode () 
+  NS_LOG_FUNCTION (this << packet << txVector.GetMode ()
     << txVector.GetMode ().GetDataRate (txVector)
     << preamble << (uint32_t)txVector.GetTxPowerLevel () << (uint32_t)mpdutype);
   /* Transmission can happen if:
@@ -530,6 +536,12 @@ YansWifiPhy::SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, WifiPr
    *  - we are idle
    */
   NS_ASSERT (!m_state->IsStateTx () && !m_state->IsStateSwitching ());
+
+  if (txVector.GetNss () > GetNumberOfTransmitAntennas ())
+    {
+      NS_FATAL_ERROR ("Less TX antennas than number of spatial streams!");
+    }
+
   bool sendTrnFields = false;
 
   if (m_state->IsStateSleep ())

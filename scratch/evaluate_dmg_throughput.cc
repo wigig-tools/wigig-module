@@ -5,7 +5,6 @@
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/measured-2d-antenna.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/wifi-module.h"
@@ -153,8 +152,7 @@ main(int argc, char *argv[])
       wifiPhy.EnableAntenna (true, true);
       wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
                           "Sectors", UintegerValue (8),
-                          "Antennas", UintegerValue (1),
-                          "AngleOffset", DoubleValue (0));
+                          "Antennas", UintegerValue (1));
 
       /* Make two nodes and set them up with the phy and the mac */
       NodeContainer wifiNodes;
@@ -174,7 +172,7 @@ main(int argc, char *argv[])
                        "BE_MaxAmsduSize", UintegerValue (7935),
                        "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                        "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                       "BeaconTransmissionInterval", TimeValue (MicroSeconds (400)),
+                       "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                        "ATIDuration", TimeValue (MicroSeconds (300)));
 
       NetDeviceContainer apDevice;

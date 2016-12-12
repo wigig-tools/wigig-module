@@ -1,14 +1,9 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
-#include "multi-band-net-device.h"
-#include "wifi-mac.h"
-#include "regular-wifi-mac.h"
-#include "wifi-phy.h"
-#include "wifi-remote-station-manager.h"
 #include "wifi-channel.h"
 #include "ns3/llc-snap-header.h"
 #include "ns3/packet.h"
@@ -17,8 +12,15 @@
 #include "ns3/node.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/log.h"
-#include "sta-wifi-mac.h"
+#include "ns3/socket.h"
+
 #include "dmg-sta-wifi-mac.h"
+#include "multi-band-net-device.h"
+#include "regular-wifi-mac.h"
+#include "sta-wifi-mac.h"
+#include "wifi-phy.h"
+#include "wifi-remote-station-manager.h"
+#include "wifi-mac.h"
 #include "wifi-mac-queue.h"
 
 namespace ns3 {
@@ -119,6 +121,42 @@ MultiBandNetDevice::CompleteConfig (void)
       technology->StationManager->SetupMac (technology->Mac);
     }
   m_configComplete = true;
+}
+
+void
+MultiBandNetDevice::NotifyNewAggregate (void)
+{
+  NS_LOG_FUNCTION (this);
+  if (m_queueInterface == 0)
+    {
+      Ptr<NetDeviceQueueInterface> ndqi = this->GetObject<NetDeviceQueueInterface> ();
+      //verify that it's a valid netdevice queue interface and that
+      //the netdevice queue interface was not set before
+      if (ndqi != 0)
+        {
+          m_queueInterface = ndqi;
+          if (m_mac == 0)
+            {
+              NS_LOG_WARN ("A mac has not been installed yet, using a single tx queue");
+            }
+          else
+            {
+              Ptr<RegularWifiMac> mac = DynamicCast<RegularWifiMac> (m_mac);
+              if (mac != 0)
+                {
+                  BooleanValue qosSupported;
+                  mac->GetAttributeFailSafe ("QosSupported", qosSupported);
+                  if (qosSupported.Get ())
+                    {
+                      m_queueInterface->SetTxQueuesN (4);
+                      // register the select queue callback
+                      m_queueInterface->SetSelectQueueCallback (MakeCallback (&MultiBandNetDevice::SelectQueue, this));
+                    }
+                }
+            }
+        }
+    }
+  NetDevice::NotifyNewAggregate ();
 }
 
 void
@@ -465,6 +503,38 @@ bool
 MultiBandNetDevice::SupportsSendFrom (void) const
 {
   return false;
+}
+
+uint8_t
+MultiBandNetDevice::SelectQueue (Ptr<QueueItem> item) const
+{
+  NS_LOG_FUNCTION (this << item);
+
+  NS_ASSERT (m_queueInterface != 0);
+
+  if (m_queueInterface->GetNTxQueues () == 1)
+    {
+      return 0;
+    }
+
+  uint8_t dscp, priority = 0;
+  if (item->GetUint8Value (QueueItem::IP_DSFIELD, dscp))
+    {
+      // if the QoS map element is implemented, it should be used here
+      // to set the priority.
+      // User priority is set to the three most significant bits of the DS field
+      priority = dscp >> 5;
+    }
+
+  // replace the priority tag
+  SocketPriorityTag priorityTag;
+  priorityTag.SetPriority (priority);
+  item->GetPacket ()->ReplacePacketTag (priorityTag);
+
+  // if the admission control were implemented, here we should check whether
+  // the access category assigned to the packet should be downgraded
+
+  return QosUtilsMapTidToAc (priority);
 }
 
 } //namespace ns3

@@ -98,6 +98,71 @@ operator >> (std::istream &is, RequestElement &element)
 }
 
 /***************************************************
+*         Traffic Stream (TS) Delay 8.4.2.34
+****************************************************/
+
+TsDelayElement::TsDelayElement ()
+  :  m_delay (0)
+{
+}
+
+WifiInformationElementId
+TsDelayElement::ElementId () const
+{
+  return IE_TS_DELAY;
+}
+
+uint8_t
+TsDelayElement::GetInformationFieldSize () const
+{
+  return 4;
+}
+
+void
+TsDelayElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  start.WriteHtolsbU32 (m_delay);
+}
+
+uint8_t
+TsDelayElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  m_delay = i.ReadLsbtohU32 ();
+  return length;
+}
+
+void
+TsDelayElement::SetDelay (uint32_t value)
+{
+  m_delay = value;
+}
+
+uint32_t
+TsDelayElement::GetDelay (void) const
+{
+  return m_delay;
+}
+
+ATTRIBUTE_HELPER_CPP (TsDelayElement);
+
+std::ostream &
+operator << (std::ostream &os, const TsDelayElement &element)
+{
+  os << element.GetDelay ();
+  return os;
+}
+
+std::istream &
+operator >> (std::istream &is, TsDelayElement &element)
+{
+  uint32_t c1;
+  is >> c1;
+  element.SetDelay (c1);
+  return is;
+}
+
+/***************************************************
 *         Timeout Interval Element 8.4.2.51
 ****************************************************/
 
@@ -117,18 +182,6 @@ uint8_t
 TimeoutIntervalElement::GetInformationFieldSize () const
 {
   return 5;
-}
-
-Buffer::Iterator
-TimeoutIntervalElement::Serialize (Buffer::Iterator i) const
-{
-  return WifiInformationElement::Serialize (i);
-}
-
-uint16_t
-TimeoutIntervalElement::GetSerializedSize () const
-{
-  return WifiInformationElement::GetSerializedSize ();
 }
 
 void

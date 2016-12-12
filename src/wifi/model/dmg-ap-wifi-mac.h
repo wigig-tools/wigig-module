@@ -166,6 +166,10 @@ private:
    * \param hdr a pointer to the MAC header for \c aggregatedPacket.
    */
   virtual void DeaggregateAmsduAndForward (Ptr<Packet> aggregatedPacket, const WifiMacHeader *hdr);
+  /**
+   * Get MultiBand Element corresponding to this DMG STA.
+   * \return Pointer to the MultiBand element.
+   */
   Ptr<MultiBandElement> GetMultiBandElement (void) const;
   /**
    * Start A-BFT Sector Sweep Slot.
@@ -197,32 +201,30 @@ private:
    * Forward a probe response packet to the DCF. The standard is not clear on the correct
    * queue for management frames if QoS is supported. We always use the DCF.
    *
-   * \param to the address of the STA we are sending a probe response to
+   * \param to the MAC address of the STA we are sending a probe response to.
    */
   void SendProbeResp (Mac48Address to);
   /**
    * Forward an association response packet to the DCF. The standard is not clear on the correct
    * queue for management frames if QoS is supported. We always use the DCF.
    *
-   * \param to the address of the STA we are sending an association response to
-   * \param success indicates whether the association was successful or not
+   * \param to the MAC address of the STA we are sending an association response to.
+   * \param success indicates whether the association was successful or not.
    */
   void SendAssocResp (Mac48Address to, bool success);
   /**
    * Send Announce Frame
-   * \param to
+   * \param to The MAC address of the DMG STA.
    */
   void SendAnnounceFrame (Mac48Address to);
-
   /**
    * Return the DMG capability of the current AP.
-   *
    * \return the DMG capability that we support
    */
   Ptr<DmgCapabilities> GetDmgCapabilities (void) const;
   /**
-   * GetDmgOperationElement
-   * \return
+   * Get DMG Operation Element.
+   * \return Pointer to the DMG Operation element.
    */
   Ptr<DmgOperationElement> GetDmgOperationElement (void) const;
   /**
@@ -236,7 +238,7 @@ private:
    */
   Ptr<ExtendedScheduleElement> GetExtendedScheduleElement (void) const;
   /**
-   * Cleanup non-static allocations.
+   * Cleanup non-static allocations. This is method is called after the transmission of the last DMG Beacon.
    */
   void CleanupAllocations (void);
   /**
@@ -259,11 +261,11 @@ private:
   bool m_beaconRandomization;           //!< Flag to indicate whether we want to randomize selection of DMG Beacon at each BI.
 
   /** A-BFT Access Period Variables **/
+  bool m_isResponderTXSS;               //!< Flag to indicate if RSS in A-BFT is TxSS or RxSS.
   uint8_t m_abftPeriodicity;            //!< The periodicity of the A-BFT in DMG Beacon.
-  /* Ensure only one DMG STA is communicating with us during A-BFT slot */
-  bool m_receivedOneSSW;
-  Mac48Address m_peerAbftStation;
-  bool m_isResponderTXSS;
+  /* Ensure only one DMG STA is communicating with us during single A-BFT slot */
+  bool m_receivedOneSSW;                //!< Flag to indicate if we received SSW Frame during SSW-Slot in A-BFT.
+  Mac48Address m_peerAbftStation;       //!< The MAC address of the station we received SSW from.
   uint8_t m_remainingSlots;
   Time m_atiStartTime;                  //!< The start time of ATI Period.
 

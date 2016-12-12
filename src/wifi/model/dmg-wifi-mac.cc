@@ -98,6 +98,7 @@ DmgWifiMac::DmgWifiMac ()
   m_sp = Create<ServicePeriod> ();
   m_sp->SetLow (m_low);
   m_sp->SetTxMiddle (m_txMiddle);
+  m_sp->SetTxOkCallback (MakeCallback (&DmgWifiMac::TxOk, this));
   m_sp->SetTxFailedCallback (MakeCallback (&DmgWifiMac::TxFailed, this));
   m_sp->CompleteConfig ();
 }
@@ -336,7 +337,7 @@ DmgWifiMac::EndContentionPeriod (void)
     {
       i->second->EndCurrentContentionPeriod ();
     }
-  /* Inform MAC Low to store parameters related to this service period (MPDU/A-MPDU) */
+  /* Inform MAC Low to store parameters related to this CBAP period (MPDU/A-MPDU) */
   if (!m_low->IsTransmissionSuspended ())
     {
       m_low->StoreAllocationParameters ();
@@ -353,6 +354,7 @@ DmgWifiMac::StartServicePeriod (AllocationID allocationID, Time length, uint8_t 
   m_allocationStarted = Simulator::Now ();
   m_peerStationAid = peerAid;
   m_peerStationAddress = peerAddress;
+  m_spSource = isSource;
   m_servicePeriodStartedCallback (GetAddress (), peerAddress);
   SteerAntennaToward (peerAddress);
   m_sp->StartServicePeriod (allocationID, peerAddress, length);
@@ -816,6 +818,13 @@ DmgWifiMac::ManagementTxOk (const WifiMacHeader &hdr)
 }
 
 void
+DmgWifiMac::TxOk (Ptr<const Packet> currentPacket, const WifiMacHeader &hdr)
+{
+  NS_LOG_FUNCTION (this);
+  RegularWifiMac::TxOk (currentPacket, hdr);
+}
+
+void
 DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 {
   NS_LOG_FUNCTION (this << packet << hdr);
@@ -1048,7 +1057,7 @@ DmgWifiMac::GetBestAntennaConfiguration (const Mac48Address stationAddress, bool
   SNR snr = highIter->second;
   for (SNR_MAP::iterator iter = snrMap.begin (); iter != snrMap.end (); iter++)
     {
-      if (snr <= iter->second)
+      if (snr < iter->second)
         {
           highIter = iter;
           snr = highIter->second;

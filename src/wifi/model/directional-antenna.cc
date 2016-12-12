@@ -32,10 +32,6 @@ DirectionalAntenna::GetTypeId (void)
                    MakeUintegerAccessor (&DirectionalAntenna::SetNumberOfSectors,
                                          &DirectionalAntenna::GetNumberOfSectors),
                    MakeUintegerChecker<uint8_t> ())
-    .AddAttribute ("AngleOffset", "The offset from the.",
-                   DoubleValue (0),
-                   MakeDoubleAccessor (&DirectionalAntenna::m_angleOffset),
-                   MakeDoubleChecker<double> (0, 360))
   ;
   return tid;
 }
@@ -85,12 +81,6 @@ DirectionalAntenna::SetCurrentRxAntennaID (uint8_t antennaId)
   m_rxAntennaId = antennaId;
 }
 
-void
-DirectionalAntenna::SetInitialSectorAngleOffset (double offset)
-{
-  m_angleOffset = offset;
-}
-
 uint8_t
 DirectionalAntenna::GetNextTxSectorID (void) const
 {
@@ -119,12 +109,6 @@ DirectionalAntenna::GetNextRxSectorID (void) const
       nextSector = 1;
     }
   return nextSector;
-}
-
-void
-DirectionalAntenna::SetBoresight (double sight)
-{
-  m_boresight = sight;
 }
 
 double
@@ -173,12 +157,6 @@ uint8_t
 DirectionalAntenna::GetCurrentRxAntennaID (void) const
 {
   return m_rxAntennaId;
-}
-
-double
-DirectionalAntenna::GetBoresight (void) const
-{
-  return m_boresight;
 }
 
 void

@@ -348,6 +348,34 @@ DmgStaWifiMac::GetAssociationID (void)
 }
 
 void
+DmgStaWifiMac::CreateAllocation (Mac48Address to, DmgTspecElement &elem)
+{
+  NS_LOG_FUNCTION (this);
+  WifiMacHeader hdr;
+  hdr.SetAction ();
+  hdr.SetAddr1 (to);
+  hdr.SetAddr2 (GetAddress ());
+  hdr.SetAddr3 (GetBssid ());
+  hdr.SetDsNotFrom ();
+  hdr.SetDsNotTo ();
+  hdr.SetNoOrder ();
+
+  DmgAddTSRequestFrame frame;
+  frame.SetDmgTspecElement (elem);
+
+  WifiActionHeader actionHdr;
+  WifiActionHeader::ActionValue action;
+  action.qos = WifiActionHeader::ADDTS_REQUEST;
+  actionHdr.SetAction (WifiActionHeader::QOS, action);
+
+  Ptr<Packet> packet = Create<Packet> ();
+  packet->AddHeader (frame);
+  packet->AddHeader (actionHdr);
+
+  m_dca->Queue (packet, hdr);
+}
+
+void
 DmgStaWifiMac::ProbeRequestTimeout (void)
 {
   NS_LOG_FUNCTION (this);

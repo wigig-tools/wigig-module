@@ -477,6 +477,11 @@ WifiActionHeader::SetAction (WifiActionHeader::CategoryValue type,
   m_category = type;
   switch (type)
     {
+    case QOS:
+      {
+        m_actionValue = action.qos;
+        break;
+      }
     case BLOCK_ACK:
       {
         m_actionValue = action.blockAck;
@@ -542,6 +547,27 @@ WifiActionHeader::GetAction ()
   retval.selfProtectedAction = PEER_LINK_OPEN; //Needs to be initialized to something to quiet valgrind in default cases
   switch (m_category)
     {
+    case QOS:
+      switch (m_actionValue)
+        {
+        case ADDTS_REQUEST:
+          retval.qos = ADDTS_REQUEST;
+          break;
+        case ADDTS_RESPONSE:
+          retval.qos = ADDTS_RESPONSE;
+          break;
+        case DELTS:
+          retval.qos = DELTS;
+          break;
+        case SCHEDULE:
+          retval.qos = SCHEDULE;
+          break;
+        case QOS_MAP_CONFIGURE:
+          retval.qos = QOS_MAP_CONFIGURE;
+          break;
+        }
+      break;
+
     case BLOCK_ACK:
       switch (m_actionValue)
         {
@@ -842,6 +868,199 @@ WifiActionHeader::Deserialize (Buffer::Iterator start)
   return i.GetDistanceFrom (start);
 }
 
+/***************************************************
+*               Add TS Request Frame
+****************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (DmgAddTSRequestFrame);
+
+DmgAddTSRequestFrame::DmgAddTSRequestFrame ()
+  : m_dialogToken (1)
+{
+}
+
+TypeId
+DmgAddTSRequestFrame::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::DmgAddTSRequestFrame")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<DmgAddTSRequestFrame> ()
+  ;
+  return tid;
+}
+
+TypeId
+DmgAddTSRequestFrame::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+DmgAddTSRequestFrame::Print (std::ostream &os) const
+{
+}
+
+uint32_t
+DmgAddTSRequestFrame::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 1;                                      //Dialog token
+  size += m_dmgTspecElement.GetSerializedSize (); //DMG TSPEC
+  return size;
+}
+
+void
+DmgAddTSRequestFrame::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  i = m_dmgTspecElement.Serialize (i);
+}
+
+uint32_t
+DmgAddTSRequestFrame::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  m_dialogToken = i.ReadU8 ();
+  i = m_dmgTspecElement.Deserialize (i);
+  return i.GetDistanceFrom (start);
+}
+
+void
+DmgAddTSRequestFrame::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+DmgAddTSRequestFrame::SetDmgTspecElement (DmgTspecElement &element)
+{
+  m_dmgTspecElement = element;
+}
+
+uint8_t
+DmgAddTSRequestFrame::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+DmgTspecElement
+DmgAddTSRequestFrame::GetDmgTspec (void) const
+{
+  return m_dmgTspecElement;
+}
+
+/***************************************************
+*               Add TS Response Frame
+****************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (DmgAddTSResponseFrame);
+
+DmgAddTSResponseFrame::DmgAddTSResponseFrame ()
+  : m_dialogToken (1)
+{
+}
+
+TypeId
+DmgAddTSResponseFrame::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::DmgAddTSResponseFrame")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<DmgAddTSResponseFrame> ()
+  ;
+  return tid;
+}
+
+TypeId
+DmgAddTSResponseFrame::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+DmgAddTSResponseFrame::Print (std::ostream &os) const
+{
+}
+
+uint32_t
+DmgAddTSResponseFrame::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 1;                                      //Dialog token
+  size += m_dmgTspecElement.GetSerializedSize (); //DMG TSPEC
+  return size;
+}
+
+void
+DmgAddTSResponseFrame::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  i = m_status.Serialize (i);
+  i = m_tsDelayElement.Serialize (i);
+  i = m_dmgTspecElement.Serialize (i);
+}
+
+uint32_t
+DmgAddTSResponseFrame::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  m_dialogToken = i.ReadU8 ();
+  i = m_status.Deserialize (i);
+  i = m_tsDelayElement.Deserialize (i);
+  i = m_dmgTspecElement.Deserialize (i);
+  return i.GetDistanceFrom (start);
+}
+
+void
+DmgAddTSResponseFrame::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+DmgAddTSResponseFrame::SetStatusCode (StatusCode status)
+{
+  m_status = status;
+}
+
+void
+DmgAddTSResponseFrame::SetTsDelay (TsDelayElement &element)
+{
+  m_tsDelayElement = element;
+}
+
+void
+DmgAddTSResponseFrame::SetDmgTspecElement (DmgTspecElement &element)
+{
+  m_dmgTspecElement = element;
+}
+
+uint8_t
+DmgAddTSResponseFrame::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+StatusCode
+DmgAddTSResponseFrame::GetStatusCode (void) const
+{
+  return m_status;
+}
+
+TsDelayElement
+DmgAddTSResponseFrame::GetTsDelay (void) const
+{
+  return m_tsDelayElement;
+}
+
+DmgTspecElement
+DmgAddTSResponseFrame::GetDmgTspec (void) const
+{
+  return m_dmgTspecElement;
+}
 
 /***************************************************
 *                 ADDBARequest

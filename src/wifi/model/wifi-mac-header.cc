@@ -822,6 +822,18 @@ WifiMacHeader::IsCts (void) const
 }
 
 bool
+WifiMacHeader::IsDmgCts (void) const
+{
+  return (GetType () == WIFI_MAC_CTL_DMG_CTS);
+}
+
+bool
+WifiMacHeader::IsDmgDts (void) const
+{
+  return (GetType () == WIFI_MAC_CTL_DMG_DTS);
+}
+
+bool
 WifiMacHeader::IsAck (void) const
 {
   return (GetType () == WIFI_MAC_CTL_ACK);

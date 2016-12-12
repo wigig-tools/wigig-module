@@ -949,6 +949,10 @@ WifiRemoteStationManager::ReportAmpduTxStatus (Mac48Address address, uint8_t tid
   NS_LOG_FUNCTION (this << address << (uint16_t)tid << nSuccessfulMpdus << nFailedMpdus << rxSnr << dataSnr);
   NS_ASSERT (!address.IsGroup ());
   WifiRemoteStation *station = Lookup (address, tid);
+  for (uint32_t i = 0; i < nFailedMpdus; i++)
+    {
+      m_macTxDataFailed (address);
+    }
   DoReportAmpduTxStatus (station, nSuccessfulMpdus, nFailedMpdus, rxSnr, dataSnr);
 }
 
@@ -958,6 +962,10 @@ WifiRemoteStationManager::NeedRts (Mac48Address address, const WifiMacHeader *he
 {
   WifiMode mode = txVector.GetMode ();
   NS_LOG_FUNCTION (this << address << *header << packet << mode);
+  if (address.IsGroup ())
+    {
+      return false;
+    }
   if (m_protectionMode == RTS_CTS
       && ((mode.GetModulationClass () == WIFI_MOD_CLASS_ERP_OFDM)
       || (mode.GetModulationClass () == WIFI_MOD_CLASS_HT)
@@ -966,10 +974,6 @@ WifiRemoteStationManager::NeedRts (Mac48Address address, const WifiMacHeader *he
     {
       NS_LOG_DEBUG ("WifiRemoteStationManager::NeedRTS returning true to protect non-ERP stations");
       return true;
-    }
-  if (address.IsGroup ())
-    {
-      return false;
     }
   bool normally = (packet->GetSize () + header->GetSize () + WIFI_MAC_FCS_LENGTH) > GetRtsCtsThreshold ();
   return DoNeedRts (Lookup (address, header), packet, normally);

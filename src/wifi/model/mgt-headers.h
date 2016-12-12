@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015 IMDEA NEtworks Institute
+ * Copyright (c) 2015, 2016 IMDEA NEtworks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -330,6 +330,7 @@ public:
 
   enum CategoryValue //table 8-38 staring from IEEE 802.11, Part11, (Year 2012)
   {
+    QOS = 1,
     BLOCK_ACK = 3,
     PUBLIC = 4,
     RADIO_MEASUREMENT = 5,      //Category: Radio Measurement
@@ -342,6 +343,15 @@ public:
     //Since vendor specific action has no stationary Action value,the parse process is not here.
     //Refer to vendor-specific-action in wave module.
     VENDOR_SPECIFIC_ACTION = 127,
+  };
+
+  enum QosActionValue
+  {
+    ADDTS_REQUEST = 0,
+    ADDTS_RESPONSE = 1,
+    DELTS = 2,
+    SCHEDULE = 3,
+    QOS_MAP_CONFIGURE = 4,
   };
 
   /**
@@ -461,6 +471,7 @@ public:
    */
   typedef union
   {
+    enum QosActionValue qos;
     enum BlockAckActionValue blockAck;
     enum RadioMeasurementActionValue radioMeasurementAction;
     enum PublicActionValue publicAction;
@@ -503,7 +514,6 @@ public:
   virtual void Serialize (Buffer::Iterator start) const;
   virtual uint32_t Deserialize (Buffer::Iterator start);
 
-
 private:
   std::string CategoryValueToString (CategoryValue value) const;
   std::string SelfProtectedActionValueToString (SelfProtectedActionValue value) const;
@@ -511,6 +521,83 @@ private:
   uint8_t m_actionValue; //!< Action value
 };
 
+/**
+ * \ingroup wifi
+ * Implement the header for management frames of type DMG ADDTS request.
+ */
+class DmgAddTSRequestFrame : public Header
+{
+public:
+  DmgAddTSRequestFrame ();
+
+  /**
+   * Register this type.
+   * \return The TypeId.
+   */
+  static TypeId GetTypeId (void);
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  /**
+  * The Dialog Token field.
+  * \param token
+  */
+  void SetDialogToken (uint8_t token);
+  void SetDmgTspecElement (DmgTspecElement &element);
+
+  uint8_t GetDialogToken (void) const;
+  DmgTspecElement GetDmgTspec (void) const;
+
+private:
+  uint8_t m_dialogToken;
+  DmgTspecElement m_dmgTspecElement;
+
+};
+
+/**
+ * \ingroup wifi
+ * Implement the header for management frames of type DMG ADDTS request.
+ */
+class DmgAddTSResponseFrame : public Header
+{
+public:
+  DmgAddTSResponseFrame ();
+
+  /**
+   * Register this type.
+   * \return The TypeId.
+   */
+  static TypeId GetTypeId (void);
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  /**
+  * The Dialog Token field.
+  * \param token
+  */
+  void SetDialogToken (uint8_t token);
+  void SetStatusCode (StatusCode status);
+  void SetTsDelay (TsDelayElement &element);
+  void SetDmgTspecElement (DmgTspecElement &element);
+
+  uint8_t GetDialogToken (void) const;
+  StatusCode GetStatusCode (void) const;
+  TsDelayElement GetTsDelay (void) const;
+  DmgTspecElement GetDmgTspec (void) const;
+
+private:
+  uint8_t m_dialogToken;
+  StatusCode m_status;
+  TsDelayElement m_tsDelayElement;
+  DmgTspecElement m_dmgTspecElement;
+
+};
 
 /**
  * \ingroup wifi

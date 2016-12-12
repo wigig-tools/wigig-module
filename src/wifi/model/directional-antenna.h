@@ -85,13 +85,13 @@ public:
    */
   uint8_t GetCurrentTxAntennaID (void) const;
   /**
-   * GetCurrentRxSectorID
-   * @return
+   * Get Current Rx Sector ID
+   * \return
    */
   uint8_t GetCurrentRxSectorID (void) const;
   /**
-   * GetCurrentRxAntennaID
-   * @return
+   * Get Current Rx Antenna ID
+   * \return
    */
   uint8_t GetCurrentRxAntennaID (void) const;
   /**
@@ -104,7 +104,14 @@ public:
    * \return the mainlobe width of a single sector
    */
   double GetMainLobeWidth (void) const;
-  double GetBoresight (void) const;
+  /**
+   * Se receive antenna pattern to be Omni.
+   */
+  void SetInOmniReceivingMode (void);
+  /**
+   * Se receive antenna pattern to be directional.
+   */
+  void SetInDirectionalReceivingMode (void);
   /**
    * Obtain antenna gain at the specified angle.
    * \param angle The angle between the transmitter and the receiver.
@@ -117,14 +124,6 @@ public:
    * \return the antenna gain at the specified angle.
    */
   virtual double GetRxGainDbi (double angle) const = 0;
-  /**
-   * Se receive antenna pattern to be Omni.
-   */
-  void SetInOmniReceivingMode (void);
-  /**
-   * Se receive antenna pattern to be directional.
-   */
-  void SetInDirectionalReceivingMode (void);
 
   virtual bool IsPeerNodeInTheCurrentSector (double angle) const = 0;
 
@@ -138,8 +137,6 @@ protected:
 
   double  m_antennaAperature;         /* Main Lobe Function (First Zero). */
   double  m_mainLobeWidth;            /* Main Lobe Function (First Zero). */
-  double  m_boresight;                /* Direction of the antenna. */
-  double  m_angleOffset;
 
   uint8_t m_txSectorId;               /* Current Tx Sector ID (Index). */
   uint8_t m_txAntennaId;              /* Current Tx Antenna ID (Index). */

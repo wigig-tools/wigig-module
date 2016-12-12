@@ -36,7 +36,8 @@ WifiTxVector::WifiTxVector ()
     m_modeInitialized (false),
     m_txPowerLevelInitialized (false),
     m_traingFieldLength (0),
-    m_beamTrackingRequest (false)
+    m_beamTrackingRequest (false),
+    m_lastRssi (0)
 {
 }
 
@@ -55,7 +56,8 @@ WifiTxVector::WifiTxVector (WifiMode mode, uint8_t powerLevel, uint8_t retries,
     m_modeInitialized (true),
     m_txPowerLevelInitialized (true),
     m_traingFieldLength (0),
-    m_beamTrackingRequest (false)
+    m_beamTrackingRequest (false),
+    m_lastRssi (0)
 {
 }
 
@@ -211,6 +213,18 @@ bool
 WifiTxVector::IsBeamTrackingRequested (void)
 {
   return m_beamTrackingRequest;
+}
+
+void
+WifiTxVector::SetLastRssi (uint8_t level)
+{
+  m_lastRssi = level;
+}
+
+uint8_t
+WifiTxVector::GetLastRssi (void) const
+{
+  return m_lastRssi;
 }
 
 std::ostream & operator << ( std::ostream &os, const WifiTxVector &v)

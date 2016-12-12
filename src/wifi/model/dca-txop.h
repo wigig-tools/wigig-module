@@ -354,7 +354,6 @@ private:
   RandomStream *m_rng;
   Ptr<WifiMac> m_wifiMac;
 
-  bool m_accessOngoing;
   Ptr<const Packet> m_currentPacket;
   WifiMacHeader m_currentHdr;
   uint8_t m_fragmentNumber;

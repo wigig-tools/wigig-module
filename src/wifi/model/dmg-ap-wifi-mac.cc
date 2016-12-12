@@ -652,6 +652,22 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
                                                    config.first, config.second, m_totalSectors);
             }
         }
+	}
+  else if (hdr.IsSSW_FBCK ())
+    {
+      ANTENNA_CONFIGURATION antennaConfig;
+      Mac48Address address = hdr.GetAddr1 ();
+      if (m_receivedOneSSW && m_isResponderTXSS)
+        {
+          antennaConfig = m_bestAntennaConfig[address].first;
+        }
+      else
+        {
+          antennaConfig.first = NO_ANTENNA_CONFIG;
+          antennaConfig.second = NO_ANTENNA_CONFIG;
+        }
+      /* Raise an event that we selected the best sector to the DMG STA */
+      m_slsCompleted (address, CHANNEL_ACCESS_BHI, antennaConfig.first, antennaConfig.second);
     }
 }
 
@@ -903,7 +919,7 @@ DmgApWifiMac::SendAnnounceFrame (Mac48Address to)
   hdr.SetNoOrder ();
 
   ExtAnnounceFrame announceHdr;
-  announceHdr.SetBeaconInterval (m_beaconInterval.GetInteger ());
+  announceHdr.SetBeaconInterval (m_beaconInterval.GetMicroSeconds ());
 
   WifiActionHeader actionHdr;
   WifiActionHeader::ActionValue action;
@@ -1035,27 +1051,28 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
     {
       NS_LOG_INFO ("Received SSW frame from=" << hdr->GetAddr2 ());
 
+      /* Check if we have received SSW frame during the current SSW-Slot */
       if (!m_receivedOneSSW)
         {
           m_receivedOneSSW = true;
           m_peerAbftStation = hdr->GetAddr2 ();
         }
 
-      if (m_receivedOneSSW && m_peerAbftStation == hdr->GetAddr2 ())
+      if (m_receivedOneSSW && (m_peerAbftStation == hdr->GetAddr2 ()) && m_isResponderTXSS)
         {
           CtrlDMG_SSW sswFrame;
           packet->RemoveHeader (sswFrame);
 
           DMG_SSW_Field ssw = sswFrame.GetSswField ();
-          /* Map the antenna configuration for the frames received by SLS of the DMG-STA */
+          /* Map the antenna Tx configuration for the frame received by SLS of the DMG-STA */
           MapTxSnr (from, ssw.GetSectorID (), ssw.GetDMGAntennaID (), m_stationManager->GetRxSnr ());
 
-          /* If we receive one SSW Frame at least, then we schedule SSW-FBCK */
+          /* If we receive one SSW Frame at least, then we schedule SSW-FBCK frame */
           if (!m_sectorFeedbackSent[from])
             {
               m_sectorFeedbackSent[from] = true;
 
-              /* Set the best TX antenna configuration reported by the SSW-FBCK Field */
+              /* Record the best TX antenna configuration reported by the SSW-FBCK Field */
               DMG_SSW_FBCK_Field sswFeedback = sswFrame.GetSswFeedbackField ();
               sswFeedback.IsPartOfISS (false);
 
@@ -1067,9 +1084,6 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
               NS_LOG_INFO ("Best TX Antenna Sector Config by this DMG AP to DMG STA=" << from
                            << ": SectorID=" << uint32_t (antennaConfigTx.first)
                            << ", AntennaID=" << uint32_t (antennaConfigTx.second));
-
-              /* Raise an event that we selected the best sector to the DMG STA */
-              m_slsCompleted (from, CHANNEL_ACCESS_BHI, antennaConfigTx.first, antennaConfigTx.second);
 
               /* Indicate this DMG-STA as waiting for Beam Refinement Phase */
               m_stationBrpMap[from] = true;

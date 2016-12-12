@@ -63,6 +63,8 @@ typedef SERVICE_PERIOD_PAIR REDS_PAIR;                        //!< Typedef to id
 
 #define dot11RSSRetryLimit              8
 #define dot11RSSBackoff                 8
+#define aMaxABFTAccessPeriod            2   //!< Typedef to identify source and destination REDS protected by an RDS.
+
 
 /**
  * \ingroup wifi
@@ -167,6 +169,13 @@ public:
    * \return The AID of the station.
    */
   uint16_t GetAssociationID (void);
+  /**
+   * Create or modify DMG allocation for the transmission of frames between DMG STA
+   * that are members of a PBSS or a DMG infrastructure.
+   * \param to The MAC address of the peer station.
+   * \param elem The DMG TSPEC information element.
+   */
+  void CreateAllocation (Mac48Address to, DmgTspecElement &elem);
 
 protected:
   friend class MultiBandNetDevice;

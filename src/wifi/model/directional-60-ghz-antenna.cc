@@ -27,7 +27,6 @@ Directional60GhzAntenna::GetTypeId (void)
 Directional60GhzAntenna::Directional60GhzAntenna ()
 {
   NS_LOG_FUNCTION (this);
-  m_boresight = 0;
   m_antennas = 1;
   m_sectors = 1;
   m_omniAntenna = true;
@@ -51,7 +50,7 @@ Directional60GhzAntenna::GetRxGainDbi (double angle) const
   NS_LOG_FUNCTION (this << angle);
   if (m_omniAntenna)
     {
-      return 1;
+      return 0;
     }
   else
     {
@@ -63,13 +62,17 @@ bool
 Directional60GhzAntenna::IsPeerNodeInTheCurrentSector (double angle) const
 {
   NS_LOG_FUNCTION (this << angle);
-  double virtualAngle;
+  double lowerLimit, upperLimit;
+
   if (angle < 0)
     {
       angle = 2 * M_PI + angle;
     }
-  virtualAngle = std::abs (angle - (m_angleOffset + m_mainLobeWidth * double (m_txSectorId - 1)));
-  if ((0 <= virtualAngle) && (virtualAngle <= GetHalfPowerBeamWidth () / 2))
+
+  lowerLimit = m_mainLobeWidth * double (m_txSectorId - 1);
+  upperLimit = m_mainLobeWidth * double (m_txSectorId);
+
+  if ((lowerLimit <= angle) && (angle <= upperLimit))
     {
       return true;
     }
@@ -83,23 +86,29 @@ double
 Directional60GhzAntenna::GetGainDbi (double angle, uint8_t sectorId, uint8_t antennaId) const
 {
   NS_LOG_FUNCTION (this << angle << sectorId << antennaId);
-  double gain;
+  double gain, lowerLimit, upperLimit;
+
   if (angle < 0)
     {
       angle = 2 * M_PI + angle;
     }
-  /* The virtual angle is to calculate where does the angle fall in */
-  double virtualAngle;// = abs (angle - m_antennaAperature * (m_antennaId - 1) - m_mainLobeWidth * (m_sectorId - 1));
-  virtualAngle = std::abs (angle - (m_angleOffset + m_mainLobeWidth * double (sectorId - 1)));
-  if ((0 <= virtualAngle) && (virtualAngle <= GetHalfPowerBeamWidth () / 2))
+
+  lowerLimit = m_mainLobeWidth * double (sectorId - 1);
+  upperLimit = m_mainLobeWidth * double (sectorId);
+
+  if ((lowerLimit <= angle) && (angle <= upperLimit))
     {
+      double virtualAngle = std::abs (angle - (m_mainLobeWidth/2 + m_mainLobeWidth * double (sectorId - 1)));
       gain = GetMaxGainDbi () - 3.01 * pow (2 * virtualAngle/GetHalfPowerBeamWidth (), 2);
+      NS_LOG_DEBUG ("VirtualAngle=" << virtualAngle);
     }
   else
     {
       gain = GetSideLobeGain ();
     }
-  NS_LOG_DEBUG ("angle=" << angle << ", virtualAngle=" << virtualAngle << ", gain=" << gain);
+
+  NS_LOG_DEBUG ("Angle=" << angle << ", LowerLimit=" << lowerLimit << ", UpperLimit=" << upperLimit
+                << ", MainLobeWidth=" << m_mainLobeWidth << ", Gain=" << gain);
   return gain;
 }
 

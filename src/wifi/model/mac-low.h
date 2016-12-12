@@ -27,18 +27,14 @@
 #include <ostream>
 #include <map>
 
-#include "wifi-mac-header.h"
 #include "wifi-mode.h"
 #include "wifi-phy.h"
 #include "wifi-preamble.h"
 #include "wifi-remote-station-manager.h"
-#include "ctrl-headers.h"
-#include "mgt-headers.h"
 #include "block-ack-agreement.h"
 #include "ns3/mac48-address.h"
 #include "ns3/callback.h"
 #include "ns3/event-id.h"
-#include "ns3/packet.h"
 #include "ns3/nstime.h"
 #include "qos-utils.h"
 #include "block-ack-cache.h"
@@ -1025,6 +1021,12 @@ private:
    */
   uint32_t GetCtsSize (void) const;
   /**
+   * Return the total DMG CTS size (including FCS trailer).
+   *
+   * \return the total DMG CTS size
+   */
+  uint32_t GetDmgCtsSize (void) const;
+  /**
    * Return the total size of the packet after WifiMacHeader and FCS trailer
    * have been added.
    *
@@ -1149,6 +1151,12 @@ private:
    * \return the time required to transmit the CTS (including preamble and FCS)
    */
   Time GetCtsDuration (Mac48Address to, WifiTxVector rtsTxVector) const;
+  /**
+   * Return the time required to transmit the DMG CTS (including preamble and FCS).
+   *
+   * \return the time required to transmit the DMG CTS (including preamble and FCS)
+   */
+  Time GetDmgCtsDuration (void) const;
   /**
    * Return the time required to transmit the ACK (including preamble and FCS).
    *
@@ -1347,13 +1355,6 @@ private:
 
   virtual void DoDispose (void);
 
-  /**
-   * \param packet packet to check
-   * \param hdr 802.11 header for packet to check
-   *
-   * Returns Tid of different packet types
-   */
-  uint8_t GetTid (Ptr<const Packet> packet, const WifiMacHeader hdr) const;
   /**
    * \param originator Address of peer participating in Block Ack mechanism.
    * \param tid TID for which Block Ack was created.

@@ -138,8 +138,7 @@ main(int argc, char *argv[])
   adWifiPhy.EnableAntenna (true, true);
   adWifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
                         "Sectors", UintegerValue (4),
-                        "Antennas", UintegerValue (1),
-                        "AngleOffset", DoubleValue (M_PI/4));
+                        "Antennas", UintegerValue (1));
 
   /* 802.11ad Structure */
   WifiTechnologyHelperStruct adWifiStruct;

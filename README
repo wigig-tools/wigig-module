@@ -51,6 +51,8 @@ The current implementation is based on ns3-26. In order to save time and evaluat
 ./waf build
 
 The previous command builds the required models only to run IEEE 802.11ad with its provided scripts in debug mode. 
+This is the prefered mode if you are testing a new scenario. Run single isntance of your simulation using this mode, if you get the expected output then proceed with the optimized build.
+The optimized build omits assertion across the code so you will not be able to figure out in which contect did you violate the execution.
 
 To build the project in optimized mode for fast execution type the following command:
 

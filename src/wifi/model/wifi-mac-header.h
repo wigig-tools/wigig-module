@@ -447,6 +447,18 @@ public:
    */
   bool IsCts (void) const;
   /**
+   * Return true if the header is a DMG CTS header.
+   *
+   * \return true if the header is a DMG CTS header, false otherwise
+   */
+  bool IsDmgCts (void) const;
+  /**
+   * Return true if the header is a DTS header.
+   *
+   * \return true if the header is a DTS header, false otherwise
+   */
+  bool IsDmgDts (void) const;
+  /**
    * Return true if the header is an ACK header.
    *
    * \return true if the header is an ACK header, false otherwise

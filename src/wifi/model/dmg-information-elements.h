@@ -57,12 +57,47 @@ std::istream &operator >> (std::istream &is, RequestElement &element);
 
 ATTRIBUTE_HELPER_HEADER (RequestElement)
 
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11 Traffic Stream (TS) Delay 8.4.2.34
+ */
+class TsDelayElement : public WifiInformationElement
+{
+public:
+  TsDelayElement ();
+
+  WifiInformationElementId ElementId () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * Set the amount of delay time, in TUs, a STA should wait before it  reinitiates setup of a TS.
+   * The Delay field is set to 0 when an AP does not expect to serve any TSPECs for  an indeterminate
+   * time and does not know this time a priori.
+   * \param type
+   */
+  void SetDelay (uint32_t delay);
+  uint32_t GetDelay (void) const;
+
+private:
+  uint32_t m_delay;
+
+};
+
+std::ostream &operator << (std::ostream &os, const TsDelayElement &element);
+std::istream &operator >> (std::istream &is, TsDelayElement &element);
+
+ATTRIBUTE_HELPER_HEADER (TsDelayElement)
+
 enum TimeoutIntervalType
 {
   ReassociationDeadlineInterval = 1,
   KeyLifetimeInterval = 2,
   AssociationComebackTime = 3,
 };
+
 /**
  * \ingroup wifi
  *
@@ -1009,7 +1044,7 @@ public:
   /**
    * Set the Multi-band Connection Capability. The Multi-band Connection Capability field indicates the
    * connection capabilities supported by the STA on the channel and band indicated in this element.
-   * \param capability
+   * @param capability
    */
   void SetConnectionCapability (uint8_t capability);
   void SetFstSessionTimeout (uint8_t timeout);

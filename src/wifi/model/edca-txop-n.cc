@@ -804,71 +804,6 @@ EdcaTxopN::GotCts (double snr, WifiMode txMode)
   NS_LOG_DEBUG ("got cts");
 }
 
-uint8_t
-EdcaTxopN::GetCurrentTid () const
-{
-  NS_LOG_FUNCTION (this);
-  if (m_currentHdr.IsQosData ())
-    {
-      return m_currentHdr.GetQosTid ();
-    }
-  else if (m_currentHdr.IsBlockAckReq ())
-    {
-      CtrlBAckRequestHeader baReqHdr;
-      m_currentPacket->PeekHeader (baReqHdr);
-      return baReqHdr.GetTidInfo ();
-    }
-  else if (m_currentHdr.IsBlockAck ())
-    {
-      CtrlBAckResponseHeader baRespHdr;
-      m_currentPacket->PeekHeader (baRespHdr);
-      return baRespHdr.GetTidInfo ();
-    }
-  else if (m_currentHdr.IsMgt () && m_currentHdr.IsAction ())
-    {
-      Ptr<Packet> packet = m_currentPacket->Copy ();
-      WifiActionHeader actionHdr;
-      packet->RemoveHeader (actionHdr);
-
-      if (actionHdr.GetCategory () == WifiActionHeader::BLOCK_ACK)
-        {
-          switch (actionHdr.GetAction ().blockAck)
-            {
-            case WifiActionHeader::BLOCK_ACK_ADDBA_REQUEST:
-              {
-                MgtAddBaResponseHeader reqHdr;
-                packet->RemoveHeader (reqHdr);
-                return reqHdr.GetTid ();
-              }
-            case WifiActionHeader::BLOCK_ACK_ADDBA_RESPONSE:
-              {
-                MgtAddBaResponseHeader respHdr;
-                packet->RemoveHeader (respHdr);
-                return respHdr.GetTid ();
-              }
-            case WifiActionHeader::BLOCK_ACK_DELBA:
-              {
-                MgtDelBaHeader delHdr;
-                packet->RemoveHeader (delHdr);
-                return delHdr.GetTid ();
-              }
-            default:
-              {
-                NS_FATAL_ERROR ("Don't know how to extract Traffic ID from this BA action frame");
-              }
-            }
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Don't know how to extract Traffic ID from this action frame");
-        }
-    }
-  else
-    {
-      NS_FATAL_ERROR ("Current packet has no Traffic ID");
-    }
-}
-
 void
 EdcaTxopN::MissedCts (void)
 {
@@ -886,7 +821,7 @@ EdcaTxopN::MissedCts (void)
       if (GetAmpduExist (m_currentHdr.GetAddr1 ()) || m_currentHdr.IsQosData ())
         {
           m_low->FlushAggregateQueue ();
-          uint8_t tid = GetCurrentTid ();
+          uint8_t tid = GetTid (m_currentPacket, m_currentHdr);
 
           if (GetBaAgreementExists (m_currentHdr.GetAddr1 (), tid))
             {
@@ -1035,7 +970,7 @@ EdcaTxopN::MissedAck (void)
         }
       if (GetAmpduExist (m_currentHdr.GetAddr1 ()) || m_currentHdr.IsQosData ())
         {
-          uint8_t tid = GetCurrentTid ();
+          uint8_t tid = GetTid (m_currentPacket, m_currentHdr);
 
           if (GetBaAgreementExists (m_currentHdr.GetAddr1 (), tid))
             {
@@ -1089,7 +1024,7 @@ EdcaTxopN::MissedBlockAck (uint32_t nMpdus)
 {
   NS_LOG_FUNCTION (this);
   NS_LOG_DEBUG ("missed block ack");
-  uint8_t tid = GetCurrentTid ();
+  uint8_t tid = GetTid (m_currentPacket, m_currentHdr);
   if (GetAmpduExist (m_currentHdr.GetAddr1 ()))
     {
       m_stationManager->ReportAmpduTxStatus (m_currentHdr.GetAddr1 (), tid, 0, nMpdus, 0, 0);
@@ -1180,7 +1115,8 @@ EdcaTxopN::RestartAccessIfNeeded (void)
       if ((m_currentPacket != 0
            || !m_queue->IsEmpty () || m_baManager->HasPackets ())
           && !m_dcf->IsAccessRequested ()
-          && m_manager->IsAccessAllowed ())
+          && m_manager->IsAccessAllowed ()
+          && !m_low->IsTransmissionSuspended ())
         {
           Ptr<const Packet> packet;
           WifiMacHeader hdr;
@@ -1252,7 +1188,8 @@ EdcaTxopN::StartAccessIfNeeded (void)
       if (((m_firstTransmission && (m_currentPacket != 0)) || m_currentPacket == 0)
          && (!m_queue->IsEmpty () || m_baManager->HasPackets ())
          && !m_dcf->IsAccessRequested ()
-         && m_manager->IsAccessAllowed ())
+         && m_manager->IsAccessAllowed ()
+         && !m_low->IsTransmissionSuspended ())
         {
           Ptr<const Packet> packet;
           WifiMacHeader hdr;
@@ -1568,7 +1505,7 @@ EdcaTxopN::NeedFragmentation (void) const
       || GetAmpduExist (m_currentHdr.GetAddr1 ())
       || (m_stationManager->HasHtSupported ()
       && m_currentHdr.IsQosData ()
-      && GetBaAgreementExists (m_currentHdr.GetAddr1 (), GetCurrentTid ())
+      && GetBaAgreementExists (m_currentHdr.GetAddr1 (), GetTid (m_currentPacket, m_currentHdr))
       && GetMpduAggregator ()->GetMaxAmpduSize () >= m_currentPacket->GetSize ()))
     {
       //MSDU is not fragmented when it is transmitted using an HT-immediate or

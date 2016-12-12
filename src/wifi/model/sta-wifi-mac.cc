@@ -104,7 +104,7 @@ StaWifiMac::GetTypeId (void)
 StaWifiMac::StaWifiMac ()
   : m_probeRequestEvent (),
     m_assocRequestEvent (),
-    m_beaconWatchdogEnd (Seconds (0.0))
+    m_beaconWatchdogEnd (Seconds (0))
 {
   NS_LOG_FUNCTION (this);
 
@@ -569,6 +569,16 @@ StaWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
               SetEdcaParameters (AC_BK, edcaParameters->GetBkCWmin(), edcaParameters->GetBkCWmax(), edcaParameters->GetBkAifsn(), 32 * MicroSeconds (edcaParameters->GetBkTXOPLimit()));
               SetEdcaParameters (AC_VI, edcaParameters->GetViCWmin(), edcaParameters->GetViCWmax(), edcaParameters->GetViAifsn(), 32 * MicroSeconds (edcaParameters->GetViTXOPLimit()));
               SetEdcaParameters (AC_VO, edcaParameters->GetVoCWmin(), edcaParameters->GetVoCWmax(), edcaParameters->GetVoAifsn(), 32 * MicroSeconds (edcaParameters->GetVoTXOPLimit()));
+            }
+          if (m_htSupported)
+            {
+              Ptr<HtCapabilities> htcapabilities = StaticCast<HtCapabilities> (beacon.GetInformationElement (IE_HT_CAPABILITIES));
+              m_stationManager->AddStationHtCapabilities (hdr->GetAddr2 (), htcapabilities);
+            }
+          if (m_vhtSupported)
+            {
+              Ptr<VhtCapabilities> vhtcapabilities = StaticCast<VhtCapabilities> (beacon.GetInformationElement (IE_VHT_CAPABILITIES));
+              m_stationManager->AddStationVhtCapabilities (hdr->GetAddr2 (), vhtcapabilities);
             }
           m_stationManager->SetShortPreambleEnabled (isShortPreambleEnabled);
           m_stationManager->SetShortSlotTimeEnabled (capabilities.IsShortSlotTime ());

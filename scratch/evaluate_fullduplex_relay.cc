@@ -272,8 +272,7 @@ main (int argc, char *argv[])
   wifiPhy.EnableAntenna (true, true);
   wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
                       "Sectors", UintegerValue (12),
-                      "Antennas", UintegerValue (1),
-                      "AngleOffset", DoubleValue (0));
+                      "Antennas", UintegerValue (1));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
