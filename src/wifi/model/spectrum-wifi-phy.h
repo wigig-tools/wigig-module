@@ -49,6 +49,10 @@ namespace ns3 {
 class SpectrumWifiPhy : public WifiPhy
 {
 public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
   static TypeId GetTypeId (void);
 
   SpectrumWifiPhy ();
@@ -66,7 +70,7 @@ public:
    *
    * \param channelNumber the channel number to add
    */
-  void AddOperationalChannel (uint16_t channelNumber);
+  void AddOperationalChannel (uint8_t channelNumber);
   /**
    * Return a list of channels to which it may be possible to roam
    * By default, this method will return the current channel number followed
@@ -74,26 +78,11 @@ public:
    *
    * \return vector of channel numbers to which it may be possible to roam
    */
-  std::vector<uint16_t> GetOperationalChannelList (void) const;
+  std::vector<uint8_t> GetOperationalChannelList (void) const;
   /**
    * Clear the list of operational channels.
    */
   void ClearOperationalChannelList (void);
-
-  /**
-   * Starting receiving the payload of a packet (i.e. the first bit of the packet has arrived).
-   *
-   * \param packet the arriving packet
-   * \param txVector the TXVECTOR of the arriving packet
-   * \param preamble the preamble of the arriving packet
-   * \param mpdutype the type of the MPDU as defined in WifiPhy::mpduType.
-   * \param event the corresponding event of the first time the packet arrives
-   */
-  void StartReceivePacket (Ptr<Packet> packet,
-                           WifiTxVector txVector,
-                           WifiPreamble preamble,
-                           enum mpduType mpdutype,
-                           Ptr<InterferenceHelper::Event> event);
 
   /**
    * Input method for delivering a signal from the spectrum channel
@@ -102,6 +91,21 @@ public:
    * \param rxParams Input signal parameters
    */
   void StartRx (Ptr<SpectrumSignalParameters> rxParams);
+
+  /**
+   * \param packet the packet to send
+   * \param txVector the TXVECTOR that has tx parameters such as mode, the transmission mode to use to send
+   *        this packet, and txPowerLevel, a power level to use to send this packet. The real transmission
+   *        power is calculated as txPowerMin + txPowerLevel * (txPowerMax - txPowerMin) / nTxLevels
+   * \param txDuration duration of the transmission.
+   */
+  void StartTx (Ptr<Packet> packet, WifiTxVector txVector, Time txDuration);
+  /**
+   * \param txVector TxVector companioned by this transmission.
+   * \param fieldsRemaining The number of TRN Fields remaining till the end of transmission.
+   */
+  void StartTrnTx (WifiTxVector txVector, uint8_t fieldsRemaining);
+
   /**
    * Method to encapsulate the creation of the WifiSpectrumPhyInterface
    * object (used to bind the WifiSpectrumPhy to a SpectrumChannel) and
@@ -138,19 +142,11 @@ public:
    * returned, it means that any model will be accepted.
    */
   Ptr<const SpectrumModel> GetRxSpectrumModel () const;
+
   /**
-   * Callback invoked at the end of a frame reception, to notify whether
-   * the frame was received successfully (true) or not (false)
+   * \return the width of each band (Hz)
    */
-  typedef Callback<void,bool> RxCallback;
-  /**
-   * Set the packet received callback (invoked at the end of a frame
-   * reception), to notify whether the frame was received successfully
-   * or not.
-   *
-   * \param callback the function to hook to the callback
-   */
-  void SetPacketReceivedCallback (RxCallback callback);
+  double GetBandBandwidth (void) const;
 
   /**
    * Callback invoked when the Phy model starts to process a signal
@@ -162,58 +158,16 @@ public:
    */
   typedef void (* SignalArrivalCallback) (bool signalType, uint32_t senderNodeId, double rxPower, Time duration);
 
-  virtual void SetReceiveOkCallback (WifiPhy::RxOkCallback callback);
-  virtual void SetReceiveErrorCallback (WifiPhy::RxErrorCallback callback);
-  virtual void SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, enum WifiPreamble preamble);
-  virtual void SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, enum WifiPreamble preamble, enum mpduType mpdutype);
-  virtual void RegisterListener (WifiPhyListener *listener);
-  virtual void UnregisterListener (WifiPhyListener *listener);
-  virtual void SetSleepMode (void);
-  virtual void ResumeFromSleep (void);
-  virtual Ptr<WifiChannel> GetChannel (void) const;
+  Ptr<Channel> GetChannel (void) const;
 
-  //*************** TEMPORARY *****************////
-  /**
-   * Register Report SNR Callback.
-   * \param callback
-   */
-  virtual void RegisterReportSnrCallback (ReportSnrCallback callback);
-  /**
-   * This method is called when the station works in RDS mode.
-   * \param srcSector The sector to use for communicating with the Source REDS.
-   * \param srcAntenna The antenna to use for communicating with the Source REDS.
-   * \param dstSector The sector to use for communicating with the Destination REDS.
-   * \param dstAntenna The antenna to use for communicating with the Destination REDS.
-   */
-  virtual void ActivateRdsOpereation (uint8_t srcSector, uint8_t srcAntenna,
-                                      uint8_t dstSector, uint8_t dstAntenna);
-  /**
-   * Disable RDS Opereation.
-   */
-  virtual void ResumeRdsOperation (void);
-  /**
-   * Disable RDS Opereation.
-   */
-  virtual void SuspendRdsOperation (void);
 
 protected:
   // Inherited
-  virtual void DoDispose (void);
-  virtual void DoInitialize (void);
-  virtual bool DoChannelSwitch (uint16_t id);
-  virtual bool DoFrequencySwitch (uint32_t frequency);
+  void DoDispose (void);
+  void DoInitialize (void);
+
 
 private:
-  /**
-   * The last bit of the packet has arrived.
-   *
-   * \param packet the packet that the last bit has arrived
-   * \param preamble the preamble of the arriving packet
-   * \param mpdutype the type of the MPDU as defined in WifiPhy::mpduType.
-   * \param event the corresponding event of the first time the packet arrives
-   */
-  void EndReceive (Ptr<Packet> packet, enum WifiPreamble preamble, enum mpduType mpdutype, Ptr<InterferenceHelper::Event> event);
-
   /**
    * \param centerFrequency center frequency (MHz)
    * \param channelWidth channel width (MHz) of the channel
@@ -223,17 +177,16 @@ private:
    * This is a helper function to create the right Tx PSD corresponding
    * to the standard in use.
    */
-  Ptr<SpectrumValue> GetTxPowerSpectralDensity (uint32_t centerFrequency, uint32_t channelWidth, double txPowerW) const;
+  Ptr<SpectrumValue> GetTxPowerSpectralDensity (uint16_t centerFrequency, uint8_t channelWidth, double txPowerW) const;
 
   Ptr<SpectrumChannel> m_channel;        //!< SpectrumChannel that this SpectrumWifiPhy is connected to
-  std::vector<uint16_t> m_operationalChannelList; //!< List of possible channels
+  std::vector<uint8_t> m_operationalChannelList; //!< List of possible channels
 
-  Ptr<WifiSpectrumPhyInterface> m_wifiSpectrumPhyInterface;
-  Ptr<AntennaModel> m_antenna;
-  mutable Ptr<const SpectrumModel> m_rxSpectrumModel;
-  RxCallback m_rxCallback;
+  Ptr<WifiSpectrumPhyInterface> m_wifiSpectrumPhyInterface; //!< Spectrum phy interface
+  Ptr<AntennaModel> m_antenna; //!< antenna model
+  mutable Ptr<const SpectrumModel> m_rxSpectrumModel; //!< receive spectrum model
   bool m_disableWifiReception;          //!< forces this Phy to fail to sync on any signal
-  TracedCallback<bool, uint32_t, double, Time> m_signalCb;
+  TracedCallback<bool, uint32_t, double, Time> m_signalCb; //!< Signal callback
 
 };
 

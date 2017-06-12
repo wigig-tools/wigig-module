@@ -34,7 +34,7 @@
 #include "ssid.h"
 #include "dsss-parameter-set.h"
 #include "ht-capabilities.h"
-#include "ht-operations.h"
+#include "ht-operation.h"
 #include "vht-capabilities.h"
 #include "erp-information.h"
 #include "edca-parameter-set.h"
@@ -75,6 +75,12 @@ public:
    * \param ssid SSID
    */
   void SetSsid (Ssid ssid);
+  /**
+   * Set the supported rates.
+   *
+   * \param rates the supported rates
+   */
+  void SetSupportedRates (SupportedRates rates);
 
   /**
    * Return the Capability information.
@@ -94,6 +100,12 @@ public:
    * \return SSID
    */
   Ssid GetSsid (void) const;
+  /**
+   * Return the supported rates.
+   *
+   * \return the supported rates
+   */
+  SupportedRates GetSupportedRates (void) const;
 
   /**
    * Register this type.
@@ -110,6 +122,7 @@ private:
   CapabilityInformation m_capability;       //!< Capability information.
   uint16_t m_listenInterval;
   Ssid m_ssid;                              //!< Service Set ID (SSID).
+  SupportedRates m_rates;                   //!< List of supported rates
 
 };
 
@@ -141,6 +154,12 @@ public:
    * \param the association identifier.
    */
   void SetAid (uint16_t aid);
+  /**
+   * Set the supported rates.
+   *
+   * \param rates the supported rates
+   */
+  void SetSupportedRates (SupportedRates rates);
 
   /**
    * Return the Capability information.
@@ -160,6 +179,12 @@ public:
    * \return the association identifier.
    */
   uint16_t GetAid (void) const;
+  /**
+   * Return the supported rates.
+   *
+   * \return the supported rates
+   */
+  SupportedRates GetSupportedRates (void) const;
 
   /**
    * Register this type.
@@ -176,6 +201,7 @@ private:
   CapabilityInformation m_capability;       //!< Capability information
   StatusCode m_code;                        //!< Status code
   uint16_t m_aid;                           //!< Association Identifier.
+  SupportedRates m_rates;                   //!< List of supported rates
 
 };
 
@@ -195,11 +221,23 @@ public:
    */
   void SetSsid (Ssid ssid);
   /**
+   * Set the supported rates.
+   *
+   * \param rates the supported rates
+   */
+  void SetSupportedRates (SupportedRates rates);
+  /**
    * Return the Service Set Identifier (SSID).
    *
    * \return SSID
    */
   Ssid GetSsid (void) const;
+  /**
+   * Return the supported rates.
+   *
+   * \return the supported rates
+   */
+  SupportedRates GetSupportedRates (void) const;
 
   /**
    * Register this type.
@@ -214,6 +252,7 @@ public:
 
 private:
   Ssid m_ssid;                            //!< Service Set ID (SSID)
+  SupportedRates m_rates;                 //!< List of supported rates
 
 };
 
@@ -245,6 +284,12 @@ public:
    * \param ssid SSID
    */
   void SetSsid (Ssid ssid);
+  /**
+   * Set the supported rates.
+   *
+   * \param rates the supported rates
+   */
+  void SetSupportedRates (SupportedRates rates);
 
   /**
    * Return the time stamp.
@@ -270,6 +315,12 @@ public:
    * \return SSID
    */
   Ssid GetSsid (void) const;
+  /**
+   * Return the supported rates.
+   *
+   * \return the supported rates
+   */
+  SupportedRates GetSupportedRates (void) const;
 
   /**
    * Register this type.
@@ -287,6 +338,7 @@ private:
   Ssid m_ssid;                              //!< Service set ID (SSID)
   uint64_t m_beaconInterval;                //!< Beacon interval
   CapabilityInformation m_capability;       //!< Capability information
+  SupportedRates m_rates;                   //!< List of supported rates
 
 };
 
@@ -523,7 +575,7 @@ private:
 
 /**
  * \ingroup wifi
- * Implement the header for management frames of type DMG ADDTS request.
+ * Implement the header for action frames of type DMG ADDTS request.
  */
 class DmgAddTSRequestFrame : public Header
 {
@@ -559,7 +611,7 @@ private:
 
 /**
  * \ingroup wifi
- * Implement the header for management frames of type DMG ADDTS request.
+ * Implement the header for action frames of type DMG ADDTS request.
  */
 class DmgAddTSResponseFrame : public Header
 {
@@ -596,6 +648,39 @@ private:
   StatusCode m_status;
   TsDelayElement m_tsDelayElement;
   DmgTspecElement m_dmgTspecElement;
+
+};
+
+/**
+ * \ingroup wifi
+ * Implement the header for action frames of type DELTS (8.5.3.4).
+ */
+class DelTsFrame : public Header
+{
+public:
+  DelTsFrame ();
+
+  /**
+   * Register this type.
+   * \return The TypeId.
+   */
+  static TypeId GetTypeId (void);
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  void SetReasonCode (uint16_t reason);
+  void SetDmgAllocationInfo (DmgAllocationInfo info);
+
+  uint16_t GetReasonCode (void) const;
+  DmgAllocationInfo GetDmgAllocationInfo (void) const;
+
+private:
+  uint8_t m_tsInfo[3];
+  uint16_t m_reasonCode;
+  DmgAllocationInfo m_dmgAllocationInfo;
 
 };
 
@@ -918,6 +1003,96 @@ private:
   uint16_t m_initiator;
   uint16_t m_tid; //!< Traffic ID
   uint16_t m_reasonCode; /* Not used for now. Always set to 1: "Unspecified reason" */
+};
+
+/**
+ * \ingroup wifi
+ * The Radio Measurement Request frame uses the Action frame body format. It is transmitted by a STA
+ * requesting another STA to make one or more measurements on one or more channels.
+ */
+class RadioMeasurementRequest : public Header
+{
+public:
+  RadioMeasurementRequest ();
+
+  /**
+   * Register this type.
+   * \return The TypeId.
+   */
+  static TypeId GetTypeId (void);
+  // Inherited
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  /**
+   * The Dialog Token field is set to a nonzero value chosen by the STA sending the radio measurement request
+   * to identify the request/report transaction.
+   * \param token
+   */
+  void SetDialogToken (uint8_t token);
+  /**
+   * The Number of Repetitions field contains the requested number of repetitions for all the Measurement
+   * Request elements in this frame. A value of 0 in the Number of Repetitions field indicates Measurement
+   * Request elements are executed once without repetition. A value of 65 535 in the Number of Repetitions field
+   * indicates Measurement Request elements are repeated until the measurement is cancelled or superseded.
+   * \param repetitions
+   */
+  void SetNumberOfRepetitions (uint16_t repetitions);
+
+  void AddMeasurementRequestElement (Ptr<WifiInformationElement> elem);
+
+  uint8_t GetDialogToken (void) const;
+  uint16_t GetNumberOfRepetitions (void) const;
+  WifiInfoElementList GetListOfMeasurementRequestElement (void) const;
+
+private:
+  uint8_t m_dialogToken;
+  uint16_t m_numOfRepetitions;
+  WifiInfoElementList m_list;
+
+};
+
+/**
+ * \ingroup wifi
+ * The Radio Measurement Report frame uses the Action frame body format. It is transmitted by a STA in
+ * response to a Radio Measurement Request frame or by a STA providing a triggered autonomous measurement report.
+ */
+class RadioMeasurementReport : public Header
+{
+public:
+  RadioMeasurementReport ();
+
+  /**
+   * Register this type.
+   * \return The TypeId.
+   */
+  static TypeId GetTypeId (void);
+  // Inherited
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  /**
+   * The Dialog Token field is set to the value in the corresponding Radio Measurement Request frame. If the
+   * Radio Measurement Report frame is not being transmitted in response to a Radio Measurement Request
+   * frame then the Dialog token is set to 0.
+   * \param token
+   */
+  void SetDialogToken (uint8_t token);
+  void AddMeasurementReportElement (Ptr<WifiInformationElement> elem);
+
+  uint8_t GetDialogToken (void) const;
+  WifiInfoElementList GetListOfMeasurementReportElement (void) const;
+
+private:
+  uint8_t m_dialogToken;
+  WifiInfoElementList m_list;
+
 };
 
 /**

@@ -86,19 +86,29 @@ double
 Directional60GhzAntenna::GetGainDbi (double angle, uint8_t sectorId, uint8_t antennaId) const
 {
   NS_LOG_FUNCTION (this << angle << sectorId << antennaId);
-  double gain, lowerLimit, upperLimit;
+  double gain, lowerLimit, upperLimit, center;
 
   if (angle < 0)
     {
       angle = 2 * M_PI + angle;
     }
 
+  /* Calculate both lower and upper limits of the current sector */
   lowerLimit = m_mainLobeWidth * double (sectorId - 1);
   upperLimit = m_mainLobeWidth * double (sectorId);
+  center = m_mainLobeWidth * (sectorId - 1) + m_mainLobeWidth / 2;
+
+  if (angle < 0)
+    {
+      angle = 2 * M_PI + angle;
+    }
+  angle = angle + m_mainLobeWidth/2;
+  angle = fmod (angle, 2 * M_PI);
 
   if ((lowerLimit <= angle) && (angle <= upperLimit))
     {
-      double virtualAngle = std::abs (angle - (m_mainLobeWidth/2 + m_mainLobeWidth * double (sectorId - 1)));
+      /* Calculate relative angle with respect to the current sector */
+      double virtualAngle = std::abs (angle - center);
       gain = GetMaxGainDbi () - 3.01 * pow (2 * virtualAngle/GetHalfPowerBeamWidth (), 2);
       NS_LOG_DEBUG ("VirtualAngle=" << virtualAngle);
     }
@@ -109,6 +119,7 @@ Directional60GhzAntenna::GetGainDbi (double angle, uint8_t sectorId, uint8_t ant
 
   NS_LOG_DEBUG ("Angle=" << angle << ", LowerLimit=" << lowerLimit << ", UpperLimit=" << upperLimit
                 << ", MainLobeWidth=" << m_mainLobeWidth << ", Gain=" << gain);
+
   return gain;
 }
 

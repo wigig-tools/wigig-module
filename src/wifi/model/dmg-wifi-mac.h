@@ -9,6 +9,7 @@
 #include "regular-wifi-mac.h"
 #include "dmg-ati-dca.h"
 #include "dmg-capabilities.h"
+#include "service-period.h"
 
 namespace ns3 {
 
@@ -17,22 +18,31 @@ namespace ns3 {
 #define dot11MaximalSectorScan          10
 #define dot11ABFTRTXSSSwitch            10
 #define dot11BFRetryLimit               10
-// Frames duration precalculated using MCS0 and reported in nanoseconds
+/* Frames duration precalculated using MCS0 and reported in nanoseconds */
+/**
+  * SSW Frame Size = 26 Bytes
+  * Ncw = 2, Ldpcw = 160, Ldplcw = 160, dencodedSymbols  = 328
+  */
 #define sswTxTime     NanoSeconds (4291) + NanoSeconds (4654) + NanoSeconds (5964)
 #define sswFbckTxTime NanoSeconds (4291) + NanoSeconds (4654) + NanoSeconds (9310)
 #define sswAckTxTime  NanoSeconds (4291) + NanoSeconds (4654) + NanoSeconds (9310)
+#define aAirPropagationTime NanoSeconds (100)
 #define aTSFResolution MicroSeconds (1)
+#define GUARD_TIME MicroSeconds (10)
 // Size of different DMG Control Frames in Bytes
-#define POLL_FRAME_SIZE           22
-#define SPR_FRAME_SIZE            27
-#define GRANT_FRAME_SIZE          27
+#define POLL_FRAME_SIZE             22
+#define SPR_FRAME_SIZE              27
+#define GRANT_FRAME_SIZE            27
 // Association Identifier
-#define AID_AP                    0
-#define AID_BROADCAST             255
+#define AID_AP                      0
+#define AID_BROADCAST               255
 // Antenna Configuration
-#define NO_ANTENNA_CONFIG         255
+#define NO_ANTENNA_CONFIG           255
 // Allocation of SPs and CBAPs
-#define BROADCAST_CBAP            0
+#define BROADCAST_CBAP              0
+#define MAX_SP_BLOCK_DURATION       32767
+#define MAX_CBAP_BLOCK_DURATION     65535
+#define MAX_NUM_BLOCKS              255
 
 typedef enum {
   CHANNEL_ACCESS_BTI = 0,
@@ -45,6 +55,9 @@ typedef enum {
 /** Type definitions **/
 typedef uint8_t SECTOR_ID;                    /* Typedef for Sector ID */
 typedef uint8_t ANTENNA_ID;                   /* Typedef for Antenna ID */
+typedef std::pair<DynamicAllocationInfoField, BF_Control_Field> AllocationData; /* Typedef for dynamic allocation */
+typedef std::list<AllocationData> AllocationDataList;
+typedef AllocationDataList::const_iterator AllocationDataListCI;
 
 class BeamRefinementElement;
 
@@ -52,7 +65,7 @@ class BeamRefinementElement;
  * \brief Wi-Fi DMG
  * \ingroup wifi
  *
- * Abstract class for DMG support.
+ * Abstract class for Directional Multi Gigabit support.
  */
 class DmgWifiMac : public RegularWifiMac
 {
@@ -80,14 +93,45 @@ public:
    */
   virtual void SetWifiRemoteStationManager(Ptr<WifiRemoteStationManager> stationManager);
   /**
-   * Steer the directional antenna towards specific station.
+   * Steer the directional antenna towards specific station for transmission and set the reception in omni-mode.
+   * \param address The MAC address of the peer station.
+   */
+  void SteerTxAntennaToward (Mac48Address address);
+  /**
+   * Steer the directional antenna towards specific station for transmission and reception.
    * \param address The MAC address of the peer station.
    */
   void SteerAntennaToward (Mac48Address address);
+  /**
+   * CalculateBeamformingTrainingDuration
+   * \param peerSectors The number of sectors in the peer node.
+   * \return The total duration required for completing beamforming training.
+   */
+  Time CalculateBeamformingTrainingDuration (uint8_t peerSectors);
+  /**
+   * Get number of sectors in each antenna array.
+   * \return
+   */
+  uint8_t GetNumberOfSectors (void) const;
+  /**
+   * Get number of phased antenna arrays.
+   * \return The number of phased antenna arrays.
+   */
+  uint8_t GetNumberOfAntennas (void) const;
+  /**
+   * Terminate service period.
+   */
+  void EndServicePeriod (void);
+  /**
+   * Get SP Queue
+   * \return Pointer to Queue of the service period access scheme.
+   */
+  Ptr<WifiMacQueue> GetSPQueue (void) const;
 
   /* Temporary Function to store AID mapping */
   void MapAidToMacAddress (uint16_t aid, Mac48Address address);
-  void SetupBlockAck (uint8_t tid, Mac48Address recipient);
+
+  Ptr<ServicePeriod> GetServicePeriod () const;
 
 protected:
   friend class MacLow;
@@ -130,6 +174,18 @@ protected:
    * \return The value of Beam Refinement Protocol Interframe Spacing (BRPIFS).
    */
   Time GetBrpifs (void) const;
+  /**
+   * Get sector sweep duration either at the initiator or responder.
+   * \param sectors The number of sectors in the duration.
+   * \return The total duration required to complete sector sweep.
+   */
+  Time GetSectorSweepDuration (uint8_t sectors);
+  /**
+   * Get sector sweep slot time in A-BFT access period.
+   * \param fss The number of sectors in the slot.
+   * \return The duration of a single slot in A-BFT access period.
+   */
+  Time GetSectorSweepSlotTime (uint8_t fss);
   /**
    * Set whether PCP Handover is supported or not.
    * \param value
@@ -177,6 +233,12 @@ protected:
    * \return the DMG capability that we support
    */
   virtual Ptr<DmgCapabilities> GetDmgCapabilities (void) const = 0;
+  /**
+   * Transmit control frame immediately.
+   * \param packet
+   * \param hdr
+   */
+  void TransmitControlFrameImmediately (Ptr<const Packet> packet, WifiMacHeader &hdr);
   /**
    * Send SSW FeedBack after RSS.
    * \param receiver The address of the responding station.
@@ -305,7 +367,24 @@ protected:
    */
   void EndContentionPeriod (void);
   /**
-   * Start service  period (SP) allocation period.
+   *BeamLink Maintenance Timeout.
+   */
+  virtual void BeamLinkMaintenanceTimeout (void);
+  /**
+   * Schedule the service period (SP) allocation blocks at the start of DTI.
+   * \param blocks The number of time blocks making up the allocation.
+   * \param spStart
+   * \param spLength
+   * \param spPeriod
+   * \param length The length of the allocation period.
+   * \param peerAid The AID of the peer station in this service period.
+   * \param peerStation The MAC Address of the peer station in this service period.
+   * \param isSource Whether we are the initiator of the service period.
+   */
+  void ScheduleServicePeriod (uint8_t blocks, Time spStart, Time spLength, Time spPeriod,
+                              AllocationID allocationID, uint8_t peerAid, Mac48Address peerAddress, bool isSource);
+  /**
+   * Start service period (SP) allocation period.
    * \param length The length of the allocation period.
    * \param peerAid The AID of the peer station in this service period.
    * \param peerStation The MAC Address of the peer station in this service period.
@@ -320,10 +399,6 @@ protected:
    * Suspend ongoing transmission for the current service period.
    */
   void SuspendServicePeriodTransmission (void);
-  /**
-   * Terminate service period.
-   */
-  void EndServicePeriod (void);
   /**
    * This function is excuted upon the transmission of frame.
    * \param hdr The header of the transmitted frame.
@@ -340,16 +415,43 @@ protected:
    * \param hdr the header of the packet that we successfully sent
    */
   virtual void TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr);
+  /**
+   * Get frame Duration in microseconds.
+   * \param duration The duration of the frame in nanoseconds.
+   * \return The duration of the frame in microseconds.
+   */
+  Time GetFrameDurationInMicroSeconds (Time duration) const;
+  /**
+   * Get transmission time duration for SPR frame.
+   * \return The transmission time duration for SPR frame.
+   */
+  Time GetSprFrameDuration (void) const;
+  /**
+   * Add range of MCSs to support in transmission/reception towards particular station.
+   * \param address The MAC address of the peer station
+   * \param firstMcs The first MCS index to support.
+   * \param lastMcs The last MCS index to support.
+   */
+  void AddMcsSupport (Mac48Address address, uint32_t initialMcs, uint32_t lastMcs);
 
 protected:
   STATION_SNR_PAIR_MAP m_stationSnrMap;           //!< Map between stations and their SNR Table.
   STATION_ANTENNA_CONFIG_MAP m_bestAntennaConfig; //!< Map between remote stations and the best antenna configuration.
-  ANTENNA_CONFIGURATION m_feedbackAntennaConfig;  //!< Temporary variable to save the best antenna config;
+  ANTENNA_CONFIGURATION m_feedbackAntennaConfig;  //!< Temporary variable to save the best antenna config of the peer station.
 
+  /* PHY Layer Information */
   Time m_sbifs;                         //!< Short Beamformnig Interframe Space.
   Time m_mbifs;                         //!< Medium Beamformnig Interframe Space.
   Time m_lbifs;                         //!< Long Beamformnig Interframe Space.
   Time m_brpifs;                        //!< Beam Refinement Protocol Interframe Spacing.
+  bool m_supportOFDM;                   //!< Flag to indicate whether we support OFDM PHY layer.
+  bool m_supportLpSc;                   //!< Flag to indicate whether we support LP-SC PHY layer.
+  uint8_t m_maxScTxMcs;                 //!< The maximum supported MCS for transmission by SC PHY.
+  uint8_t m_maxScRxMcs;                 //!< The maximum supported MCS for reception by SC PHY.
+  uint8_t m_maxOfdmTxMcs;               //!< The maximum supported MCS for transmission by OFDM PHY.
+  uint8_t m_maxOfdmRxMcs;               //!< The maximum supported MCS for reception by OFDM PHY.
+
+  /* Channel Access Period */
   ChannelAccessPeriod m_accessPeriod;   //!< The type of the current channel access period.
   Time m_btiDuration;                   //!< The length of the Beacon Transmission Interval (BTI).
   Time m_atiDuration;                   //!< The length of the ATI period.
@@ -406,6 +508,7 @@ protected:
   /* DMG Parameteres */
   bool m_isCbapOnly;                            //!< Flag to indicate whether the DTI is allocated to CBAP.
   bool m_isCbapSource;                          //!< Flag to indicate that PCP/AP has higher priority for transmission.
+  bool m_announceDmgCapabilities;               //!< Flag to indicate that we announce DMG Capabilities.
 
   /* Access Period Allocations */
   AllocationID m_currentAllocationID;           //!< The ID of the current allocation.
@@ -422,6 +525,23 @@ protected:
   /* Service Period Channel Access */
   Ptr<ServicePeriod> m_sp;                      //!< Pointer to current service period channel access pbject.
 
+  /** Link Maintenance **/
+  BeamLinkMaintenanceUnitIndex m_beamlinkMaintenanceUnit;   //!< Link maintenance Unit according to std 802.11ad-2012.
+  uint8_t m_beamlinkMaintenanceValue;                       //!< Link maintenance timer value in MicroSeconds.
+  uint32_t dot11BeamLinkMaintenanceTime;                    //!< Link maintenance timer in MicroSeconds.
+
+  typedef struct {
+    uint32_t negotiatedValue;
+    uint32_t beamLinkMaintenanceTime;
+  } BeamLinkMaintenanceInfo;
+
+  typedef std::map<uint8_t, BeamLinkMaintenanceInfo> BeamLinkMaintenanceTable;
+  typedef BeamLinkMaintenanceTable::iterator BeamLinkMaintenanceTableI;
+  BeamLinkMaintenanceTable m_beamLinkMaintenanceTable;
+  EventId m_beamLinkMaintenanceTimeout;         //!< Event ID related to the timer assoicated to the current beamformed link.
+  bool m_currentLinkMaintained;                 //!< Flag to indicate whether the current beamformed link is maintained.
+  BeamLinkMaintenanceInfo m_currentBeamLinkMaintenanceInfo;
+
   /**
    * TracedCallback signature for BeamLink Maintenance Timer expiration.
    *
@@ -435,8 +555,10 @@ protected:
   /* AID to MAC Address mapping */
   typedef std::map<uint16_t, Mac48Address> AID_MAP;
   typedef std::map<Mac48Address, uint16_t> MAC_MAP;
-  AID_MAP m_aidMap;
-  MAC_MAP m_macMap;
+  typedef AID_MAP::const_iterator AID_MAP_CI;
+  typedef MAC_MAP::const_iterator MAC_MAP_CI;
+  AID_MAP m_aidMap;                                     //!< Map AID to MAC Address.
+  MAC_MAP m_macMap;                                     //!< Map MAC Address to AID.
 
   /**
    * TracedCallback signature for service period initiation/termination.

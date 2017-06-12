@@ -22,12 +22,9 @@
  *
  * Adapted from ht-wifi-network.cc example
  */
-#include <sstream>
-#include <iomanip>
 
+#include <iomanip>
 #include "ns3/core-module.h"
-#include "ns3/config-store-module.h"
-#include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/wifi-module.h"
 #include "ns3/mobility-module.h"
@@ -95,20 +92,17 @@ using namespace ns3;
 double g_signalDbmAvg;
 double g_noiseDbmAvg;
 uint32_t g_samples;
-uint16_t g_channelNumber;
-uint32_t g_rate;
 
-void MonitorSniffRx (Ptr<const Packet> packet, uint16_t channelFreqMhz,
-                     uint16_t channelNumber, uint32_t rate,
-                     WifiPreamble preamble, WifiTxVector txVector,
-                     struct mpduInfo aMpdu, struct signalNoiseDbm signalNoise)
+void MonitorSniffRx (Ptr<const Packet> packet,
+                     uint16_t channelFreqMhz,
+                     WifiTxVector txVector,
+                     MpduInfo aMpdu,
+                     SignalNoiseDbm signalNoise)
 
 {
   g_samples++;
   g_signalDbmAvg += ((signalNoise.signal - g_signalDbmAvg) / g_samples);
   g_noiseDbmAvg += ((signalNoise.noise - g_noiseDbmAvg) / g_samples);
-  g_rate = rate;
-  g_channelNumber = channelNumber;
 }
 
 NS_LOG_COMPONENT_DEFINE ("WifiSpectrumPerInterference");
@@ -271,7 +265,6 @@ int main (int argc, char *argv[])
         {
           NS_FATAL_ERROR ("Unsupported WiFi type " << wifiType);
         }
-
 
       WifiHelper wifi;
       wifi.SetStandard (WIFI_PHY_STANDARD_80211n_5GHZ);
@@ -491,7 +484,6 @@ int main (int argc, char *argv[])
       stack.Install (wifiStaNode);
 
       Ipv4AddressHelper address;
-
       address.SetBase ("192.168.1.0", "255.255.255.0");
       Ipv4InterfaceContainer staNodeInterface;
       Ipv4InterfaceContainer apNodeInterface;
@@ -500,21 +492,21 @@ int main (int argc, char *argv[])
       apNodeInterface = address.Assign (apDevice);
 
       /* Setting applications */
-      ApplicationContainer serverApp, sinkApp;
+      ApplicationContainer serverApp;
       if (udp)
         {
           //UDP flow
-          UdpServerHelper myServer (9);
-          serverApp = myServer.Install (wifiStaNode.Get (0));
+          uint16_t port = 9;
+          UdpServerHelper server (port);
+          serverApp = server.Install (wifiStaNode.Get (0));
           serverApp.Start (Seconds (0.0));
           serverApp.Stop (Seconds (simulationTime + 1));
 
-          UdpClientHelper myClient (staNodeInterface.GetAddress (0), 9);
-          myClient.SetAttribute ("MaxPackets", UintegerValue (1000));
-          myClient.SetAttribute ("Interval", TimeValue (MilliSeconds (5)));
-          myClient.SetAttribute ("PacketSize", UintegerValue (payloadSize));
-
-          ApplicationContainer clientApp = myClient.Install (wifiApNode.Get (0));
+          UdpClientHelper client (staNodeInterface.GetAddress (0), port);
+          client.SetAttribute ("MaxPackets", UintegerValue (4294967295u));
+          client.SetAttribute ("Interval", TimeValue (Time ("0.00001"))); //packets/s
+          client.SetAttribute ("PacketSize", UintegerValue (payloadSize));
+          ApplicationContainer clientApp = client.Install (wifiApNode.Get (0));
           clientApp.Start (Seconds (1.0));
           clientApp.Stop (Seconds (simulationTime + 1));
         }
@@ -522,28 +514,25 @@ int main (int argc, char *argv[])
         {
           //TCP flow
           uint16_t port = 50000;
-          Address apLocalAddress (InetSocketAddress (Ipv4Address::GetAny (), port));
-          PacketSinkHelper packetSinkHelper ("ns3::TcpSocketFactory", apLocalAddress);
-          sinkApp = packetSinkHelper.Install (wifiStaNode.Get (0));
+          Address localAddress (InetSocketAddress (Ipv4Address::GetAny (), port));
+          PacketSinkHelper packetSinkHelper ("ns3::TcpSocketFactory", localAddress);
+          serverApp = packetSinkHelper.Install (wifiStaNode.Get (0));
+          serverApp.Start (Seconds (0.0));
+          serverApp.Stop (Seconds (simulationTime + 1));
 
-          sinkApp.Start (Seconds (0.0));
-          sinkApp.Stop (Seconds (simulationTime + 1));
-
-          OnOffHelper onoff ("ns3::TcpSocketFactory",Ipv4Address::GetAny ());
+          OnOffHelper onoff ("ns3::TcpSocketFactory", Ipv4Address::GetAny ());
           onoff.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
           onoff.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
           onoff.SetAttribute ("PacketSize", UintegerValue (payloadSize));
           onoff.SetAttribute ("DataRate", DataRateValue (1000000000)); //bit/s
-          ApplicationContainer apps;
-
           AddressValue remoteAddress (InetSocketAddress (staNodeInterface.GetAddress (0), port));
           onoff.SetAttribute ("Remote", remoteAddress);
-          apps.Add (onoff.Install (wifiApNode.Get (0)));
-          apps.Start (Seconds (1.0));
-          apps.Stop (Seconds (simulationTime + 1));
+          ApplicationContainer clientApp = onoff.Install (wifiApNode.Get (0));
+          clientApp.Start (Seconds (1.0));
+          clientApp.Stop (Seconds (simulationTime + 1));
         }
-      // Configure waveform generator
 
+      // Configure waveform generator
       Ptr<SpectrumValue> wgPsd = Create<SpectrumValue> (SpectrumModelWifi5180MHz);
       *wgPsd = waveformPower / (100 * 180000);
       NS_LOG_INFO ("wgPsd : " << *wgPsd << " integrated power: " << Integral (*(GetPointer (wgPsd))));
@@ -573,8 +562,6 @@ int main (int argc, char *argv[])
       g_signalDbmAvg = 0;
       g_noiseDbmAvg = 0;
       g_samples = 0;
-      g_channelNumber = 0;
-      g_rate = 0;
 
       // Make sure we are tuned to 5180 MHz; if not, the example will
       // not work properly
@@ -601,7 +588,7 @@ int main (int argc, char *argv[])
       else
         {
           //TCP
-          uint32_t totalBytesRx = DynamicCast<PacketSink> (sinkApp.Get (0))->GetTotalRx ();
+          uint32_t totalBytesRx = DynamicCast<PacketSink> (serverApp.Get (0))->GetTotalRx ();
           totalPacketsThrough = totalBytesRx / tcpPacketSize;
           throughput = totalBytesRx * 8 / (simulationTime * 1000000.0); //Mbit/s
         }

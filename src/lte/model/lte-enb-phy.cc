@@ -74,18 +74,34 @@ static const Time DL_CTRL_DELAY_FROM_SUBFRAME_START = NanoSeconds (214286);
 class EnbMemberLteEnbPhySapProvider : public LteEnbPhySapProvider
 {
 public:
+  /**
+   * Constructor
+   *
+   * \param phy the ENB Phy
+   */
   EnbMemberLteEnbPhySapProvider (LteEnbPhy* phy);
 
   // inherited from LteEnbPhySapProvider
   virtual void SendMacPdu (Ptr<Packet> p);
-  virtual void SetBandwidth (uint8_t ulBandwidth, uint8_t dlBandwidth);
-  virtual void SetCellId (uint16_t cellId);
   virtual void SendLteControlMessage (Ptr<LteControlMessage> msg);
   virtual uint8_t GetMacChTtiDelay ();
+  /**
+   * Set bandwidth function
+   *
+   * \param ulBandwidth the UL bandwidth
+   * \param dlBandwidth the DL bandwidth
+   */
+  virtual void SetBandwidth (uint8_t ulBandwidth, uint8_t dlBandwidth);
+  /**
+   * Set Cell ID function
+   *
+   * \param cellId the cell ID
+   */
+  virtual void SetCellId (uint16_t cellId);
 
 
 private:
-  LteEnbPhy* m_phy;
+  LteEnbPhy* m_phy; ///< the ENB Phy
 };
 
 EnbMemberLteEnbPhySapProvider::EnbMemberLteEnbPhySapProvider (LteEnbPhy* phy) : m_phy (phy)
@@ -704,6 +720,7 @@ LteEnbPhy::StartSubFrame (void)
                   params.m_size = dci->GetDci ().m_tbsSize.at (i);
                   params.m_rv = dci->GetDci ().m_rv.at (i);
                   params.m_ndi = dci->GetDci ().m_ndi.at (i);
+                  params.m_ccId = m_componentCarrierId;
                   m_dlPhyTransmission (params);
                 }
 
@@ -908,7 +925,7 @@ LteEnbPhy::DoSetBandwidth (uint8_t ulBandwidth, uint8_t dlBandwidth)
 }
 
 void 
-LteEnbPhy::DoSetEarfcn (uint16_t ulEarfcn, uint16_t dlEarfcn)
+LteEnbPhy::DoSetEarfcn (uint32_t ulEarfcn, uint32_t dlEarfcn)
 {
   NS_LOG_FUNCTION (this << ulEarfcn << dlEarfcn);
   m_ulEarfcn = ulEarfcn;
@@ -1012,7 +1029,7 @@ LteEnbPhy::CreateSrsReport (uint16_t rnti, double srs)
   (*it).second++;
   if ((*it).second == m_srsSamplePeriod)
     {
-      m_reportUeSinr (m_cellId, rnti, srs);
+      m_reportUeSinr (m_cellId, rnti, srs, (uint16_t) m_componentCarrierId);
       (*it).second = 0;
     }
 }

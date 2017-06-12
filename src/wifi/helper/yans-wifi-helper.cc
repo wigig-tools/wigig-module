@@ -20,18 +20,13 @@
  *          Hany Assasa <hany.assasa@gmail.com>
  */
 
-#include "ns3/trace-helper.h"
 #include "yans-wifi-helper.h"
-#include "ns3/error-rate-model.h"
 #include "ns3/propagation-loss-model.h"
 #include "ns3/propagation-delay-model.h"
-#include "ns3/yans-wifi-channel.h"
 #include "ns3/yans-wifi-phy.h"
-#include "ns3/wifi-net-device.h"
-#include "ns3/multi-band-net-device.h"
 #include "ns3/names.h"
 #include "ns3/log.h"
-#include "ns3/abort.h"
+#include "ns3/multi-band-net-device.h"
 
 namespace ns3 {
 
@@ -150,7 +145,8 @@ YansWifiChannelHelper::AssignStreams (Ptr<YansWifiChannel> c, int64_t stream)
 }
 
 YansWifiPhyHelper::YansWifiPhyHelper ()
-  : m_channel (0)
+  : m_channel (0),
+    m_enableAntenna (false)
 {
   m_phy.SetTypeId ("ns3::YansWifiPhy");
 }

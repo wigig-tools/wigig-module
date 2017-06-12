@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef EXT_HEADERS_H
@@ -365,6 +365,12 @@ public:
   */
   void SetDMGParameters (ExtDMGParameters &parameters);
   /**
+  * Set DMG Cluster Control Field
+  *
+  * \param The DMG Cluster Control Field.
+  */
+  void SetClusterControlField (ExtDMGClusteringControlField &cluster);
+  /**
   * Set the Service Set Identifier (SSID)
   *
   * \param ssid SSID.
@@ -408,6 +414,12 @@ public:
   */
   ExtDMGParameters GetDMGParameters (void) const;
   /**
+  * Get DMG Cluster Control Field
+  *
+  * \return The DMG Cluster Control Field.
+  */
+  ExtDMGClusteringControlField GetClusterControlField (void) const;
+  /**
    * Return the Service Set Identifier (SSID).
    *
    * \return SSID
@@ -428,6 +440,7 @@ private:
   uint64_t m_beaconInterval;                              //!< Beacon Interval.
   ExtDMGBeaconIntervalCtrlField m_beaconIntervalCtrl;     //!< Beacon Interval Control.
   ExtDMGParameters m_dmgParameters;                       //!< DMG Parameters.
+  ExtDMGClusteringControlField m_cluster;                 //!< Cluster Control Field.
   Ssid m_ssid;                                            //!< Service set ID (SSID)
 
 };

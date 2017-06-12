@@ -25,12 +25,19 @@ typedef enum {
   RELAY_LINK = 1
 } TransmissionLink;
 
+typedef enum {
+  SOURCE_STA = 0,
+  DESTINATION_STA = 1,
+  RELAY_STA = 2
+} STA_ROLE;
+
 typedef struct {
   bool relayForwardingActivated;              //!< Flag to indicate if a relay link has been aactivated.
   bool relayLinkEstablished;                  //!< Flag to indicate if a relay link has been established.
   bool rdsDuplexMode;                         //!< The duplex mode of the RDS.
   bool waitingDestinationRedsReports;         //!< Flag to indicate that we are waiting for the destination REDS report.
   bool switchTransmissionLink;                //!< Flag to indicate that we want to change the current transmission link.
+  bool tearDownRelayLink;
 
   uint8_t relayLinkChangeInterval;            //!< Relay Link Change Interval reported by the source REDS (MicroSeconds).
   uint8_t relayDataSensingTime;               //!< Relay Data Sensing Time reported by the source REDS (MicroSeconds).
@@ -63,8 +70,9 @@ typedef SERVICE_PERIOD_PAIR REDS_PAIR;                        //!< Typedef to id
 
 #define dot11RSSRetryLimit              8
 #define dot11RSSBackoff                 8
-#define aMaxABFTAccessPeriod            2   //!< Typedef to identify source and destination REDS protected by an RDS.
+#define aMaxABFTAccessPeriod            2
 
+typedef Callback<DynamicAllocationInfoField, Mac48Address, BF_Control_Field &> ServicePeriodRequestCallback;
 
 /**
  * \ingroup wifi
@@ -138,15 +146,12 @@ public:
    */
   void StartRlsProcedure (void);
   /**
-   * Tear down relay operation by either RDS or source REDS.
-   * \param to The address of the REDS or RDS.
-   * \param destinationAddress The address of the REDS.
+   * Tear down relay operation by either the RDS or the source REDS.
    * \param sourceAid The AID of the source REDS.
    * \param destinationAid The AID of the destination REDS.
    * \param relayAid The AID of the RDS.
    */
-  void TeardownRelay (Mac48Address to, Mac48Address destinationAddress,
-                      uint16_t sourceAid, uint16_t destinationAid, uint16_t relayAid);
+  void TeardownRelay (uint16_t sourceAid, uint16_t destinationAid, uint16_t relayAid);
   /**
    * Send Channel Measurement Request to specific DMG STA.
    * \param to The MAC address of the destination STA.
@@ -154,7 +159,7 @@ public:
    */
   void SendChannelMeasurementRequest (Mac48Address to, uint8_t token);
   /**
-   * RegisterRelaySelectorFunction
+   * Register relay selector function for custom relay selection.
    * \param callback
    */
   void RegisterRelaySelectorFunction (ChannelMeasurementCallback callback);
@@ -172,10 +177,25 @@ public:
   /**
    * Create or modify DMG allocation for the transmission of frames between DMG STA
    * that are members of a PBSS or a DMG infrastructure.
-   * \param to The MAC address of the peer station.
    * \param elem The DMG TSPEC information element.
    */
-  void CreateAllocation (Mac48Address to, DmgTspecElement &elem);
+  void CreateAllocation (DmgTspecElement elem);
+  /**
+   * Delete existing DMG Allocation.
+   * \param reason The reason for deleting the DMG Allocation.
+   * \param allocationInfo Information about the allocation to be deleted.
+   */
+  void DeleteAllocation (uint16_t reason, DmgAllocationInfo &allocationInfo);
+  /**
+   * Register service period request function for custom resource request.
+   * \param callback
+   */
+  void RegisterSPRequestFunction (ServicePeriodRequestCallback callback);
+  /**
+   * Communicate in service period (temporary solution for Dynamic Allocation).
+   * \param peerAddress The MAC address of the peer station.
+   */
+  void CommunicateInServicePeriod (Mac48Address peerAddress);
 
 protected:
   friend class MultiBandNetDevice;
@@ -191,8 +211,15 @@ protected:
   void BrpSetupCompleted (Mac48Address address);
   virtual void NotifyBrpPhaseCompleted (void);
 
+  void StartChannelQualityMeasurement (Ptr<DirectionalChannelQualityRequestElement> element);
+  void ReportChannelQualityMeasurement (TimeBlockMeasurementList list);
   /**
-   * Forward an Action Frame to the specified destination
+   * Send Directional Channel Quality Report.
+   * \param element The Directional Channel Quality Report Information Element.
+   */
+  void SendDirectionalChannelQualityReport (Ptr<DirectionalChannelQualityReportElement> element);
+  /**
+   * Forward an Action Frame to the specified destination.
    * \param to
    * \param actionHdr
    * \param actionBody
@@ -251,6 +278,11 @@ protected:
    */
   void SetState (enum MacState value);
   /**
+   * Get STA Availability Element.
+   * \return Pointer to the STA availabiltiy element.
+   */
+  Ptr<StaAvailabilityElement> GetStaAvailabilityElement (void) const;
+  /**
    * Forward data frame to another DMG STA. This function is called during HD-DF relay operation ode.
    * \param hdr The MAC Header.
    * \param packet
@@ -280,6 +312,18 @@ protected:
    */
   void SendChannelMeasurementReport (Mac48Address to, uint8_t token, ChannelMeasurementInfoList &measurementList);
   /**
+   * Schedule all the allocation blocks.
+   * \param id The allocation identifier.
+   * \param role The role of the STA in the relay period.
+   */
+  void ScheduleAllocationBlocks (AllocationField &field, STA_ROLE role);
+  /**
+   * Schedule an allocation block protected by relay operation mode.
+   * \param id The allocation identifier.
+   * \param role The role of the STA in the relay period.
+   */
+  void InitiateAllocationPeriod (AllocationID id, uint8_t srcAid, uint8_t dstAid, Time spLength, STA_ROLE role);
+  /**
    * Initiate and schedule periods related to relay operation.
    * \param info Information regarding relay link.
    */
@@ -308,9 +352,34 @@ protected:
    */
   void StartFullDuplexRelay (AllocationID allocationID, Time length, uint8_t peerAid, Mac48Address peerAddress, bool isSource);
   /**
+   * Start Half Duplex Relay operation.
+   * \param allocationID The ID of the current allocation.
+   * \param servicePeriodLength The length of the service period for which we are using the relay.
+   * \param involved Flag to indicate if we are involved in relay forwarding.
+   */
+  void StartHalfDuplexRelay (AllocationID allocationID, Time servicePeriodLength, bool involved);
+
+  void StartRelayFirstPeriodAfterSwitching (void);
+  /**
+   * Start the First Period related to the HD-DF Relay operation mode.
+   */
+  void StartRelayFirstPeriod (void);
+  /**
+   * Start the Second Period related to the HD-DF Relay operation mode.
+   */
+  void StartRelaySecondPeriod (void);
+  /**
    * Suspend transmission in the current period related to the HD-DF Relay operation mode.
    */
   void SuspendRelayPeriod (void);
+  /**
+   * Relay First Period Timeout.
+   */
+  void RelayFirstPeriodTimeout (void);
+  /**
+   * Relay Second Period Timeout.
+   */
+  void RelaySecondPeriodTimeout (void);
   /**
    * MissedAck
    * \param hdr
@@ -328,6 +397,19 @@ protected:
    * Relay Operation Timeout.
    */
   void RelayOperationTimeout (void);
+  /**
+   * The packet we sent was successfully received by the receiver
+   * (i.e. we received an ACK from the receiver).  If the packet
+   * was an association response to the receiver, we record that
+   * the receiver is now associated with us.
+   *
+   * \param hdr the header of the packet that we successfully sent
+   */
+  virtual void TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr);
+  /**
+   *BeamLink Maintenance Timeout.
+   */
+  virtual void BeamLinkMaintenanceTimeout (void);
 
 private:
   /**
@@ -402,6 +484,14 @@ private:
    */
   Ptr<DmgCapabilities> GetDmgCapabilities (void) const;
   /**
+   * Send Service Period Request (SPR) Frame.
+   * \param to The MAC address of the PCP/AP.
+   * \param duration The duration till the end of the polling period.
+   * \param info The dynamic allocation information to be requested.
+   * \param bfField The beamforming training field.
+   */
+  void SendSprFrame (Mac48Address to, Time duration, DynamicAllocationInfoField &info, BF_Control_Field &bfField);
+  /**
    * Start Initiator Sector Sweep (ISS) Phase.
    * \param stationAddress The address of the station.
    * \param isTxss Indicate whether the RSS is TxSS or RxSS.
@@ -469,6 +559,11 @@ private:
    * \param receiver The MAC address of the peer DMG STA.
    */
   void SendSswAckFrame (Mac48Address receiver);
+  /**
+   * Record Beamformed Link Maintenance Value
+   * \param field The BF Link Maintenance Field in SSW-FBCK/ACK.
+   */
+  void RecordBeamformedLinkMaintenanceValue (BF_Link_Maintenance_Field field);
 
 private:
   Time m_probeRequestTimeout;
@@ -479,8 +574,7 @@ private:
   Time m_beaconWatchdogEnd;                     //! Watch dog timer end time/
   uint32_t m_maxLostBeacons;                    //! Maximum number of beacons we are allowed to miss.
   bool m_activeProbing;                         //! Flag to indicate whether to perform active probing.
-
-  uint16_t m_aid;   /* AID of the STA */
+  uint16_t m_aid;                               //! AID of the STA.
 
   TracedCallback<Mac48Address> m_assocLogger;
   TracedCallback<Mac48Address> m_deAssocLogger;
@@ -500,7 +594,7 @@ private:
   EventId m_sswFbckTimeout;                     //!< Timeout Event for receiving SSW FBCK Frame.
   Ptr<UniformRandomVariable> a_bftSlot;         //!< Random variable for A-BFT slot.
   bool    m_isIssInitiator;                     //!< Flag to indicate that we are ISS.
-  EventId m_rssEvent;                           //!< Event related to scheduling
+  EventId m_rssEvent;                           //!< Event related to scheduling RSS.
   uint8_t m_remainingSlotsPerABFT;              //!< Remaining Slots in the current A-BFT.
   uint8_t m_slotOffset;                         //!< Variable used to print the correct slot selected.
   Time m_sswFbckDuration;                       //!< The duration in the SSW-FBCK Field.
@@ -510,18 +604,23 @@ private:
   uint32_t m_rssBackoffRemaining;               //!< Remaining BTIs for the RSS in A-BFT.
   uint32_t m_rssBackoffLimit;                   //!< Maximum RSS Backoff value.
   Ptr<UniformRandomVariable> m_rssBackoffVariable;//!< Random variable for the RSS Backoff value.
+  bool m_staAvailabilityElement;                //!< Flag to indicate whether we include STA Availability element in DMG Beacon.
 
   /* DMG Relay Support Variables */
   bool m_relayMode;                             //!< Flag to indicate if we are in relay mode (For RDS).
   bool m_rdsDuplexMode;                         //!< The duplex mode of the RDS.
   uint8_t m_relayLinkChangeInterval;            //!< Relay Link Change Interval reported by the source REDS (MicroSeconds).
   uint8_t m_relayDataSensingTime;               //!< Relay Data Sensing Time reported by the source REDS (MicroSeconds).
+  uint16_t m_relayFirstPeriod;                  //!< Relay First Period reported by the source REDS (MicroSeconds).
+  uint16_t m_relaySecondPeriod;                 //!< Relay Second Period reported by the source REDS (MicroSeconds).
 
   TracedCallback<Mac48Address> m_channelReportReceived;  //!< Trace callback for Channel Measurement completion.
   EventId m_linkChangeInterval;                 //!< Event ID for the link change interval.
+  EventId m_firstPeriod;                        //!< Event ID for the first period.
+  EventId m_secondPeriod;                       //!< Event ID for the second period.
   bool m_relayDataExchanged;                    //!< Flag to indicate a data has been exchanged during the relay operation mode.
   bool m_relayReceivedData;                     //!< Flag to indicate if the RDS has received frame in the HD-DF operation mode.
-  bool m_periodProtected;
+  bool m_periodProtected;                       //!< Flag to indicate if the current SP allocation is protected by relay operation.
 
   ChannelMeasurementInfoList m_channelMeasurementList;    //!< The channel measurement list between the source REDS and the RDS.
   ChannelMeasurementCallback m_channelMeasurementCallback;
@@ -540,6 +639,11 @@ private:
   typedef void (* TransmissionLinkChangedCallback)(Mac48Address address, TransmissionLink link);
   TracedCallback<Mac48Address, TransmissionLink> m_transmissionLinkChanged;
 
+  /* Dynamic Allocation of Service Period */
+  bool m_pollingPhase;                            //!< Flag to indicate if we participate in the polling phase.
+  SERVICE_PERIOD_PAIR m_currentServicePeriod;
+  ServicePeriodRequestCallback m_servicePeriodRequestCallback;
+
   /* Data Forwarding Table */
   typedef struct {
     Mac48Address nextHopAddress;
@@ -548,7 +652,12 @@ private:
 
   typedef std::map<Mac48Address, AccessPeriodInformation> DataForwardingTable;
   typedef DataForwardingTable::iterator DataForwardingTableIterator;
+  typedef DataForwardingTable::const_iterator DataForwardingTableCI;
   DataForwardingTable m_dataForwardingTable;
+
+  /* Spatial Sharing and Interference Mitigation */
+  bool m_supportSpsh;                           //!< Flag to indicate whether we support Spatial Sharing and Interference Mitigation.
+  Ptr<DirectionalChannelQualityRequestElement> m_reqElem;
 
 };
 

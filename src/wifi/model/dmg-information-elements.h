@@ -57,6 +57,200 @@ std::istream &operator >> (std::istream &is, RequestElement &element);
 
 ATTRIBUTE_HELPER_HEADER (RequestElement)
 
+typedef enum {
+  BASIC_REQUEST = 0,
+  CCA_REQEUST,
+  RPI_REQUEST,
+  CHANNEL_LOAD_REQUEST,
+  NOISE_HISTOGRAM_LOAD_REQUEST,
+  BEACON_REQUEST,
+  FRAME_REQUEST,
+  STA_STATISTICS_REQUEST,
+  LCI_REQUEST,
+  TRANSMIT_STREAM_REQUEST,
+  MULTICAST_DIAGNOSTIC_REQUEST,
+  LOCATION_CIVIC_REQUEST,
+  LOCATION_IDENTIFIER_REQUEST,
+  DIRECTIONAL_CHANNEL_QUALITY_REQUEST,
+  DIRECTIONAL_MEASUREMENT_REQUEST,
+  DIRECTIONAL_STATISTICS_REQUEST,
+  MEASUREMENT_PAUSE_REQUEST = 255,
+} MeasurementType;
+
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11 Measurement Request Information Element (8.4.2.23)
+ */
+class MeasurementRequestElement : public WifiInformationElement
+{
+public:
+  MeasurementRequestElement ();
+
+  WifiInformationElementId ElementId () const;
+  virtual uint8_t GetInformationFieldSize () const;
+  virtual void SerializeInformationField (Buffer::Iterator start) const = 0;
+  virtual uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length) = 0;
+
+  void SetMeasurementToken (uint8_t token);
+  void SetMeasurementRequestMode (bool parallel, bool enable, bool request, bool report, bool durationManadatory);
+  void SetMeasurementType (MeasurementType type);
+
+  uint8_t GetMeasurementToken (void) const;
+  bool IsParallelMode (void) const;
+  bool IsEnableMode (void) const;
+  bool IsRequestMode (void) const;
+  bool IsReportMode (void) const;
+  bool IsDurationMandatory (void) const;
+  MeasurementType GetMeasurementType (void) const;
+
+protected:
+  uint8_t m_measurementToken;
+  uint8_t m_measurementRequestMode;
+  MeasurementType m_measurementType;
+
+};
+
+typedef enum {
+  ANIPI = 0,
+  RSNI = 1,
+} MeasurementMethod;
+
+/**
+ * \ingroup wifi
+ *
+ * Directional Channel Quality Request (8.4.2.23.16)
+ */
+class DirectionalChannelQualityRequestElement : public MeasurementRequestElement
+{
+public:
+  DirectionalChannelQualityRequestElement ();
+
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  void SetOperatingClass (uint8_t oclass);
+  void SetChannelNumber (uint8_t number);
+  void SetAid (uint8_t aid);
+  void SetReservedField (uint8_t field);
+  void SetMeasurementMethod (MeasurementMethod method);
+  void SetMeasurementStartTime (uint64_t startTime);
+  void SetMeasurementDuration (uint16_t duration);
+  void SetNumberOfTimeBlocks (uint8_t blocks);
+
+  uint8_t GetOperatingClass (void) const;
+  uint8_t GetChannelNumber (void) const;
+  uint8_t GetAid (void) const;
+  uint8_t GetReservedField (void) const;
+  MeasurementMethod GetMeasurementMethod (void) const;
+  uint64_t GetMeasurementStartTime (void) const;
+  uint16_t GetMeasurementDuration (void) const;
+  uint8_t GetNumberOfTimeBlocks (void) const;
+
+private:
+  uint8_t m_operatingClass;
+  uint8_t m_channelNumber;
+  uint8_t m_aid;
+  uint8_t m_reserved;
+  MeasurementMethod m_measurementMethod;
+  uint64_t m_measurementStartTime;
+  uint16_t m_measurementDuration;
+  uint8_t m_numberOfTimeBlocks;
+
+};
+
+std::ostream &operator << (std::ostream &os, const DirectionalChannelQualityRequestElement &element);
+std::istream &operator >> (std::istream &is, DirectionalChannelQualityRequestElement &element);
+
+ATTRIBUTE_HELPER_HEADER (DirectionalChannelQualityRequestElement)
+
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11 Measurement Report Information Element (8.4.2.24)
+ */
+class MeasurementReportElement : public WifiInformationElement
+{
+public:
+  MeasurementReportElement ();
+
+  WifiInformationElementId ElementId () const;
+  virtual uint8_t GetInformationFieldSize () const;
+
+  void SetMeasurementToken (uint8_t token);
+  void SetMeasurementReportMode (bool late, bool incapable, bool refused);
+  void SetMeasurementType (MeasurementType type);
+
+  uint8_t GetMeasurementToken (void) const;
+  bool IsLateMode (void) const;
+  bool IsIncapableMode (void) const;
+  bool IsRefusedMode (void) const;
+  MeasurementType GetMeasurementType (void) const;
+
+protected:
+  uint8_t m_measurementToken;
+  uint8_t m_measurementReportMode;
+  MeasurementType m_measurementType;
+
+};
+
+typedef uint8_t TimeBlockMeasurement;
+typedef std::list<TimeBlockMeasurement> TimeBlockMeasurementList;
+typedef TimeBlockMeasurementList::const_iterator TimeBlockMeasurementListCI;
+
+/**
+ * \ingroup wifi
+ *
+ * Directional Channel Quality Request (8.4.2.24.15)
+ */
+class DirectionalChannelQualityReportElement : public MeasurementReportElement
+{
+public:
+  DirectionalChannelQualityReportElement ();
+
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  void SetOperatingClass (uint8_t oclass);
+  void SetChannelNumber (uint8_t number);
+  void SetAid (uint8_t aid);
+  void SetReservedField (uint8_t field);
+  void SetMeasurementMethod (uint8_t method);
+  void SetMeasurementStartTime (uint64_t startTime);
+  void SetMeasurementDuration (uint16_t duration);
+  void SetNumberOfTimeBlocks (uint8_t blocks);
+  void AddTimeBlockMeasurement (TimeBlockMeasurement measurement);
+
+  uint8_t GetOperatingClass (void) const;
+  uint8_t GetChannelNumber (void) const;
+  uint8_t GetAid (void) const;
+  uint8_t GetReservedField (void) const;
+  uint8_t GetMeasurementMethod (void) const;
+  uint64_t GetMeasurementStartTime (void) const;
+  uint16_t GetMeasurementDuration (void) const;
+  uint8_t GetNumberOfTimeBlocks (void) const;
+  TimeBlockMeasurementList GetTimeBlockMeasurementList (void) const;
+
+private:
+  uint8_t m_operatingClass;
+  uint8_t m_channelNumber;
+  uint8_t m_aid;
+  uint8_t m_reserved;
+  uint8_t m_measurementMethod;
+  uint64_t m_measurementStartTime;
+  uint16_t m_measurementDuration;
+  uint8_t m_numberOfTimeBlocks;
+  TimeBlockMeasurementList m_measurementList;
+
+};
+
+std::ostream &operator << (std::ostream &os, const DirectionalChannelQualityReportElement &element);
+std::istream &operator >> (std::istream &is, DirectionalChannelQualityReportElement &element);
+
+ATTRIBUTE_HELPER_HEADER (DirectionalChannelQualityReportElement)
+
 /**
  * \ingroup wifi
  *
@@ -126,9 +320,6 @@ public:
 
   enum TimeoutIntervalType GetTimeoutIntervalType (void) const;
   uint32_t GetTimeoutIntervalValue (void) const;
-
-  Buffer::Iterator Serialize (Buffer::Iterator start) const;
-  uint16_t GetSerializedSize () const;
 
 private:
   uint8_t m_timeoutIntervalType;
@@ -793,7 +984,12 @@ public:
 
   void SetDmgAllocationInfo (DmgAllocationInfo &info);
   void SetBfControl (BF_Control_Field &ctrl);
-  void SetAllocationPeriod (uint16_t period);
+  /**
+   * Set the allocation period as a fraction or multiple of the beacon interval (BI).
+   * \param period The allocation period check table (Table 8-183k) in the 802.11ad standard.
+   * \param multiple Flag to indicate if the allocation period is multiple or fraction of BI.
+   */
+  void SetAllocationPeriod (uint16_t period, bool multiple);
   void SetMinimumAllocation (uint16_t min);
   void SetMaximumAllocation (uint16_t max);
   void SetMinimumDuration (uint16_t duration);
@@ -802,6 +998,7 @@ public:
   DmgAllocationInfo GetDmgAllocationInfo (void) const;
   BF_Control_Field GetBfControl (void) const;
   uint16_t GetAllocationPeriod (void) const;
+  bool IsAllocationPeriodMultipleBI (void) const;
   uint16_t GetMinimumAllocation (void) const;
   uint16_t GetMaximumAllocation (void) const;
   uint16_t GetMinimumDuration (void) const;
@@ -1438,6 +1635,112 @@ typedef enum {
 /**
  * \ingroup wifi
  *
+ * The IEEE 802.11ad Cluster Report Element 8.4.2.149
+ */
+class ClusterReportElement : public WifiInformationElement
+{
+public:
+  ClusterReportElement ();
+
+  WifiInformationElementId ElementId () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /** Cluster Report Control **/
+
+  /**
+   * The Cluster Request subfield is set to 1 to indicate that the STA is requesting the PCP/AP to start PCP/AP
+   * clustering (9.34). Otherwise, it is set to 0.
+   * \param request
+   */
+  void SetClusterRequest (bool request);
+  /**
+   * The Cluster Report subfield is set to 1 to indicate that this element contains a cluster report. If this subfield is
+   * set to 1, the Reported BSSID, Reference Timestamp and Clustering Control fields are present in this
+   * element. Otherwise, if the Cluster Report subfield is set to 0, none of the Reported BSSID, Reference
+   * Timestamp, Clustering Control, Extended Schedule Element, and TSCONST fields is present in this
+   * element.
+   * \param report
+   */
+  void SetClusterReport (bool report);
+  /**
+   * The Schedule Present subfield is valid only if the Cluster Report subfield is set to 1; otherwise, it is reserved.
+   * The Schedule present subfield is set to 1 to indicate that the Extended Schedule Element field is present in
+   * this element. Otherwise, the Extended Schedule Element field is not present in this element.
+   * \param present
+   */
+  void SetSchedulePresent (bool present);
+  void SetTsConstPresent (bool present);
+  void SetEcpacPolicyEnforced (bool enforced);
+  void SetEcpacPolicyPresent (bool present);
+
+  /**
+   * Set the BSSID of the DMG Beacon frame that triggered this report.
+   * \param bssid The BSSID of the DMG Beacon frame that triggered this report.
+   */
+  void SetReportedBssID (Mac48Address bssid);
+  /**
+   * The Reference Timestamp field contains the lower 4 octets of the TSF timer value sampled at the instant that
+   * the STA’s MAC received a DMG Beacon frame that triggered this report.
+   * \param timestamp
+   */
+  void SetReferenceTimestamp (uint32_t timestamp);
+  /**
+   * Set Clustering Control
+   * \param field Contains the Clustering Control received in the DMG Beacon that triggered this report.
+   */
+  void SetClusteringControl (ExtDMGClusteringControlField &field);
+
+  void SetEcpacPolicyElement ();
+  void SetExtendedScheduleElement (ExtendedScheduleElement &element);
+  /**
+   * \param constraint The Traffic Scheduling Constraint (TSCONST) field is defined in 8.4.2.136 and specifies
+   * periods of time with respect to the TBTT of the beacon interval of the BSS the STA participates where the STA
+   * experiences poor channel conditions, such as due to interference.
+   */
+  void AddTrafficSchedulingConstraint (ConstraintSubfield &constraint);
+
+  bool GetClusterRequest (void) const;
+  bool GetClusterReport (void) const;
+  bool GetSchedulePresent (void) const;
+  bool GetTsConstPresent (void) const;
+  bool GetEcpacPolicyEnforced (void) const;
+  bool GetEcpacPolicyPresent (void) const;
+
+  Mac48Address GetReportedBssID (void) const;
+  uint32_t GetReferenceTimestamp (void) const;
+  ExtDMGClusteringControlField GetClusteringControl (void) const;
+  void GetEcpacPolicyElement (void) const;
+  ExtendedScheduleElement GetExtendedScheduleElement (void) const;
+  uint8_t GetNumberOfContraints (void) const;
+  ConstraintList GetTrafficSchedulingConstraintList (void) const;
+
+private:
+  /** Cluster Report Control **/
+  bool m_clusterRequest;
+  bool m_clusterReport;
+  bool m_schedulePresent;
+  bool m_tsconstPresent;
+  bool m_ecpacPolicyEnforced;
+  bool m_ecpacPolicyPresent;
+
+  Mac48Address m_bssID;
+  uint32_t m_timestamp;
+  ExtDMGClusteringControlField m_clusteringControl;
+  ExtendedScheduleElement m_scheduleElement;
+  ConstraintList m_constraintList;
+
+};
+
+std::ostream &operator << (std::ostream &os, const ClusterReportElement &element);
+std::istream &operator >> (std::istream &is, ClusterReportElement &element);
+
+ATTRIBUTE_HELPER_HEADER (ClusterReportElement)
+
+/**
+ * \ingroup wifi
+ *
  * The IEEE 802.11ad Relay Capabilities Information Element 8.4.2.150
  *
  * A STA that intends to participate in relay operation (10.35) advertises its capabilities
@@ -1776,6 +2079,62 @@ std::ostream &operator << (std::ostream &os, const QuietPeriodResponseElement &e
 std::istream &operator >> (std::istream &is, QuietPeriodResponseElement &element);
 
 ATTRIBUTE_HELPER_HEADER (QuietPeriodResponseElement)
+
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11ad ECPAC Policy Element 8.4.2.157
+ */
+class EcpacPolicyElement : public WifiInformationElement
+{
+public:
+  EcpacPolicyElement ();
+
+  WifiInformationElementId ElementId () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /** ECPAC Policy Detail **/
+
+  void SetBhiEnforced (bool enforced);
+  void SetTxssCbapEnforced (bool enforced);
+  void SetProtectedPeriodEnforced (bool enforced);
+
+  void SetCCSRID (Mac48Address ccsrID);
+  void SetTimestampOffsetBitmap (uint32_t bitmap);
+  void SetTxssCbapOffset (uint16_t offset);
+  void SetTxssCbapDuration (uint8_t duration);
+  void SetTxssCbapMaxMem (uint8_t max);
+
+  bool GetBhiEnforced (void) const;
+  bool GetTxssCbapEnforced (void) const;
+  bool GetProtectedPeriodEnforced (void) const;
+
+  Mac48Address GetCCSRID (void) const;
+  uint32_t GetTimestampOffsetBitmap (void) const;
+  uint16_t GetTxssCbapOffset (void) const;
+  uint8_t GetTxssCbapDuration (void) const;
+  uint8_t GetTxssCbapMaxMem (void) const;
+
+private:
+  /** ECPAC Policy Detail **/
+  bool m_bhiEnforced;
+  bool m_txssCbapEnforced;
+  bool m_protectedPeriodEnforced;
+
+  Mac48Address m_ccsrID;
+  uint32_t m_timestampOffsetBitmap;
+  uint16_t m_txssCbapOffset ;
+  uint8_t m_txssCbapDuration;
+  uint8_t m_txssCbapMaxMem;
+
+};
+
+std::ostream &operator << (std::ostream &os, const EcpacPolicyElement &element);
+std::istream &operator >> (std::istream &is, EcpacPolicyElement &element);
+
+ATTRIBUTE_HELPER_HEADER (EcpacPolicyElement)
 
 } //namespace ns3
 

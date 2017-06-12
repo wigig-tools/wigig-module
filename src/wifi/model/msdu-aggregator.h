@@ -21,17 +21,13 @@
 #ifndef MSDU_AGGREGATOR_H
 #define MSDU_AGGREGATOR_H
 
-#include "ns3/ptr.h"
 #include "ns3/packet.h"
 #include "ns3/object.h"
 #include "amsdu-subframe-header.h"
-#include <list>
-#include "ns3/nstime.h"
 
 namespace ns3 {
 
 class WifiMacHeader;
-class MacLow;
 
 /**
  * \brief Abstract class that concrete msdu aggregators have to implement
@@ -40,39 +36,52 @@ class MacLow;
 class MsduAggregator : public Object
 {
 public:
+  /// DeaggregatedMsdus typedef
   typedef std::list<std::pair<Ptr<Packet>, AmsduSubframeHeader> > DeaggregatedMsdus;
+  /// DeaggregatedMsdusCI typedef
   typedef std::list<std::pair<Ptr<Packet>, AmsduSubframeHeader> >::const_iterator DeaggregatedMsdusCI;
 
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
   static TypeId GetTypeId (void);
 
+  /**
+   * Sets the maximum A-MSDU size in bytes.
+   * Value 0 means that MSDU aggregation is disabled.
+   *
+   * \param maxSize the maximum A-MSDU size in bytes.
+   */
   virtual void SetMaxAmsduSize (uint32_t maxSize) = 0;
+  /**
+   * Returns the maximum A-MSDU size in bytes.
+   * Value 0 means that MSDU aggregation is disabled.
+   *
+   * \return the maximum A-MSDU size in bytes.
+   */
   virtual uint32_t GetMaxAmsduSize (void) const = 0;
 
-  /* Adds <i>packet</i> to <i>aggregatedPacket</i>. In concrete aggregator's implementation is
+  /**
+   * Adds <i>packet</i> to <i>aggregatedPacket</i>. In concrete aggregator's implementation is
    * specified how and if <i>packet</i> can be added to <i>aggregatedPacket</i>. If <i>packet</i>
    * can be added returns true, false otherwise.
+   *
+   * \param packet the packet.
+   * \param aggregatedPacket the aggregated packet.
+   * \param src the source address.
+   * \param dest the destination address
+   * \return true if successful.
    */
   virtual bool Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket,
-                          Mac48Address src, Mac48Address dest) = 0;
+                          Mac48Address src, Mac48Address dest) const = 0;
 
-  /* Adds <i>packet</i> to <i>aggregatedPacket</i>. In concrete aggregator's implementation is
-   * specified how and if <i>packet</i> can be added to <i>aggregatedPacket</i>. If <i>packet</i>
-   * can be added returns true, false otherwise.
-   */
-  virtual bool Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket, WifiMacHeader &hdr,
-                          Mac48Address src, Mac48Address dest, Ptr<MacLow> maclow, Time duration) = 0;
-
-  static DeaggregatedMsdus Deaggregate (Ptr<Packet> aggregatedPacket);
   /**
-   * \param packetSize size of the packet we want to insert into <i>aggregatedPacket</i>.
-   * \param aggregatedPacket packet that will contain the packet of size <i>packetSize</i>, if aggregation is possible.
    *
-   * \return true if the packet of size <i>packetSize</i> can be aggregated to <i>aggregatedPacket</i>,
-   *         false otherwise.
-   *
-   * This method is used to determine if a packet could be aggregated to an A-MPDU without exceeding the maximum packet size.
+   * \param aggregatedPacket the aggregated packet.
+   * \returns DeaggregatedMsdus.
    */
-  virtual bool CanBeAggregated (uint32_t packetSize, Ptr<Packet> aggregatedPacket) = 0;
+  static DeaggregatedMsdus Deaggregate (Ptr<Packet> aggregatedPacket);
 };
 
 } //namespace ns3

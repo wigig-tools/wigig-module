@@ -11,14 +11,24 @@
 #include "common-functions.h"
 
 /**
- * This script is used to evaluate different options to control IEEE 802.11ad Beacon Interval.
- * Network topology is simple and consists of One Access Point + One Station. Each station has one antenna array with
- * eight virutal sectors to cover 360 in the 2D Domain. The purpose of the script is to generate different versions
- * of beacon interval.
  *
- * To run the script type the following commands:
+ * Simulation Objective:
+ * This script is used to evaluate various options to control IEEE 802.11ad Beacon Interval.
+ *
+ * Network Topology:
+ * Network topology is simple and consists of One Access Point + One Station. Each station has one antenna array with
+ * eight virutal sectors to cover 360 in the 2D Domain.
+ *
+ *          DMG PCP/AP (0,0)                       DMG STA (+1,0)
+ *
+ * Running Simulation:
+ * To evaluate CSMA/CA channel access scheme:
  * ./waf --run "evaluate_beacon_interval --beaconInterval=102400 --nextBeacon=1 --beaconRandomization=true
  *  --btiDuration=400 --nextAbft=0 --atiPresent=false --simulationTime=10"
+ *
+ * Simulation Output:
+ * The simulation generates the following traces:
+ * 1. PCAP traces for each station.
  */
 
 NS_LOG_COMPONENT_DEFINE ("EvaluateBeaconInterval");
@@ -84,7 +94,7 @@ main(int argc, char *argv[])
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
-  wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (56.16e9));
+  wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** SETUP ALL NODES ****/
   YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
@@ -97,7 +107,7 @@ main(int argc, char *argv[])
   wifiPhy.Set ("TxGain", DoubleValue (0));
   wifiPhy.Set ("RxGain", DoubleValue (0));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (3));
+  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   /* Set the phy layer error model */
@@ -120,7 +130,7 @@ main(int argc, char *argv[])
   /**** Allocate a default DMG Wifi MAC ****/
   DmgWifiMacHelper wifiMac = DmgWifiMacHelper::Default ();
 
-  Ssid ssid = Ssid ("test802.11ad");
+  Ssid ssid = Ssid ("BTI_Test");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue (ssid),
                    "BeaconInterval", TimeValue (MicroSeconds (beaconInterval)),

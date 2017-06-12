@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/assert.h"
@@ -18,6 +18,7 @@
 #include "wifi-mac-queue.h"
 #include "wifi-mac-trailer.h"
 #include "wifi-mac.h"
+#include "dcf-state.h"
 
 #undef NS_LOG_APPEND_CONTEXT
 #define NS_LOG_APPEND_CONTEXT if (m_low != 0) { std::clog << "[mac=" << m_low->GetAddress () << "] "; }
@@ -26,123 +27,22 @@ namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("DmgAtiDca");
 
-class DmgAtiDca::Dcf : public DcfState
-{
-public:
-  Dcf (DmgAtiDca * txop)
-    : m_txop (txop)
-  {
-  }
-  virtual bool IsEdca (void) const
-  {
-    return false;
-  }
-private:
-  virtual void DoNotifyAccessGranted (void)
-  {
-    m_txop->NotifyAccessGranted ();
-  }
-  virtual void DoNotifyInternalCollision (void)
-  {
-    m_txop->NotifyInternalCollision ();
-  }
-  virtual void DoNotifyCollision (void)
-  {
-    m_txop->NotifyCollision ();
-  }
-  virtual void DoNotifyChannelSwitching (void)
-  {
-  }
-  virtual void DoNotifySleep (void)
-  {
-  }
-  virtual void DoNotifyWakeUp (void)
-  {
-  }
-
-  DmgAtiDca *m_txop;
-};
-
-
-/**
- * Listener for MacLow events. Forwards to DmgAtiDca.
- */
-class DmgAtiDca::TransmissionListener : public MacLowTransmissionListener
-{
-public:
-  /**
-   * Create a TransmissionListener for the given DmgAtiDca.
-   *
-   * \param txop
-   */
-  TransmissionListener (DmgAtiDca * txop)
-    : MacLowTransmissionListener (),
-      m_txop (txop)
-  {
-  }
-
-  virtual ~TransmissionListener ()
-  {
-  }
-
-  virtual void GotCts (double snr, WifiMode txMode)
-  {
-  }
-  virtual void MissedCts (void)
-  {
-  }
-  virtual void GotAck (double snr, WifiMode txMode)
-  {
-    m_txop->GotAck (snr, txMode);
-  }
-  virtual void MissedAck (void)
-  {
-    m_txop->MissedAck ();
-  }
-  virtual void StartNextFragment (void)
-  {
-  }
-  virtual void StartNext (void)
-  {
-  }
-  virtual void Cancel (void)
-  {
-    m_txop->Cancel ();
-  }
-  virtual void EndTxNoAck (void)
-  {
-    m_txop->EndTxNoAck ();
-  }
-
-private:
-  DmgAtiDca *m_txop;
-};
-
 NS_OBJECT_ENSURE_REGISTERED (DmgAtiDca);
 
 TypeId
 DmgAtiDca::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::DmgAtiDca")
-    .SetParent<ns3::Dcf> ()
+    .SetParent<ns3::DcaTxop> ()
     .SetGroupName ("Wifi")
     .AddConstructor<DmgAtiDca> ()
-    .AddAttribute ("Queue", "The WifiMacQueue object",
-                   PointerValue (),
-                   MakePointerAccessor (&DmgAtiDca::GetQueue),
-                   MakePointerChecker<WifiMacQueue> ())
   ;
   return tid;
 }
 
 DmgAtiDca::DmgAtiDca ()
-  : m_manager (0),
-    m_currentPacket (0)
 {
   NS_LOG_FUNCTION (this);
-  m_transmissionListener = new DmgAtiDca::TransmissionListener (this);
-  m_dcf = new DmgAtiDca::Dcf (this);
-  m_queue = CreateObject<WifiMacQueue> ();
   m_allowTransmission = false;
 }
 
@@ -155,111 +55,7 @@ void
 DmgAtiDca::DoDispose (void)
 {
   NS_LOG_FUNCTION (this);
-  m_queue = 0;
-  m_low = 0;
-  m_stationManager = 0;
-  delete m_transmissionListener;
-  delete m_dcf;
-  m_transmissionListener = 0;
-  m_dcf = 0;
-  m_txMiddle = 0;
-}
-
-void
-DmgAtiDca::SetManager (DcfManager *manager)
-{
-  NS_LOG_FUNCTION (this << manager);
-  m_manager = manager;
-  m_manager->Add (m_dcf);
-}
-
-void DmgAtiDca::SetTxMiddle (MacTxMiddle *txMiddle)
-{
-  m_txMiddle = txMiddle;
-}
-
-void
-DmgAtiDca::SetLow (Ptr<MacLow> low)
-{
-  NS_LOG_FUNCTION (this << low);
-  m_low = low;
-}
-
-void
-DmgAtiDca::SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> remoteManager)
-{
-  NS_LOG_FUNCTION (this << remoteManager);
-  m_stationManager = remoteManager;
-}
-
-void
-DmgAtiDca::SetTxOkCallback (TxPacketOk callback)
-{
-  NS_LOG_FUNCTION (this << &callback);
-  m_txOkCallback = callback;
-}
-
-void
-DmgAtiDca::SetTxOkNoAckCallback (TxOk callback)
-{
-  NS_LOG_FUNCTION (this << &callback);
-  m_txOkNoAckCallback = callback;
-}
-
-void
-DmgAtiDca::SetTxFailedCallback (TxFailed callback)
-{
-  NS_LOG_FUNCTION (this << &callback);
-  m_txFailedCallback = callback;
-}
-
-Ptr<WifiMacQueue >
-DmgAtiDca::GetQueue () const
-{
-  NS_LOG_FUNCTION (this);
-  return m_queue;
-}
-
-void
-DmgAtiDca::SetMinCw (uint32_t minCw)
-{
-  NS_LOG_FUNCTION (this << minCw);
-  m_dcf->SetCwMin (minCw);
-}
-
-void
-DmgAtiDca::SetMaxCw (uint32_t maxCw)
-{
-  NS_LOG_FUNCTION (this << maxCw);
-  m_dcf->SetCwMax (maxCw);
-}
-
-void
-DmgAtiDca::SetAifsn (uint32_t aifsn)
-{
-  NS_LOG_FUNCTION (this << aifsn);
-  m_dcf->SetAifsn (aifsn);
-}
-
-uint32_t
-DmgAtiDca::GetMinCw (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_dcf->GetCwMin ();
-}
-
-uint32_t
-DmgAtiDca::GetMaxCw (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_dcf->GetCwMax ();
-}
-
-uint32_t
-DmgAtiDca::GetAifsn (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_dcf->GetAifsn ();
+  DcaTxop::DoDispose ();
 }
 
 void
@@ -267,7 +63,7 @@ DmgAtiDca::Queue (Ptr<const Packet> packet, const WifiMacHeader &hdr)
 {
   NS_LOG_FUNCTION (this << packet << &hdr);
   m_stationManager->PrepareForQueue (hdr.GetAddr1 (), &hdr, packet);
-  m_queue->Enqueue (packet, hdr);
+  m_queue->Enqueue (Create<WifiMacQueueItem> (packet, hdr));
   StartAccessIfNeeded ();
 }
 
@@ -276,7 +72,7 @@ DmgAtiDca::RestartAccessIfNeeded (void)
 {
   NS_LOG_FUNCTION (this);
   if ((m_currentPacket != 0
-       || !m_queue->IsEmpty ())
+       || m_queue->HasPackets ())
       && !m_dcf->IsAccessRequested ()
       && m_allowTransmission)
     {
@@ -289,7 +85,7 @@ DmgAtiDca::StartAccessIfNeeded (void)
 {
   NS_LOG_FUNCTION (this);
   if (m_currentPacket == 0
-      && !m_queue->IsEmpty ()
+      && m_queue->HasPackets ()
       && !m_dcf->IsAccessRequested ()
       && m_allowTransmission)
     {
@@ -304,7 +100,6 @@ DmgAtiDca::InitiateAtiAccessPeriod (Time atiDuration)
   m_atiDuration = atiDuration;
   m_allowTransmission = true;
   m_transmissionStarted = Simulator::Now ();
-  m_queue->Empty ();
   Simulator::Schedule (atiDuration, &DmgAtiDca::DisableTransmission, this);
 }
 
@@ -323,18 +118,11 @@ DmgAtiDca::DisableTransmission (void)
   m_allowTransmission = false;
 }
 
-Ptr<MacLow>
-DmgAtiDca::Low (void)
-{
-  NS_LOG_FUNCTION (this);
-  return m_low;
-}
-
 void
 DmgAtiDca::DoInitialize ()
 {
   NS_LOG_FUNCTION (this);
-  ns3::Dcf::DoInitialize ();
+  DcaTxop::DoInitialize ();
 }
 
 bool
@@ -360,14 +148,17 @@ DmgAtiDca::NotifyAccessGranted (void)
 
   if (m_currentPacket == 0)
     {
-      if (m_queue->IsEmpty ())
+      if (!m_queue->HasPackets ())
         {
           NS_LOG_DEBUG ("queue empty");
           return;
         }
-      m_currentPacket = m_queue->Dequeue (&m_currentHdr);
+      Ptr<WifiMacQueueItem> item = m_queue->Dequeue ();
+      NS_ASSERT (item != 0);
+      m_currentPacket = item->GetPacket ();
+      m_currentHdr = item->GetHeader ();
       NS_ASSERT (m_currentPacket != 0);
-      uint16_t sequence = m_txMiddle->GetNextSequenceNumberfor (&m_currentHdr);
+      uint16_t sequence = m_txMiddle->GetNextSequenceNumberFor (&m_currentHdr);
       m_currentHdr.SetSequenceNumber (sequence);
       m_currentHdr.SetNoMoreFragments ();
       m_currentHdr.SetNoRetry ();
@@ -376,21 +167,20 @@ DmgAtiDca::NotifyAccessGranted (void)
                     ", seq=" << m_currentHdr.GetSequenceControl ());
     }
 
-  MacLowTransmissionParameters params;
-  params.SetAsBoundedTransmission ();
-  params.SetMaximumTransmissionDuration (m_remainingDuration);
-  params.DisableOverrideDurationId ();
-  params.DisableRts ();
-  params.DisableNextData ();
+  m_currentParams.SetAsBoundedTransmission ();
+  m_currentParams.SetMaximumTransmissionDuration (m_remainingDuration);
+  m_currentParams.DisableOverrideDurationId ();
+  m_currentParams.DisableRts ();
+  m_currentParams.DisableNextData ();
   if (m_currentHdr.IsCtl () || m_currentHdr.IsActionNoAck ())
     {
-      params.DisableAck ();
+      m_currentParams.DisableAck ();
     }
   else if (m_currentHdr.IsMgt () )
     {
-      params.EnableAck ();
+      m_currentParams.EnableAck ();
     }
-  Low ()->TransmitSingleFrame (m_currentPacket, &m_currentHdr, params, m_transmissionListener);
+  GetLow ()->TransmitSingleFrame (m_currentPacket, &m_currentHdr, m_currentParams, this);
 }
 
 void
@@ -463,22 +253,7 @@ DmgAtiDca::EndTxNoAck (void)
     {
       m_txOkNoAckCallback (m_currentHdr);
     }
-
   StartAccessIfNeeded ();
-}
-
-void
-DmgAtiDca::SetTxopLimit (Time txopLimit)
-{
-  NS_LOG_FUNCTION (this << txopLimit);
-  m_dcf->SetTxopLimit (txopLimit);
-}
-
-Time
-DmgAtiDca::GetTxopLimit (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_dcf->GetTxopLimit ();
 }
 
 } //namespace ns3

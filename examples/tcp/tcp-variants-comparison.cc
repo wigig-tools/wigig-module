@@ -218,13 +218,14 @@ int main (int argc, char *argv[])
   uint32_t run = 0;
   bool flow_monitor = false;
   bool pcap = false;
+  bool sack = true;
   std::string queue_disc_type = "ns3::PfifoFastQueueDisc";
 
 
   CommandLine cmd;
   cmd.AddValue ("transport_prot", "Transport protocol to use: TcpNewReno, "
                 "TcpHybla, TcpHighSpeed, TcpHtcp, TcpVegas, TcpScalable, TcpVeno, "
-                "TcpBic, TcpYeah, TcpIllinois, TcpWestwood, TcpWestwoodPlus ", transport_prot);
+                "TcpBic, TcpYeah, TcpIllinois, TcpWestwood, TcpWestwoodPlus, TcpLedbat ", transport_prot);
   cmd.AddValue ("error_p", "Packet error rate", error_p);
   cmd.AddValue ("bandwidth", "Bottleneck bandwidth", bandwidth);
   cmd.AddValue ("delay", "Bottleneck delay", delay);
@@ -240,6 +241,7 @@ int main (int argc, char *argv[])
   cmd.AddValue ("flow_monitor", "Enable flow monitor", flow_monitor);
   cmd.AddValue ("pcap_tracing", "Enable or disable PCAP tracing", pcap);
   cmd.AddValue ("queue_disc_type", "Queue disc type for gateway (e.g. ns3::CoDelQueueDisc)", queue_disc_type);
+  cmd.AddValue ("sack", "Enable or disable SACK option", sack);
   cmd.Parse (argc, argv);
 
   SeedManager::SetSeed (1);
@@ -269,6 +271,7 @@ int main (int argc, char *argv[])
   // 4 MB of TCP buffer
   Config::SetDefault ("ns3::TcpSocket::RcvBufSize", UintegerValue (1 << 21));
   Config::SetDefault ("ns3::TcpSocket::SndBufSize", UintegerValue (1 << 21));
+  Config::SetDefault ("ns3::TcpSocketBase::Sack", BooleanValue (sack));
 
   // Select TCP variant
   if (transport_prot.compare ("TcpNewReno") == 0)
@@ -321,6 +324,10 @@ int main (int argc, char *argv[])
       Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpWestwood::GetTypeId ()));
       Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOODPLUS));
       Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
+    }
+  else if (transport_prot.compare ("TcpLedbat") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpLedbat::GetTypeId ()));
     }
   else
     {
@@ -376,7 +383,7 @@ int main (int argc, char *argv[])
   Time access_d (access_delay);
   Time bottle_d (delay);
 
-  Config::SetDefault ("ns3::CoDelQueueDisc::Mode", EnumValue (Queue::QUEUE_MODE_BYTES));
+  Config::SetDefault ("ns3::CoDelQueueDisc::Mode", EnumValue (CoDelQueueDisc::QUEUE_DISC_MODE_BYTES));
 
   uint32_t size = (std::min (access_b, bottle_b).GetBitRate () / 8) *
     ((access_d + bottle_d) * 2).GetSeconds ();
@@ -432,7 +439,8 @@ int main (int argc, char *argv[])
           || transport_prot.compare ("TcpBic") == 0
           || transport_prot.compare ("TcpScalable") == 0
           || transport_prot.compare ("TcpYeah") == 0
-          || transport_prot.compare ("TcpIllinois") == 0)
+          || transport_prot.compare ("TcpIllinois") == 0
+          || transport_prot.compare ("TcpLedbat") == 0)
         {
           Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (tcp_adu_size));
           BulkSendHelper ftp ("ns3::TcpSocketFactory", Address ());

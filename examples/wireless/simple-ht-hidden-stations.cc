@@ -19,11 +19,9 @@
  */
 
 #include "ns3/core-module.h"
-#include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/wifi-module.h"
 #include "ns3/mobility-module.h"
-#include "ns3/ipv4-global-routing-helper.h"
 #include "ns3/internet-module.h"
 
 // This example considers two hidden stations in an 802.11n network which supports MPDU aggregation.
@@ -54,12 +52,16 @@ int main (int argc, char *argv[])
   uint32_t nMpdus = 1;
   uint32_t maxAmpduSize = 0;
   bool enableRts = 0;
+  double minExpectedThroughput = 0;
+  double maxExpectedThroughput = 0;
 
   CommandLine cmd;
   cmd.AddValue ("nMpdus", "Number of aggregated MPDUs", nMpdus);
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
-  cmd.AddValue ("enableRts", "Enable RTS/CTS", enableRts); // 1: RTS/CTS enabled; 0: RTS/CTS disabled
+  cmd.AddValue ("enableRts", "Enable RTS/CTS", enableRts);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
+  cmd.AddValue ("minExpectedThroughput", "if set, simulation fails if the lowest throughput is below this value", minExpectedThroughput);
+  cmd.AddValue ("maxExpectedThroughput", "if set, simulation fails if the highest throughput is above this value", maxExpectedThroughput);
   cmd.Parse (argc, argv);
 
   if (!enableRts)
@@ -133,7 +135,6 @@ int main (int argc, char *argv[])
   stack.Install (wifiStaNodes);
 
   Ipv4AddressHelper address;
-
   address.SetBase ("192.168.1.0", "255.255.255.0");
   Ipv4InterfaceContainer StaInterface;
   StaInterface = address.Assign (staDevices);
@@ -141,18 +142,19 @@ int main (int argc, char *argv[])
   ApInterface = address.Assign (apDevice);
 
   // Setting applications
-  UdpServerHelper myServer (9);
-  ApplicationContainer serverApp = myServer.Install (wifiApNode);
+  uint16_t port = 9;
+  UdpServerHelper server (port);
+  ApplicationContainer serverApp = server.Install (wifiApNode);
   serverApp.Start (Seconds (0.0));
   serverApp.Stop (Seconds (simulationTime + 1));
 
-  UdpClientHelper myClient (ApInterface.GetAddress (0), 9);
-  myClient.SetAttribute ("MaxPackets", UintegerValue (4294967295u));
-  myClient.SetAttribute ("Interval", TimeValue (Time ("0.00002"))); //packets/s
-  myClient.SetAttribute ("PacketSize", UintegerValue (payloadSize));
+  UdpClientHelper client (ApInterface.GetAddress (0), port);
+  client.SetAttribute ("MaxPackets", UintegerValue (4294967295u));
+  client.SetAttribute ("Interval", TimeValue (Time ("0.00002"))); //packets/s
+  client.SetAttribute ("PacketSize", UintegerValue (payloadSize));
 
   // Saturated UDP traffic from stations to AP
-  ApplicationContainer clientApp1 = myClient.Install (wifiStaNodes);
+  ApplicationContainer clientApp1 = client.Install (wifiStaNodes);
   clientApp1.Start (Seconds (1.0));
   clientApp1.Stop (Seconds (simulationTime + 1));
 
@@ -168,6 +170,10 @@ int main (int argc, char *argv[])
   uint32_t totalPacketsThrough = DynamicCast<UdpServer> (serverApp.Get (0))->GetReceived ();
   double throughput = totalPacketsThrough * payloadSize * 8 / (simulationTime * 1000000.0);
   std::cout << "Throughput: " << throughput << " Mbit/s" << '\n';
-
+  if (throughput < minExpectedThroughput || (maxExpectedThroughput > 0 && throughput > maxExpectedThroughput))
+    {
+      NS_LOG_ERROR ("Obtained throughput " << throughput << " is not in the expected boundaries!");
+      exit (1);
+    }
   return 0;
 }

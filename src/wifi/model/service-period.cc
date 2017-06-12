@@ -27,179 +27,26 @@ namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("ServicePeriod");
 
-class ServicePeriod::TransmissionListener : public MacLowTransmissionListener
-{
-public:
-  TransmissionListener (ServicePeriod *sp)
-    : MacLowTransmissionListener (),
-      m_sp (sp)
-  {
-  }
-
-  virtual ~TransmissionListener ()
-  {
-  }
-
-  virtual void GotCts (double snr, WifiMode txMode)
-  {
-    m_sp->GotCts (snr, txMode);
-  }
-  virtual void MissedCts (void)
-  {
-    m_sp->MissedCts ();
-  }
-  virtual void GotAck (double snr, WifiMode txMode)
-  {
-    m_sp->GotAck (snr, txMode);
-  }
-  virtual void MissedAck (void)
-  {
-    m_sp->MissedAck ();
-  }
-  virtual void GotBlockAck (const CtrlBAckResponseHeader *blockAck, Mac48Address source, double rxSnr, WifiMode txMode, double dataSnr)
-  {
-    m_sp->GotBlockAck (blockAck, source, rxSnr, txMode, dataSnr);
-  }
-  virtual void MissedBlockAck (uint32_t nMpdus)
-  {
-    m_sp->MissedBlockAck (nMpdus);
-  }
-  virtual void StartNextFragment (void)
-  {
-    m_sp->StartNext ();
-  }
-  virtual void StartNext (void)
-  {
-    m_sp->StartNext ();
-  }
-  virtual void Cancel (void)
-  {
-    m_sp->Cancel ();
-  }
-  virtual void EndTxNoAck (void)
-  {
-    m_sp->EndTxNoAck ();
-  }
-  virtual Ptr<WifiMacQueue> GetQueue (void)
-  {
-    return m_sp->GetQueue ();
-  }
-
-private:
-  ServicePeriod *m_sp;
-
-};
-
-class ServicePeriod::AggregationCapableTransmissionListener : public MacLowAggregationCapableTransmissionListener
-{
-public:
-  AggregationCapableTransmissionListener (ServicePeriod *sp)
-    : MacLowAggregationCapableTransmissionListener (),
-      m_sp (sp)
-  {
-  }
-  virtual ~AggregationCapableTransmissionListener ()
-  {
-  }
-
-  virtual void BlockAckInactivityTimeout (Mac48Address address, uint8_t tid)
-  {
-    m_sp->SendDelbaFrame (address, tid, false);
-  }
-  virtual Ptr<WifiMacQueue> GetQueue (void)
-  {
-    return m_sp->GetQueue ();
-  }
-  virtual  void CompleteTransfer (Mac48Address recipient, uint8_t tid)
-  {
-    m_sp->CompleteAmpduTransfer (recipient, tid);
-  }
-  virtual void SetAmpdu (Mac48Address dest, bool enableAmpdu)
-  {
-    return m_sp->SetAmpduExist (dest, enableAmpdu);
-  }
-  virtual void CompleteMpduTx (Ptr<const Packet> packet, WifiMacHeader hdr, Time tstamp)
-  {
-    m_sp->CompleteMpduTx (packet, hdr, tstamp);
-  }
-  virtual uint16_t GetNextSequenceNumberfor (WifiMacHeader *hdr)
-  {
-    return m_sp->GetNextSequenceNumberfor (hdr);
-  }
-  virtual uint16_t PeekNextSequenceNumberfor (WifiMacHeader *hdr)
-  {
-    return m_sp->PeekNextSequenceNumberfor (hdr);
-  }
-  virtual Ptr<const Packet> PeekNextPacketInBaQueue (WifiMacHeader &header, Mac48Address recipient, uint8_t tid, Time *timestamp)
-  {
-    return m_sp->PeekNextRetransmitPacket (header, recipient, tid, timestamp);
-  }
-  virtual void RemoveFromBaQueue (uint8_t tid, Mac48Address recipient, uint16_t seqnumber)
-  {
-    m_sp->RemoveRetransmitPacket (tid, recipient, seqnumber);
-  }
-  virtual bool GetBlockAckAgreementExists (Mac48Address address, uint8_t tid)
-  {
-    return m_sp->GetBaAgreementExists (address,tid);
-  }
-  virtual uint32_t GetNOutstandingPackets (Mac48Address address, uint8_t tid)
-  {
-    return m_sp->GetNOutstandingPacketsInBa (address, tid);
-  }
-  virtual uint32_t GetNRetryNeededPackets (Mac48Address recipient, uint8_t tid) const
-  {
-    return m_sp->GetNRetryNeededPackets (recipient, tid);
-  }
-  virtual Ptr<MsduAggregator> GetMsduAggregator (void) const
-  {
-    return m_sp->GetMsduAggregator ();
-  }
-  virtual Ptr<MpduAggregator> GetMpduAggregator (void) const
-  {
-    return m_sp->GetMpduAggregator ();
-  }
-  virtual Mac48Address GetSrcAddressForAggregation (const WifiMacHeader &hdr)
-  {
-    return m_sp->MapSrcAddressForAggregation (hdr);
-  }
-  virtual Mac48Address GetDestAddressForAggregation (const WifiMacHeader &hdr)
-  {
-    return m_sp->MapDestAddressForAggregation (hdr);
-  }
-
-private:
-  ServicePeriod *m_sp;
-};
-
 NS_OBJECT_ENSURE_REGISTERED (ServicePeriod);
 
 TypeId
 ServicePeriod::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::ServicePeriod")
-    .SetParent<Object> ()
+    .SetParent<ns3::DcaTxop> ()
     .SetGroupName ("Wifi")
     .AddConstructor<ServicePeriod> ()
-    .AddAttribute ("Queue",
-                   "The WifiMacQueue object",
-                   PointerValue (),
-                   MakePointerAccessor (&ServicePeriod::GetQueue),
-                   MakePointerChecker<WifiMacQueue> ())
   ;
   return tid;
 }
 
 ServicePeriod::ServicePeriod ()
-  : m_currentPacket (0),
-    m_msduAggregator (0),
+  : m_msduAggregator (0),
     m_mpduAggregator (0),
     m_typeOfStation (DMG_STA),
     m_blockAckType (COMPRESSED_BLOCK_ACK)
 {
   NS_LOG_FUNCTION (this);
-  m_transmissionListener = new ServicePeriod::TransmissionListener (this);
-  m_blockAckListener = new ServicePeriod::AggregationCapableTransmissionListener (this);
-  m_queue = CreateObject<WifiMacQueue> ();
   m_qosBlockedDestinations = new QosBlockedDestinations ();
   m_baManager = new BlockAckManager ();
   m_baManager->SetQueue (m_queue);
@@ -220,30 +67,23 @@ void
 ServicePeriod::DoDispose (void)
 {
   NS_LOG_FUNCTION (this);
-  m_queue = 0;
-  m_low = 0;
-  m_stationManager = 0;
-  delete m_transmissionListener;
   delete m_qosBlockedDestinations;
   delete m_baManager;
-  delete m_blockAckListener;
-  m_transmissionListener = 0;
   m_qosBlockedDestinations = 0;
   m_baManager = 0;
-  m_blockAckListener = 0;
-  m_txMiddle = 0;
   m_msduAggregator = 0;
   m_mpduAggregator = 0;
+  DcaTxop::DoDispose ();
 }
 
 bool
-ServicePeriod::GetBaAgreementExists (Mac48Address address, uint8_t tid)
+ServicePeriod::GetBaAgreementExists (Mac48Address address, uint8_t tid) const
 {
   return m_baManager->ExistsAgreement (address, tid);
 }
 
 uint32_t
-ServicePeriod::GetNOutstandingPacketsInBa (Mac48Address address, uint8_t tid)
+ServicePeriod::GetNOutstandingPacketsInBa (Mac48Address address, uint8_t tid) const
 {
   return m_baManager->GetNBufferedPackets (address, tid);
 }
@@ -261,74 +101,17 @@ ServicePeriod::CompleteAmpduTransfer (Mac48Address recipient, uint8_t tid)
 }
 
 void
-ServicePeriod::SetTxOkCallback (TxPacketOk callback)
-{
-  NS_LOG_FUNCTION (this << &callback);
-  m_txOkCallback = callback;
-}
-
-void
-ServicePeriod::SetTxFailedCallback (TxFailed callback)
-{
-  NS_LOG_FUNCTION (this << &callback);
-  m_txFailedCallback = callback;
-}
-
-void
-ServicePeriod::SetMissedAckCallback (TxFailed callback)
-{
-  NS_LOG_FUNCTION (this << &callback);
-  m_missedAck = callback;
-}
-
-void
-ServicePeriod::SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> remoteManager)
-{
-  NS_LOG_FUNCTION (this << remoteManager);
-  m_stationManager = remoteManager;
-  m_baManager->SetWifiRemoteStationManager (m_stationManager);
-}
-
-void
 ServicePeriod::SetTypeOfStation (enum TypeOfStation type)
 {
   NS_LOG_FUNCTION (this << static_cast<uint32_t> (type));
   m_typeOfStation = type;
 }
 
-enum TypeOfStation
+TypeOfStation
 ServicePeriod::GetTypeOfStation (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_typeOfStation;
-}
-
-Ptr<WifiMacQueue>
-ServicePeriod::GetQueue () const
-{
-  NS_LOG_FUNCTION (this);
-  return m_queue;
-}
-
-void
-ServicePeriod::SetTxMiddle (MacTxMiddle *txMiddle)
-{
-  NS_LOG_FUNCTION (this << txMiddle);
-  m_txMiddle = txMiddle;
-}
-
-Ptr<MacLow>
-ServicePeriod::Low (void)
-{
-  NS_LOG_FUNCTION (this);
-  return m_low;
-}
-
-void
-ServicePeriod::SetLow (Ptr<MacLow> low)
-{
-  NS_LOG_FUNCTION (this << low);
-  m_low = low;
 }
 
 bool
@@ -339,15 +122,15 @@ ServicePeriod::NeedsAccess (void) const
 }
 
 uint16_t
-ServicePeriod::GetNextSequenceNumberfor (WifiMacHeader *hdr)
+ServicePeriod::GetNextSequenceNumberFor (WifiMacHeader *hdr)
 {
-  return m_txMiddle->GetNextSequenceNumberfor (hdr);
+  return m_txMiddle->GetNextSequenceNumberFor (hdr);
 }
 
 uint16_t
-ServicePeriod::PeekNextSequenceNumberfor (WifiMacHeader *hdr)
+ServicePeriod::PeekNextSequenceNumberFor (WifiMacHeader *hdr)
 {
-  return m_txMiddle->PeekNextSequenceNumberfor (hdr);
+  return m_txMiddle->GetNextSequenceNumberFor (hdr);
 }
 
 Ptr<const Packet>
@@ -382,7 +165,7 @@ ServicePeriod::NotifyAccessGranted (void)
 
   if (!m_low->RestoredSuspendedTransmission ())
     {
-      m_low->ResumeTransmission (m_remainingDuration, m_transmissionListener);
+      m_low->ResumeTransmission (m_remainingDuration, this);
       return;
     }
 
@@ -398,23 +181,32 @@ ServicePeriod::NotifyAccessGranted (void)
       if (m_currentPacket == 0)
         {
           /* Check if there is any available packets for the destination DMG STA in this SP */
-          if (m_queue->PeekFirstAvailableByAddress (&m_currentHdr, m_currentPacketTimestamp,
-                                                    WifiMacHeader::ADDR1, m_peerStation, m_qosBlockedDestinations) == 0)
+          Ptr<const WifiMacQueueItem> item = m_queue->PeekFirstAvailableByAddress (WifiMacHeader::ADDR1,
+                                                                                   m_peerStation, m_qosBlockedDestinations);
+          if (item == 0)
             {
+              NS_LOG_DEBUG ("no available packets in the queue");
               return;
             }
+          m_currentHdr = item->GetHeader ();
+          m_currentPacketTimestamp = item->GetTimeStamp ();
           if (m_currentHdr.IsQosData () && !m_currentHdr.GetAddr1 ().IsBroadcast ()
+              && m_stationManager->GetQosSupported (m_currentHdr.GetAddr1 ())
               && !m_baManager->ExistsAgreement (m_currentHdr.GetAddr1 (), m_currentHdr.GetQosTid ())
               && SetupBlockAckIfNeeded ())
             {
               return;
             }
 
-          m_currentPacket = m_queue->DequeueByAddress (&m_currentHdr, WifiMacHeader::ADDR1,
-                                                       m_peerStation, m_qosBlockedDestinations);
+          item = m_queue->DequeueByAddress (WifiMacHeader::ADDR1, m_peerStation, m_qosBlockedDestinations);
+          m_currentPacket = item->GetPacket ();
+          m_currentHdr = item->GetHeader ();
+          m_currentPacketTimestamp = item->GetTimeStamp ();
+          NS_ASSERT (m_currentPacket != 0);
+
           if (m_currentPacket != 0)
             {
-              uint16_t sequence = m_txMiddle->GetNextSequenceNumberfor (&m_currentHdr);
+              uint16_t sequence = m_txMiddle->GetNextSequenceNumberFor (&m_currentHdr);
               m_currentHdr.SetSequenceNumber (sequence);
               m_stationManager->UpdateFragmentationThreshold ();
               m_currentHdr.SetFragmentNumber (0);
@@ -432,15 +224,16 @@ ServicePeriod::NotifyAccessGranted (void)
         }
     }
 
+//  std::cout << "MaxQueueSize=" << m_queue->GetMaxPackets () << std::endl;
+//  std::cout << "CurrentQueueSize=" << m_queue->GetNPackets () << std::endl;
 
   if (m_currentPacket != 0)
     {
-      MacLowTransmissionParameters params;
-      params.SetAsBoundedTransmission ();
-      params.SetMaximumTransmissionDuration (m_remainingDuration);
+      m_currentParams.SetAsBoundedTransmission ();
+      m_currentParams.SetMaximumTransmissionDuration (m_remainingDuration);
 //      params.EnableOverrideDurationId (m_remainingDuration);
-      params.DisableOverrideDurationId ();
-      params.SetTransmitInSericePeriod ();
+      m_currentParams.DisableOverrideDurationId ();
+      m_currentParams.SetTransmitInSericePeriod ();
       if (m_currentHdr.GetType () == WIFI_MAC_CTL_BACKREQ)
         {
           SendBlockAckRequest (m_currentBar);
@@ -449,11 +242,11 @@ ServicePeriod::NotifyAccessGranted (void)
         {
           if (m_currentHdr.IsQosData () && m_currentHdr.IsQosBlockAck ())
             {
-              params.DisableAck ();
+              m_currentParams.DisableAck ();
             }
           else
             {
-              params.EnableAck ();
+              m_currentParams.EnableAck ();
             }
           if (((m_currentHdr.IsQosData () && !m_currentHdr.IsQosAmsdu ())
               || (m_currentHdr.IsData () && !m_currentHdr.IsQosData () && m_currentHdr.IsQosAmsdu ()))
@@ -461,58 +254,59 @@ ServicePeriod::NotifyAccessGranted (void)
               && NeedFragmentation ())
             {
               //With COMPRESSED_BLOCK_ACK fragmentation must be avoided.
-              params.DisableRts ();
+              m_currentParams.DisableRts ();
               WifiMacHeader hdr;
               Ptr<Packet> fragment = GetFragmentPacket (&hdr);
               if (IsLastFragment ())
                 {
                   NS_LOG_DEBUG ("fragmenting last fragment size=" << fragment->GetSize ());
-                  params.DisableNextData ();
+                  m_currentParams.DisableNextData ();
                 }
               else
                 {
                   NS_LOG_DEBUG ("fragmenting size=" << fragment->GetSize ());
-                  params.EnableNextData (GetNextFragmentSize ());
+                  m_currentParams.EnableNextData (GetNextFragmentSize ());
                 }
-              m_low->StartTransmission (fragment, &hdr, params,
-                                        m_transmissionListener);
+              m_low->StartTransmission (fragment, &hdr, m_currentParams, this);
             }
           else
             {
               WifiMacHeader peekedHdr;
-              Time tstamp;
+              Ptr<const WifiMacQueueItem> item;
               if (m_currentHdr.IsQosData ()
-                  && m_queue->PeekByTidAndAddress (&peekedHdr, m_currentHdr.GetQosTid (),
-                                                   WifiMacHeader::ADDR1, m_currentHdr.GetAddr1 (), &tstamp)
+                  && (item = m_queue->PeekByTidAndAddress (m_currentHdr.GetQosTid (),
+                                                           WifiMacHeader::ADDR1, m_currentHdr.GetAddr1 ()))
                   && !m_currentHdr.GetAddr1 ().IsBroadcast ()
                   && m_msduAggregator != 0 && !m_currentHdr.IsRetry ())
                 {
-                  /* here is performed MSDU aggregation */
+                  peekedHdr = item->GetHeader ();
+                  /* here is performed aggregation */
                   Ptr<Packet> currentAggregatedPacket = Create<Packet> ();
                   m_msduAggregator->Aggregate (m_currentPacket, currentAggregatedPacket,
                                                MapSrcAddressForAggregation (peekedHdr),
                                                MapDestAddressForAggregation (peekedHdr));
                   bool aggregated = false;
                   bool isAmsdu = false;
-                  Ptr<const Packet> peekedPacket = m_queue->PeekByTidAndAddress (&peekedHdr, m_currentHdr.GetQosTid (),
-                                                                                 WifiMacHeader::ADDR1,
-                                                                                 m_currentHdr.GetAddr1 (), &tstamp);
-                  while (peekedPacket != 0)
+                  Ptr<const WifiMacQueueItem> peekedItem = m_queue->PeekByTidAndAddress (m_currentHdr.GetQosTid (),
+                                                                                         WifiMacHeader::ADDR1,
+                                                                                         m_currentHdr.GetAddr1 ());
+                  while (peekedItem != 0)
                     {
-                      aggregated = m_msduAggregator->Aggregate (peekedPacket, currentAggregatedPacket,
+                      peekedHdr = peekedItem->GetHeader ();
+                      aggregated = m_msduAggregator->Aggregate (peekedItem->GetPacket (), currentAggregatedPacket,
                                                                 MapSrcAddressForAggregation (peekedHdr),
                                                                 MapDestAddressForAggregation (peekedHdr));
                       if (aggregated)
                         {
                           isAmsdu = true;
-                          m_queue->Remove (peekedPacket);
+                          m_queue->Remove (peekedItem->GetPacket ());
                         }
                       else
                         {
                           break;
                         }
-                      peekedPacket = m_queue->PeekByTidAndAddress (&peekedHdr, m_currentHdr.GetQosTid (),
-                                                                   WifiMacHeader::ADDR1, m_currentHdr.GetAddr1 (), &tstamp);
+                      peekedItem = m_queue->PeekByTidAndAddress (m_currentHdr.GetQosTid (),
+                                                                 WifiMacHeader::ADDR1, m_currentHdr.GetAddr1 ());
                     }
                   if (isAmsdu)
                     {
@@ -523,7 +317,7 @@ ServicePeriod::NotifyAccessGranted (void)
                       NS_LOG_DEBUG ("tx unicast A-MSDU");
                     }
                 }
-              params.DisableNextData ();
+              m_currentParams.DisableNextData ();
 
               /* Check if more MSDUs are buffered for transmission */
               if (m_queue->HasPacketsForReceiver (m_peerStation))
@@ -531,8 +325,7 @@ ServicePeriod::NotifyAccessGranted (void)
                   m_currentHdr.SetMoreData ();
                 }
 
-              m_low->StartTransmission (m_currentPacket, &m_currentHdr,
-                                        params, m_transmissionListener);
+              m_low->StartTransmission (m_currentPacket, &m_currentHdr, m_currentParams, this);
               if (!GetAmpduExist (m_currentHdr.GetAddr1 ()))
                 {
                   CompleteTx ();
@@ -543,18 +336,11 @@ ServicePeriod::NotifyAccessGranted (void)
 }
 
 void
-ServicePeriod::GotCts (double snr, WifiMode txMode)
-{
-  NS_LOG_FUNCTION (this << snr << txMode);
-  NS_LOG_DEBUG ("got cts");
-}
-
-void
 ServicePeriod::MissedCts (void)
 {
   NS_LOG_FUNCTION (this);
   NS_LOG_DEBUG ("missed cts");
-  if (!NeedRtsRetransmission ())
+  if (!NeedRtsRetransmission (m_currentPacket, m_currentHdr))
     {
       NS_LOG_DEBUG ("Cts Fail");
       bool resetCurrentPacket = true;
@@ -565,7 +351,7 @@ ServicePeriod::MissedCts (void)
         }
       if (GetAmpduExist (m_currentHdr.GetAddr1 ()))
         {
-          m_low->FlushAggregateQueue ();
+          m_low->FlushAggregateQueue (AC_BE);
           uint8_t tid = 0;
           if (m_currentHdr.IsQosData ())
             {
@@ -587,7 +373,7 @@ ServicePeriod::MissedCts (void)
               NS_LOG_DEBUG ("Transmit Block Ack Request");
               CtrlBAckRequestHeader reqHdr;
               reqHdr.SetType (COMPRESSED_BLOCK_ACK);
-              reqHdr.SetStartingSequence (m_txMiddle->PeekNextSequenceNumberfor (&m_currentHdr));
+              reqHdr.SetStartingSequence (m_txMiddle->PeekNextSequenceNumberFor (&m_currentHdr));
               reqHdr.SetTidInfo (tid);
               reqHdr.SetHtImmediateAck (true);
               Ptr<Packet> bar = Create<Packet> ();
@@ -617,35 +403,9 @@ ServicePeriod::MissedCts (void)
 }
 
 void
-ServicePeriod::NotifyChannelSwitching (void)
+ServicePeriod::GotAck (void)
 {
   NS_LOG_FUNCTION (this);
-  m_queue->Flush ();
-  m_currentPacket = 0;
-}
-
-void
-ServicePeriod::NotifySleep (void)
-{
-  NS_LOG_FUNCTION (this);
-  if (m_currentPacket != 0)
-    {
-      m_queue->PushFront (m_currentPacket, m_currentHdr);
-      m_currentPacket = 0;
-    }
-}
-
-void
-ServicePeriod::NotifyWakeUp (void)
-{
-  NS_LOG_FUNCTION (this);
-  RestartAccessIfNeeded ();
-}
-
-void
-ServicePeriod::GotAck (double snr, WifiMode txMode)
-{
-  NS_LOG_FUNCTION (this << snr << txMode);
   if (!NeedFragmentation ()
       || IsLastFragment ()
       || m_currentHdr.IsQosAmsdu ())
@@ -697,7 +457,7 @@ ServicePeriod::MissedAck (void)
       m_missedAck (m_currentHdr);
     }
 
-  if (!NeedDataRetransmission ())
+  if (!NeedDataRetransmission (m_currentPacket, m_currentHdr))
     {
       NS_LOG_DEBUG ("Ack Fail");
       m_stationManager->ReportFinalDataFailed (m_currentHdr.GetAddr1 (), &m_currentHdr);
@@ -706,17 +466,9 @@ ServicePeriod::MissedAck (void)
         {
           m_txFailedCallback (m_currentHdr);
         }
-      if (GetAmpduExist (m_currentHdr.GetAddr1 ()))
+      if (GetAmpduExist (m_currentHdr.GetAddr1 ()) || m_currentHdr.IsQosData ())
         {
-          uint8_t tid = 0;
-          if (m_currentHdr.IsQosData ())
-            {
-              tid = m_currentHdr.GetQosTid ();
-            }
-          else
-            {
-              NS_FATAL_ERROR ("Current packet is not Qos Data");
-            }
+          uint8_t tid = GetTid (m_currentPacket, m_currentHdr);
 
           if (GetBaAgreementExists (m_currentHdr.GetAddr1 (), tid))
             {
@@ -724,7 +476,7 @@ ServicePeriod::MissedAck (void)
               NS_LOG_DEBUG ("Transmit Block Ack Request");
               CtrlBAckRequestHeader reqHdr;
               reqHdr.SetType (COMPRESSED_BLOCK_ACK);
-              reqHdr.SetStartingSequence (m_txMiddle->PeekNextSequenceNumberfor (&m_currentHdr));
+              reqHdr.SetStartingSequence (m_txMiddle->PeekNextSequenceNumberFor (&m_currentHdr));
               reqHdr.SetTidInfo (tid);
               reqHdr.SetHtImmediateAck (true);
               Ptr<Packet> bar = Create<Packet> ();
@@ -745,7 +497,6 @@ ServicePeriod::MissedAck (void)
               resetCurrentPacket = false;
             }
         }
-
       if (resetCurrentPacket == true)
         {
           m_currentPacket = 0;
@@ -760,27 +511,10 @@ ServicePeriod::MissedAck (void)
 }
 
 void
-ServicePeriod::MissedBlockAck (uint32_t nMpdus)
+ServicePeriod::MissedBlockAck (uint8_t nMpdus)
 {
-  NS_LOG_FUNCTION (this);
-  NS_LOG_DEBUG ("missed block ack");
-  uint8_t tid = 0;
-  if (m_currentHdr.IsQosData ())
-    {
-      tid = m_currentHdr.GetQosTid ();
-    }
-  else if (m_currentHdr.IsBlockAckReq ())
-    {
-      CtrlBAckRequestHeader baReqHdr;
-      m_currentPacket->PeekHeader (baReqHdr);
-      tid = baReqHdr.GetTidInfo ();
-    }
-  else if (m_currentHdr.IsBlockAck ())
-    {
-      CtrlBAckResponseHeader baRespHdr;
-      m_currentPacket->PeekHeader (baRespHdr);
-      tid = baRespHdr.GetTidInfo ();
-    }
+  NS_LOG_FUNCTION (this << (uint16_t)nMpdus);
+  uint8_t tid = GetTid (m_currentPacket, m_currentHdr);
   if (GetAmpduExist (m_currentHdr.GetAddr1 ()))
     {
       m_stationManager->ReportAmpduTxStatus (m_currentHdr.GetAddr1 (), tid, 0, nMpdus, 0, 0);
@@ -907,8 +641,11 @@ ServicePeriod::EndCurrentServicePeriod (void)
 {
   NS_LOG_FUNCTION (this);
   /* Store parameters related to this service period which include MSDU/A-MSDU */
-  m_storedPackets[m_allocationID] = std::make_pair (m_currentPacket, m_currentHdr);
-  m_currentPacket = 0;
+  if (m_currentPacket != 0)
+    {
+      m_storedPackets[m_allocationID] = std::make_pair (m_currentPacket, m_currentHdr);
+      m_currentPacket = 0;
+    }
   /* Inform MAC Low to store parameters related to this service period (MPDU/A-MPDU) */
   if (!m_low->IsTransmissionSuspended ())
     {
@@ -929,8 +666,11 @@ ServicePeriod::StartServicePeriod (AllocationID allocationID, Mac48Address peerS
 void
 ServicePeriod::InitiateTransmission (void)
 {
-  NS_LOG_FUNCTION (this);
+  NS_LOG_FUNCTION (this << m_queue->IsEmpty ());
   m_accessAllowed = true;
+
+  /* Restore previously suspended transmission */
+  m_low->RestoreAllocationParameters (m_allocationID);
 
   /* Check if we have stored packet for this service period (MSDU/A-MSDU) */
   StoredPacketsCI it = m_storedPackets.find (m_allocationID);
@@ -940,9 +680,6 @@ ServicePeriod::InitiateTransmission (void)
       m_currentPacket = info.first;
       m_currentHdr = info.second;
     }
-
-  /* Restore previously suspended transmission */
-  m_low->RestoreAllocationParameters (m_allocationID);
 
   /* Start access if we have packets in the queue or packets that need retransmit or non-restored transmission */
   if (!m_queue->IsEmpty () || m_baManager->HasPackets () || !m_low->RestoredSuspendedTransmission ())
@@ -969,7 +706,7 @@ ServicePeriod::PushFront (Ptr<const Packet> packet, const WifiMacHeader &hdr)
 {
   NS_LOG_FUNCTION (this << packet << &hdr);
   m_stationManager->PrepareForQueue (hdr.GetAddr1 (), &hdr, packet);
-  m_queue->PushFront (packet, hdr);
+  m_queue->PushFront (Create<WifiMacQueueItem> (packet, hdr));
   StartAccessIfNeeded ();
 }
 
@@ -978,24 +715,8 @@ ServicePeriod::Queue (Ptr<const Packet> packet, WifiMacHeader &hdr)
 {
   NS_LOG_FUNCTION (this << packet << &hdr << hdr.GetAddr1 ());
   m_stationManager->PrepareForQueue (hdr.GetAddr1 (), &hdr, packet);
-  m_queue->Enqueue (packet, hdr);
+  m_queue->Enqueue (Create<WifiMacQueueItem> (packet, hdr));
   StartAccessIfNeeded ();
-}
-
-bool
-ServicePeriod::NeedRtsRetransmission (void)
-{
-  NS_LOG_FUNCTION (this);
-  return m_stationManager->NeedRtsRetransmission (m_currentHdr.GetAddr1 (), &m_currentHdr,
-                                                  m_currentPacket);
-}
-
-bool
-ServicePeriod::NeedDataRetransmission (void)
-{
-  NS_LOG_FUNCTION (this);
-  return m_stationManager->NeedDataRetransmission (m_currentHdr.GetAddr1 (), &m_currentHdr,
-                                                   m_currentPacket);
 }
 
 bool
@@ -1026,15 +747,8 @@ ServicePeriod::NeedBarRetransmission (void)
 }
 
 void
-ServicePeriod::NextFragment (void)
+ServicePeriod::StartNextPacket (void)
 {
-  NS_LOG_FUNCTION (this);
-  m_fragmentNumber++;
-}
-
-void
-ServicePeriod::StartNext (void)
-{ 
 //  NS_LOG_FUNCTION (this);
 //  WifiMacHeader hdr;
 //  Time tstamp;
@@ -1089,13 +803,6 @@ ServicePeriod::StartNext (void)
 }
 
 void
-ServicePeriod::Cancel (void)
-{
-  NS_LOG_FUNCTION (this);
-  NS_LOG_DEBUG ("transmission cancelled");
-}
-
-void
 ServicePeriod::EndTxNoAck (void)
 {
   NS_LOG_FUNCTION (this);
@@ -1108,20 +815,37 @@ bool
 ServicePeriod::NeedFragmentation (void) const
 {
   NS_LOG_FUNCTION (this);
-  return m_stationManager->NeedFragmentation (m_currentHdr.GetAddr1 (), &m_currentHdr,
-                                              m_currentPacket);
+  if (m_stationManager->HasVhtSupported ()
+      || m_stationManager->HasHeSupported ()
+      || GetAmpduExist (m_currentHdr.GetAddr1 ())
+      || (m_stationManager->HasHtSupported ()
+          && m_currentHdr.IsQosData ()
+          && GetBaAgreementExists (m_currentHdr.GetAddr1 (), GetTid (m_currentPacket, m_currentHdr))
+          && GetMpduAggregator ()->GetMaxAmpduSize () >= m_currentPacket->GetSize ()))
+    {
+      //MSDU is not fragmented when it is transmitted using an HT-immediate or
+      //HT-delayed Block Ack agreement or when it is carried in an A-MPDU.
+      return false;
+    }
+  bool needTxopFragmentation = false;
+  if (GetTxopLimit () > NanoSeconds (0) && m_currentHdr.IsData ())
+    {
+      needTxopFragmentation = (GetLow ()->CalculateOverallTxTime (m_currentPacket, &m_currentHdr, m_currentParams) > GetTxopLimit ());
+    }
+  return (needTxopFragmentation || m_stationManager->NeedFragmentation (m_currentHdr.GetAddr1 (), &m_currentHdr, m_currentPacket));
 }
 
 uint32_t
-ServicePeriod::GetFragmentSize (void)
+ServicePeriod::GetFragmentSize (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_stationManager->GetFragmentSize (m_currentHdr.GetAddr1 (), &m_currentHdr,
                                             m_currentPacket, m_fragmentNumber);
+
 }
 
 uint32_t
-ServicePeriod::GetNextFragmentSize (void)
+ServicePeriod::GetNextFragmentSize (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_stationManager->GetFragmentSize (m_currentHdr.GetAddr1 (), &m_currentHdr,
@@ -1129,7 +853,7 @@ ServicePeriod::GetNextFragmentSize (void)
 }
 
 uint32_t
-ServicePeriod::GetFragmentOffset (void)
+ServicePeriod::GetFragmentOffset (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_stationManager->GetFragmentOffset (m_currentHdr.GetAddr1 (), &m_currentHdr,
@@ -1139,7 +863,6 @@ ServicePeriod::GetFragmentOffset (void)
 bool
 ServicePeriod::IsLastFragment (void) const
 {
-  NS_LOG_FUNCTION (this);
   return m_stationManager->IsLastFragment (m_currentHdr.GetAddr1 (), &m_currentHdr,
                                            m_currentPacket, m_fragmentNumber);
 }
@@ -1184,7 +907,7 @@ ServicePeriod::MapSrcAddressForAggregation (const WifiMacHeader &hdr)
 Mac48Address
 ServicePeriod::MapDestAddressForAggregation (const WifiMacHeader &hdr)
 {
-//  NS_LOG_FUNCTION (this << &hdr);
+  NS_LOG_FUNCTION (this << &hdr);
   return hdr.GetAddr1 ();
 }
 
@@ -1257,14 +980,15 @@ ServicePeriod::VerifyBlockAck (void)
     {
       m_baManager->SwitchToBlockAckIfNeeded (recipient, tid, sequence);
     }
-  if ((m_baManager->ExistsAgreementInState (recipient, tid, OriginatorBlockAckAgreement::ESTABLISHED)) && (GetMpduAggregator () == 0))
+  if ((m_baManager->ExistsAgreementInState (recipient, tid, OriginatorBlockAckAgreement::ESTABLISHED))
+      && (GetMpduAggregator () == 0 || GetMpduAggregator ()->GetMaxAmpduSize () == 0))
     {
       m_currentHdr.SetQosAckPolicy (WifiMacHeader::BLOCK_ACK);
     }
 }
 
 bool
-ServicePeriod::GetAmpduExist (Mac48Address dest)
+ServicePeriod::GetAmpduExist (Mac48Address dest) const
 {
   NS_LOG_FUNCTION (this << dest);
   if (m_aMpduEnabled.find (dest) != m_aMpduEnabled.end ())
@@ -1314,27 +1038,17 @@ ServicePeriod::CompleteMpduTx (Ptr<const Packet> packet, WifiMacHeader hdr, Time
                                                                                     hdr.GetAddr1 ()), WifiMacHeader::NORMAL_ACK);
 }
 
-/* Test Function */
-void
-ServicePeriod::SetupBlockAck (uint8_t tid, Mac48Address recipient)
-{
-  NS_LOG_FUNCTION (this << tid << recipient);
-  if (m_mpduAggregator != 0)
-    {
-      SendAddBaRequest (recipient, tid, 0, m_blockAckInactivityTimeout, true);
-    }
-}
-
 bool
 ServicePeriod::SetupBlockAckIfNeeded ()
 {
   NS_LOG_FUNCTION (this);
   uint8_t tid = m_currentHdr.GetQosTid ();
   Mac48Address recipient = m_currentHdr.GetAddr1 ();
-
   uint32_t packets = m_queue->GetNPacketsByTidAndAddress (tid, WifiMacHeader::ADDR1, recipient);
-
-  if ((m_blockAckThreshold > 0 && packets >= m_blockAckThreshold) || (packets > 1 && m_mpduAggregator != 0))
+  if ((m_blockAckThreshold > 0 && packets >= m_blockAckThreshold)
+      || (m_mpduAggregator != 0 && m_mpduAggregator->GetMaxAmpduSize () > 0 && packets > 1)
+      || m_stationManager->HasVhtSupported ()
+      || m_stationManager->HasHeSupported ())
     {
       /* Block ack setup */
       uint16_t startingSequence = m_txMiddle->GetNextSeqNumberByTidAndAddress (tid, recipient);
@@ -1345,7 +1059,7 @@ ServicePeriod::SetupBlockAckIfNeeded ()
 }
 
 void
-ServicePeriod::SendBlockAckRequest (const struct Bar &bar)
+ServicePeriod::SendBlockAckRequest (const Bar &bar)
 {
   NS_LOG_FUNCTION (this << &bar);
   WifiMacHeader hdr;
@@ -1362,22 +1076,21 @@ ServicePeriod::SendBlockAckRequest (const struct Bar &bar)
   m_currentPacket = bar.bar;
   m_currentHdr = hdr;
 
-  MacLowTransmissionParameters params;
-  params.DisableRts ();
-  params.DisableNextData ();
-  params.SetAsBoundedTransmission ();
-  params.SetMaximumTransmissionDuration (m_remainingDuration);
-  params.EnableOverrideDurationId (m_remainingDuration);
-  params.SetTransmitInSericePeriod ();
+  m_currentParams.DisableRts ();
+  m_currentParams.DisableNextData ();
+  m_currentParams.SetAsBoundedTransmission ();
+  m_currentParams.SetMaximumTransmissionDuration (m_remainingDuration);
+  m_currentParams.EnableOverrideDurationId (m_remainingDuration);
+  m_currentParams.SetTransmitInSericePeriod ();
   if (bar.immediate)
     {
       if (m_blockAckType == BASIC_BLOCK_ACK)
         {
-          params.EnableBasicBlockAck ();
+          m_currentParams.EnableBasicBlockAck ();
         }
       else if (m_blockAckType == COMPRESSED_BLOCK_ACK)
         {
-          params.EnableCompressedBlockAck ();
+          m_currentParams.EnableCompressedBlockAck ();
         }
       else if (m_blockAckType == MULTI_TID_BLOCK_ACK)
         {
@@ -1387,9 +1100,16 @@ ServicePeriod::SendBlockAckRequest (const struct Bar &bar)
   else
     {
       //Delayed block ack
-      params.EnableAck ();
+      m_currentParams.EnableAck ();
     }
-  m_low->StartTransmission (m_currentPacket, &m_currentHdr, params, m_transmissionListener);
+  m_low->StartTransmission (m_currentPacket, &m_currentHdr, m_currentParams, this);
+}
+
+void
+ServicePeriod::SetMissedAckCallback (TxFailed callback)
+{
+  NS_LOG_FUNCTION (this << &callback);
+  m_missedAck = callback;
 }
 
 void
@@ -1397,14 +1117,14 @@ ServicePeriod::CompleteConfig (void)
 {
   NS_LOG_FUNCTION (this);
   m_baManager->SetTxMiddle (m_txMiddle);
-  m_low->RegisterBlockAckListenerForAc (AC_BE, m_blockAckListener);
+//  m_low->RegisterEdcaForAc (AC_BE, m_this);
   m_baManager->SetBlockAckInactivityCallback (MakeCallback (&ServicePeriod::SendDelbaFrame, this));
 }
 
 void
 ServicePeriod::SetBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << static_cast<uint32_t> (threshold));
+  NS_LOG_FUNCTION (this << (uint16_t)threshold);
   m_blockAckThreshold = threshold;
   m_baManager->SetBlockAckThreshold (threshold);
 }
@@ -1427,7 +1147,7 @@ void
 ServicePeriod::SendAddBaRequest (Mac48Address dest, uint8_t tid, uint16_t startSeq,
                                  uint16_t timeout, bool immediateBAck)
 {
-  NS_LOG_FUNCTION (this << dest << static_cast<uint32_t> (tid) << startSeq << timeout << immediateBAck);
+  NS_LOG_FUNCTION (this << dest << (uint16_t)tid << startSeq << timeout << immediateBAck);
   NS_LOG_DEBUG ("sent ADDBA request to " << dest);
   WifiMacHeader hdr;
   hdr.SetAction ();
@@ -1471,117 +1191,29 @@ ServicePeriod::SendAddBaRequest (Mac48Address dest, uint8_t tid, uint16_t startS
   m_currentPacket = packet;
   m_currentHdr = hdr;
 
-  uint16_t sequence = m_txMiddle->GetNextSequenceNumberfor (&m_currentHdr);
+  uint16_t sequence = m_txMiddle->GetNextSequenceNumberFor (&m_currentHdr);
   m_currentHdr.SetSequenceNumber (sequence);
   m_stationManager->UpdateFragmentationThreshold ();
   m_currentHdr.SetFragmentNumber (0);
   m_currentHdr.SetNoMoreFragments ();
   m_currentHdr.SetNoRetry ();
 
-  MacLowTransmissionParameters params;
-  params.EnableAck ();
-  params.DisableRts ();
-  params.DisableNextData ();
-  params.DisableOverrideDurationId ();
-  params.SetAsBoundedTransmission ();
-  params.SetMaximumTransmissionDuration (m_remainingDuration);
-  params.SetTransmitInSericePeriod ();
-
-  m_low->StartTransmission (m_currentPacket, &m_currentHdr, params,
-                            m_transmissionListener);
-}
-
-void
-ServicePeriod::SendAddBaResponse (const MgtAddBaRequestHeader *reqHdr,
-                                  Mac48Address originator)
-{
-  NS_LOG_FUNCTION (this);
-
-  /* Update SP duration */
-  m_remainingDuration = GetRemainingDuration ();
-  if (m_remainingDuration <= Seconds (0))
+  m_currentParams.EnableAck ();
+  m_currentParams.DisableRts ();
+  m_currentParams.DisableNextData ();
+  m_currentParams.DisableOverrideDurationId ();
+  if (m_stationManager->HasDmgSupported () && GetTypeOfStation () != DMG_ADHOC)
     {
-      m_accessAllowed = false;
-      return;
+      m_currentParams.SetAsBoundedTransmission ();
+      m_currentParams.SetMaximumTransmissionDuration (m_remainingDuration);
     }
-
-  WifiMacHeader hdr;
-  hdr.SetAction ();
-  hdr.SetAddr1 (originator);
-  hdr.SetAddr2 (m_low->GetAddress ());
-  hdr.SetAddr3 (m_low->GetAddress ());
-  hdr.SetDsNotFrom ();
-  hdr.SetDsNotTo ();
-  hdr.SetNoOrder ();
-
-  MgtAddBaResponseHeader respHdr;
-  StatusCode code;
-  code.SetSuccess ();
-  respHdr.SetStatusCode (code);
-  //Here a control about queues type?
-  respHdr.SetAmsduSupport (reqHdr->IsAmsduSupported ());
-
-  if (reqHdr->IsImmediateBlockAck ())
-    {
-      respHdr.SetImmediateBlockAck ();
-    }
-  else
-    {
-      respHdr.SetDelayedBlockAck ();
-    }
-  respHdr.SetTid (reqHdr->GetTid ());
-  //For now there's not no control about limit of reception. We
-  //assume that receiver has no limit on reception. However we assume
-  //that a receiver sets a bufferSize in order to satisfy next
-  //equation: (bufferSize + 1) % 16 = 0 So if a recipient is able to
-  //buffer a packet, it should be also able to buffer all possible
-  //packet's fragments. See section 7.3.1.14 in IEEE802.11e for more details.
-  respHdr.SetBufferSize (1023);
-  respHdr.SetTimeout (reqHdr->GetTimeout ());
-
-  WifiActionHeader actionHdr;
-  WifiActionHeader::ActionValue action;
-  action.blockAck = WifiActionHeader::BLOCK_ACK_ADDBA_RESPONSE;
-  actionHdr.SetAction (WifiActionHeader::BLOCK_ACK, action);
-
-  Ptr<Packet> packet = Create<Packet> ();
-  packet->AddHeader (respHdr);
-  packet->AddHeader (actionHdr);
-
-  //We need to notify our MacLow object as it will have to buffer all
-  //correctly received packets for this Block Ack session
-  m_low->CreateBlockAckAgreement (&respHdr, originator,
-                                  reqHdr->GetStartingSequence ());
-
-  m_currentPacket = packet;
-  m_currentHdr = hdr;
-
-  uint16_t sequence = m_txMiddle->GetNextSequenceNumberfor (&m_currentHdr);
-  m_currentHdr.SetSequenceNumber (sequence);
-  m_stationManager->UpdateFragmentationThreshold ();
-  m_currentHdr.SetFragmentNumber (0);
-  m_currentHdr.SetNoMoreFragments ();
-  m_currentHdr.SetNoRetry ();
-
-  MacLowTransmissionParameters params;
-  params.EnableAck ();
-  params.DisableRts ();
-  params.DisableNextData ();
-  params.DisableOverrideDurationId ();
-  params.SetAsBoundedTransmission ();
-  params.SetMaximumTransmissionDuration (m_remainingDuration);
-  params.SetTransmitInSericePeriod ();
-
-  Simulator::Schedule (MicroSeconds (10), &MacLow::FutureTransmission, m_low,
-                       m_currentPacket, &m_currentHdr, params, m_transmissionListener);
-//  m_low->StartTransmission (m_currentPacket, &m_currentHdr, params,
-//                            m_transmissionListener);
+  m_low->StartTransmission (m_currentPacket, &m_currentHdr, m_currentParams, this);
 }
 
 void
 ServicePeriod::SendDelbaFrame (Mac48Address addr, uint8_t tid, bool byOriginator)
 {
-  NS_LOG_FUNCTION (this << addr << static_cast<uint32_t> (tid) << byOriginator);
+  NS_LOG_FUNCTION (this << addr << (uint16_t)tid << byOriginator);
   WifiMacHeader hdr;
   hdr.SetAction ();
   hdr.SetAddr1 (addr);
@@ -1639,5 +1271,6 @@ ServicePeriod::BaTxFailed (const WifiMacHeader &hdr)
       m_txFailedCallback (m_currentHdr);
     }
 }
+
 
 } //namespace ns3

@@ -18,6 +18,7 @@
  * Author: Giuseppe Piro  <g.piro@poliba.it>
  * Author: Marco Miozzo <mmiozzo@cttc.es> : Update to FF API Architecture
  * Author: Nicola Baldo <nbaldo@cttc.es>  : Integrated with new RRC and MAC architecture
+ * Author: Danilo Abrignani <danilo.abrignani@unibo.it> : Integrated with new architecture - GSoC 2015 - Carrier Aggregation
  */
 
 #include <ns3/llc-snap-header.h>
@@ -44,6 +45,9 @@
 #include <ns3/ipv4-l3-protocol.h>
 #include <ns3/abort.h>
 #include <ns3/log.h>
+#include <ns3/lte-enb-component-carrier-manager.h>
+#include <ns3/object-map.h>
+#include <ns3/object-factory.h>
 
 namespace ns3 {
 
@@ -78,21 +82,15 @@ TypeId LteEnbNetDevice::GetTypeId (void)
                    PointerValue (),
                    MakePointerAccessor (&LteEnbNetDevice::m_ffrAlgorithm),
                    MakePointerChecker <LteFfrAlgorithm> ())
-    .AddAttribute ("LteEnbMac",
-                   "The MAC associated to this EnbNetDevice",
+    .AddAttribute ("LteEnbComponentCarrierManager",
+                   "The RRC associated to this EnbNetDevice",
                    PointerValue (),
-                   MakePointerAccessor (&LteEnbNetDevice::m_mac),
-                   MakePointerChecker <LteEnbMac> ())
-    .AddAttribute ("FfMacScheduler",
-                   "The scheduler associated to this EnbNetDevice",
-                   PointerValue (),
-                   MakePointerAccessor (&LteEnbNetDevice::m_scheduler),
-                   MakePointerChecker <FfMacScheduler> ())
-    .AddAttribute ("LteEnbPhy",
-                   "The PHY associated to this EnbNetDevice",
-                   PointerValue (),
-                   MakePointerAccessor (&LteEnbNetDevice::m_phy),
-                   MakePointerChecker <LteEnbPhy> ())
+                   MakePointerAccessor (&LteEnbNetDevice::m_componentCarrierManager),
+                   MakePointerChecker <LteEnbComponentCarrierManager> ())
+    .AddAttribute ("ComponentCarrierMap", "List of component carriers.",
+                   ObjectMapValue (),
+                   MakeObjectMapAccessor (&LteEnbNetDevice::m_ccMap),
+                   MakeObjectMapChecker<ComponentCarrierEnb> ())
     .AddAttribute ("UlBandwidth",
                    "Uplink Transmission Bandwidth Configuration in number of Resource Blocks",
                    UintegerValue (25),
@@ -115,13 +113,13 @@ TypeId LteEnbNetDevice::GetTypeId (void)
                    "as per 3GPP 36.101 Section 5.7.3. ",
                    UintegerValue (100),
                    MakeUintegerAccessor (&LteEnbNetDevice::m_dlEarfcn),
-                   MakeUintegerChecker<uint16_t> (0, 6599))
+                   MakeUintegerChecker<uint32_t> (0, 262143))
     .AddAttribute ("UlEarfcn",
                    "Uplink E-UTRA Absolute Radio Frequency Channel Number (EARFCN) "
                    "as per 3GPP 36.101 Section 5.7.3. ",
                    UintegerValue (18100),
                    MakeUintegerAccessor (&LteEnbNetDevice::m_ulEarfcn),
-                   MakeUintegerChecker<uint16_t> (18000, 24599))
+                   MakeUintegerChecker<uint32_t> (0, 262143))
     .AddAttribute ("CsgId",
                    "The Closed Subscriber Group (CSG) identity that this eNodeB belongs to",
                    UintegerValue (0),
@@ -143,7 +141,8 @@ TypeId LteEnbNetDevice::GetTypeId (void)
 LteEnbNetDevice::LteEnbNetDevice ()
   : m_isConstructed (false),
     m_isConfigured (false),
-    m_anr (0)
+    m_anr (0),
+    m_componentCarrierManager(0)
 {
   NS_LOG_FUNCTION (this);
 }
@@ -158,12 +157,6 @@ LteEnbNetDevice::DoDispose ()
 {
   NS_LOG_FUNCTION (this);
 
-  m_mac->Dispose ();
-  m_mac = 0;
-
-  m_scheduler->Dispose ();
-  m_scheduler = 0;
-
   m_rrc->Dispose ();
   m_rrc = 0;
 
@@ -175,13 +168,16 @@ LteEnbNetDevice::DoDispose ()
       m_anr->Dispose ();
       m_anr = 0;
     }
-
-  m_ffrAlgorithm->Dispose ();
-  m_ffrAlgorithm = 0;
-
-  m_phy->Dispose ();
-  m_phy = 0;
-
+  m_componentCarrierManager->Dispose();
+  m_componentCarrierManager = 0;
+  // ComponentCarrierEnb::DoDispose() will call DoDispose
+  // of its PHY, MAC, FFR and scheduler instance
+  for (uint32_t i = 0; i < m_ccMap.size (); i++)
+    {
+      m_ccMap.at (i)->Dispose ();
+      m_ccMap.at (i) = 0;
+    }
+   
   LteNetDevice::DoDispose ();
 }
 
@@ -190,19 +186,37 @@ LteEnbNetDevice::DoDispose ()
 Ptr<LteEnbMac>
 LteEnbNetDevice::GetMac () const
 {
-  return m_mac;
+  return m_ccMap.at (0)->GetMac ();
 }
 
 Ptr<LteEnbPhy>
 LteEnbNetDevice::GetPhy () const
 {
-  return m_phy;
+  return m_ccMap.at (0)->GetPhy ();
+}
+
+Ptr<LteEnbMac>
+LteEnbNetDevice::GetMac (uint8_t index) 
+{
+  return m_ccMap.at (index)->GetMac ();
+}
+
+Ptr<LteEnbPhy>
+LteEnbNetDevice::GetPhy(uint8_t index)  
+{
+  return m_ccMap.at (index)->GetPhy ();
 }
 
 Ptr<LteEnbRrc>
 LteEnbNetDevice::GetRrc () const
 {
   return m_rrc;
+}
+
+Ptr<LteEnbComponentCarrierManager>
+LteEnbNetDevice::GetComponentCarrierManager () const
+{
+  return  m_componentCarrierManager;
 }
 
 uint16_t
@@ -265,27 +279,27 @@ LteEnbNetDevice::SetDlBandwidth (uint8_t bw)
     }
 }
 
-uint16_t 
+uint32_t 
 LteEnbNetDevice::GetDlEarfcn () const
 {
   return m_dlEarfcn;
 }
 
 void 
-LteEnbNetDevice::SetDlEarfcn (uint16_t earfcn)
+LteEnbNetDevice::SetDlEarfcn (uint32_t earfcn)
 { 
   NS_LOG_FUNCTION (this << earfcn);
   m_dlEarfcn = earfcn;
 }
 
-uint16_t 
+uint32_t 
 LteEnbNetDevice::GetUlEarfcn () const
 {
   return m_ulEarfcn;
 }
 
 void 
-LteEnbNetDevice::SetUlEarfcn (uint16_t earfcn)
+LteEnbNetDevice::SetUlEarfcn (uint32_t earfcn)
 { 
   NS_LOG_FUNCTION (this << earfcn);
   m_ulEarfcn = earfcn;
@@ -319,6 +333,17 @@ LteEnbNetDevice::SetCsgIndication (bool csgIndication)
   UpdateConfig (); // propagate the change to RRC level
 }
 
+std::map < uint8_t, Ptr<ComponentCarrierEnb> >
+LteEnbNetDevice::GetCcMap ()
+{
+  return m_ccMap;
+}
+
+void
+LteEnbNetDevice::SetCcMap (std::map< uint8_t, Ptr<ComponentCarrierEnb> > ccm)
+{
+  m_ccMap = ccm;
+}
 
 void 
 LteEnbNetDevice::DoInitialize (void)
@@ -326,9 +351,13 @@ LteEnbNetDevice::DoInitialize (void)
   NS_LOG_FUNCTION (this);
   m_isConstructed = true;
   UpdateConfig ();
-  m_phy->Initialize ();
-  m_mac->Initialize ();
+  std::map< uint8_t, Ptr<ComponentCarrierEnb> >::iterator it;
+  for (it = m_ccMap.begin (); it != m_ccMap.end (); ++it)
+    {
+       it->second->Initialize ();
+    }
   m_rrc->Initialize ();
+  m_componentCarrierManager->Initialize();
   m_handoverAlgorithm->Initialize ();
 
   if (m_anr != 0)
@@ -360,7 +389,7 @@ LteEnbNetDevice::UpdateConfig (void)
         {
           NS_LOG_LOGIC (this << " Configure cell " << m_cellId);
           // we have to make sure that this function is called only once
-          m_rrc->ConfigureCell (m_ulBandwidth, m_dlBandwidth, m_ulEarfcn, m_dlEarfcn, m_cellId);
+          m_rrc->ConfigureCell (m_cellId);
           m_isConfigured = true;
         }
 

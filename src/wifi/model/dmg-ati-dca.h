@@ -1,114 +1,25 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef DMG_ATI_DCA_H
 #define DMG_ATI_DCA_H
 
-#include <stdint.h>
-#include "ns3/callback.h"
-#include "ns3/packet.h"
-#include "ns3/nstime.h"
-#include "ns3/object.h"
-#include "ns3/wifi-mac-header.h"
-#include "ns3/wifi-mode.h"
-#include "ns3/wifi-remote-station-manager.h"
-#include "ns3/dcf.h"
+#include "dca-txop.h"
+#include "mac-low.h"
+#include "wifi-mac-header.h"
+#include "wifi-remote-station-manager.h"
 
 namespace ns3 {
 
-class DcfState;
-class DcfManager;
-class WifiMacQueue;
-class MacLow;
-class WifiMacParameters;
-class MacTxMiddle;
-class RandomStream;
-class MacStation;
-class MacStations;
-
-class DmgAtiDca : public Dcf
+class DmgAtiDca : public DcaTxop
 {
 public:
   static TypeId GetTypeId (void);
 
-  /**
-   * typedef for a callback to invoke when a
-   * packet transmission was completed successfully.
-   */
-  typedef Callback <void, Ptr<const Packet>, const WifiMacHeader&> TxPacketOk;
-  /**
-   * typedef for a callback to invoke when a
-   * packet transmission was completed successfully.
-   */
-  typedef Callback <void, const WifiMacHeader&> TxOk;
-  /**
-   * typedef for a callback to invoke when a
-   * packet transmission was failed.
-   */
-  typedef Callback <void, const WifiMacHeader&> TxFailed;
-
   DmgAtiDca ();
   ~DmgAtiDca ();
-
-  /**
-   * Set MacLow associated with this DmgAtiDca.
-   *
-   * \param low MacLow
-   */
-  void SetLow (Ptr<MacLow> low);
-  /**
-   * Set DcfManager this DmgAtiDca is associated to.
-   *
-   * \param manager DcfManager
-   */
-  void SetManager (DcfManager *manager);
-  /**
-   * Set WifiRemoteStationsManager this DmgAtiDca is associated to.
-   *
-   * \param remoteManager WifiRemoteStationManager
-   */
-  void SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> remoteManager);
-  /**
-   * Set MacTxMiddle this DmgAtiDca is associated to.
-   *
-   * \param txMiddle MacTxMiddle
-   */
-  void SetTxMiddle (MacTxMiddle *txMiddle);
-
-  /**
-   * \param callback the callback to invoke when a
-   * packet transmission was completed successfully.
-   */
-  void SetTxOkCallback (TxPacketOk callback);
-  /**
-   * \param callback the callback to invoke when a
-   * transmission without ACK was completed successfully.
-   */
-  void SetTxOkNoAckCallback (TxOk callback) ;
-  /**
-   * \param callback the callback to invoke when a
-   * packet transmission was completed unsuccessfully.
-   */
-  void SetTxFailedCallback (TxFailed callback);
-  /**
-   * Return the packet queue associated with this DmgAtiDca.
-   *
-   * \return WifiMacQueue
-   */
-  Ptr<WifiMacQueue> GetQueue () const;
-
-  //Inherited
-  virtual void SetMinCw (uint32_t minCw);
-  virtual void SetMaxCw (uint32_t maxCw);
-  virtual void SetAifsn (uint32_t aifsn);
-  virtual void SetTxopLimit (Time txopLimit);
-  virtual uint32_t GetMinCw (void) const;
-  virtual uint32_t GetMaxCw (void) const;
-  virtual uint32_t GetAifsn (void) const;
-  virtual Time GetTxopLimit (void) const;
-
   /**
    * \param packet packet to send
    * \param hdr header of packet to send.
@@ -129,23 +40,10 @@ public:
   void InitiateTransmission (Time atiDuration);
 
 private:
-  class TransmissionListener;
-  class NavListener;
-  class PhyListener;
-  class Dcf;
-  friend class Dcf;
-  friend class TransmissionListener;
-
   DmgAtiDca &operator = (const DmgAtiDca &);
   DmgAtiDca (const DmgAtiDca &o);
 
   //Inherited from ns3::Object
-  /**
-   * Return the MacLow associated with this DmgAtiDca.
-   *
-   * \return MacLow
-   */
-  Ptr<MacLow> Low (void);
   void DoInitialize ();
 
   /**
@@ -203,18 +101,6 @@ private:
   bool NeedDataRetransmission (void);
 
   virtual void DoDispose (void);
-
-  Dcf *m_dcf;
-  DcfManager *m_manager;
-  TxPacketOk m_txOkCallback;
-  TxOk m_txOkNoAckCallback;
-  TxFailed m_txFailedCallback;
-  Ptr<WifiMacQueue> m_queue;
-  MacTxMiddle *m_txMiddle;
-  Ptr<MacLow> m_low;
-  Ptr<WifiRemoteStationManager> m_stationManager;
-  TransmissionListener *m_transmissionListener;
-  Ptr<WifiMac> m_wifiMac;
 
   Ptr<const Packet> m_currentPacket;
   WifiMacHeader m_currentHdr;

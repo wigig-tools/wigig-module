@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -16,6 +16,7 @@
 #include "dcf-manager.h"
 #include "msdu-standard-aggregator.h"
 #include "mpdu-standard-aggregator.h"
+#include "wifi-mac-queue.h"
 
 namespace ns3 {
 
@@ -29,15 +30,52 @@ DmgWifiMac::GetTypeId (void)
   static TypeId tid = TypeId ("ns3::DmgWifiMac")
     .SetParent<RegularWifiMac> ()
     .SetGroupName ("Wifi")
+
+    /* PHY Layer Capabilities */
+    .AddAttribute ("SupportOfdmPhy", "Whether the DMG STA supports OFDM PHY layer.",
+                    BooleanValue (true),
+                    MakeBooleanAccessor (&DmgWifiMac::m_supportOFDM),
+                    MakeBooleanChecker ())
+    .AddAttribute ("SupportLpScPhy", "Whether the DMG STA supports LP-SC PHY layer.",
+                    BooleanValue (false),
+                    MakeBooleanAccessor (&DmgWifiMac::m_supportLpSc),
+                    MakeBooleanChecker ())
+    .AddAttribute ("MaxScTxMcs", "The maximum supported MCS for transmission by SC PHY.",
+                    UintegerValue (12),
+                    MakeUintegerAccessor (&DmgWifiMac::m_maxScTxMcs),
+                    MakeUintegerChecker<uint8_t> (4, 12))
+    .AddAttribute ("MaxScRxMcs", "The maximum supported MCS for reception by SC PHY.",
+                    UintegerValue (12),
+                    MakeUintegerAccessor (&DmgWifiMac::m_maxScRxMcs),
+                    MakeUintegerChecker<uint8_t> (4, 12))
+    .AddAttribute ("MaxOfdmTxMcs", "The maximum supported MCS for transmission by OFDM PHY.",
+                    UintegerValue (24),
+                    MakeUintegerAccessor (&DmgWifiMac::m_maxOfdmTxMcs),
+                    MakeUintegerChecker<uint8_t> (18, 24))
+    .AddAttribute ("MaxOfdmRxMcs", "The maximum supported MCS for reception by OFDM PHY.",
+                    UintegerValue (24),
+                    MakeUintegerAccessor (&DmgWifiMac::m_maxOfdmRxMcs),
+                    MakeUintegerChecker<uint8_t> (18, 24))
+
+    /* DMG Operation Element */
     .AddAttribute ("PcpHandoverSupport", "Whether we support PCP Handover.",
                     BooleanValue (false),
                     MakeBooleanAccessor (&DmgWifiMac::GetPcpHandoverSupport,
                                          &DmgWifiMac::SetPcpHandoverSupport),
                     MakeBooleanChecker ())
+
+    /* Reverse Direction Protocol */
     .AddAttribute ("SupportRDP", "Whether the DMG STA supports Reverse Direction Protocol (RDP)",
                     BooleanValue (false),
                     MakeBooleanAccessor (&DmgWifiMac::m_supportRdp),
                     MakeBooleanChecker ())
+
+    /* DMG Operation Element */
+    .AddAttribute ("AnnounceCapabilities", "Whether we announce DMG Capabilities.",
+                    BooleanValue (true),
+                    MakeBooleanAccessor (&DmgWifiMac::m_announceDmgCapabilities),
+                    MakeBooleanChecker ())
+
       /* DMG Relay Capabilities common between PCP/AP and DMG STA */
     .AddAttribute ("REDSActivated", "Whether the DMG STA is REDS.",
                     BooleanValue (false),
@@ -53,18 +91,24 @@ DmgWifiMac::GetTypeId (void)
                     MakeEnumChecker (RELAY_FD_AF, "Full Duplex",
                                      RELAY_HD_DF, "Half Duplex",
                                      RELAY_BOTH, "Both"))
-//    .AddAttribute ("RelayDuplexMode", "Set relay duplex mode.",
-//                    BooleanValue (false),
-//                    MakeBooleanAccessor (&DmgWifiMac::RelayDuplexMode),
-//                    MakeBooleanChecker ())
+
+    .AddAttribute ("ServicePeriod",
+                   "Queue that manages packets belonging to AC_BE access class in the Service Period.",
+                   PointerValue (),
+                   MakePointerAccessor (&DmgWifiMac::GetServicePeriod),
+                   MakePointerChecker<ServicePeriod> ())
+    .AddAttribute ("SPQueue",
+                   "Queue that manages packets belonging to AC_BE access class in the Service Period.",
+                   PointerValue (),
+                   MakePointerAccessor (&DmgWifiMac::GetSPQueue),
+                   MakePointerChecker<WifiMacQueue> ())
 
     .AddTraceSource ("ServicePeriodStarted", "A service period between two DMG STAs has started.",
-                     MakeTraceSourceAccessor (&DmgWifiMac::m_servicePeriodStartedCallback),
+                   MakeTraceSourceAccessor (&DmgWifiMac::m_servicePeriodStartedCallback),
                      "ns3::DmgWifiMac::ServicePeriodTracedCallback")
     .AddTraceSource ("ServicePeriodEnded", "A service period between two DMG STAs has ended.",
                      MakeTraceSourceAccessor (&DmgWifiMac::m_servicePeriodEndedCallback),
                      "ns3::DmgWifiMac::ServicePeriodTracedCallback")
-
     .AddTraceSource ("SLSCompleted", "SLS phase is completed",
                      MakeTraceSourceAccessor (&DmgWifiMac::m_slsCompleted),
                      "ns3::Mac48Address::TracedCallback")
@@ -120,14 +164,28 @@ DmgWifiMac::DoDispose ()
 void
 DmgWifiMac::DoInitialize (void)
 {
+  /* PHY Layer Information */
+  if (!m_supportOFDM)
+    {
+      m_maxOfdmTxMcs = 0;
+      m_maxOfdmRxMcs = 0;
+    }
   m_requestedBrpTraining = false;
+  m_phy->RegisterReportSnrCallback (MakeCallback (&DmgWifiMac::ReportSnrValue, this));
+  /* At initialization stage, a DMG STA should be in quasi-omni receiving mode */
+  m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+  /* Channel Access Periods */
   m_dmgAtiDca->Initialize ();
   m_dca->Initialize ();
   m_sp->Initialize ();
-  m_phy->RegisterReportSnrCallback (MakeCallback (&DmgWifiMac::ReportSnrValue, this));
-  /* At initialization stage, a DMG STA should be in Omni receiving mode */
-  m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+  /* Initialzie Upper Layers */
   RegularWifiMac::DoInitialize ();
+}
+
+Ptr<ServicePeriod>
+DmgWifiMac::GetServicePeriod () const
+{
+  return m_sp;
 }
 
 void
@@ -218,7 +276,7 @@ void
 DmgWifiMac::Configure80211ad (void)
 {
   WifiMac::Configure80211ad ();
-  /* DMG Beaforming IFS */
+  /* DMG Beamforming IFS */
   SetSbifs (MicroSeconds (1));
   SetMbifs (GetSifs () * 3);
   SetLbifs (GetSifs () * 6);
@@ -244,7 +302,6 @@ void
 DmgWifiMac::EnableAggregation (void)
 {
   NS_LOG_FUNCTION (this);
-  RegularWifiMac::EnableAggregation ();
   if (m_sp->GetMsduAggregator () == 0)
     {
       Ptr<MsduStandardAggregator> msduAggregator = CreateObject<MsduStandardAggregator> ();
@@ -255,7 +312,7 @@ DmgWifiMac::EnableAggregation (void)
 //      Ptr<MpduStandardAggregator> mpduAggregator = CreateObject<MpduStandardAggregator> ();
 //      m_sp->SetMpduAggregator (mpduAggregator);
 //    }
-  ConfigureAggregation ();
+  RegularWifiMac::EnableAggregation ();
 }
 
 void
@@ -277,7 +334,7 @@ DmgWifiMac::SendAddBaResponse (const MgtAddBaRequestHeader *reqHdr, Mac48Address
     }
   else
     {
-      m_sp->SendAddBaResponse (reqHdr, originator);
+//      m_sp->SendAddBaResponse (reqHdr, originator);
     }
 }
 
@@ -289,10 +346,26 @@ DmgWifiMac::MapAidToMacAddress (uint16_t aid, Mac48Address address)
   m_macMap[address] = aid;
 }
 
-void
-DmgWifiMac::SetupBlockAck (uint8_t tid, Mac48Address recipient)
+Time
+DmgWifiMac::GetFrameDurationInMicroSeconds (Time duration) const
 {
-  m_sp->SetupBlockAck (tid, recipient);
+  return MicroSeconds (ceil ((double) duration.GetNanoSeconds () / 1000));
+}
+
+Time
+DmgWifiMac::GetSprFrameDuration (void) const
+{
+  return GetFrameDurationInMicroSeconds (m_phy->CalculateTxDuration (SPR_FRAME_SIZE,
+                                         m_stationManager->GetDmgLowestScVector (), 0));
+}
+
+void
+DmgWifiMac::AddMcsSupport (Mac48Address address, uint32_t initialMcs, uint32_t lastMcs)
+{
+  for (uint32_t j = initialMcs; j <= lastMcs; j++)
+    {
+      m_stationManager->AddSupportedMode (address, m_phy->GetMode (j));
+    }
 }
 
 ChannelAccessPeriod
@@ -314,11 +387,15 @@ DmgWifiMac::StartContentionPeriod (AllocationID allocationID, Time contentionDur
   m_currentAllocation = CBAP_ALLOCATION;
   /* Restore previously suspended transmission */
   m_low->RestoreAllocationParameters (allocationID);
+  if (GetTypeOfStation () == DMG_STA)
+    {
+      /* For the time being we assume in CBAP we communicate with the PCP/AP only */
+      SteerAntennaToward (GetBssid ());
+    }
   /* Allow Contention Access */
   m_dcfManager->AllowChannelAccess ();
-  /* Signal Management DCA to start channel access */
+  /* Signal DCA & EDCA Functions to start channel access */
   m_dca->InitiateTransmission (allocationID, contentionDuration);
-  /* Signal EDCA queues to start channel access */
   for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
       i->second->InitiateTransmission (allocationID, contentionDuration);
@@ -345,9 +422,46 @@ DmgWifiMac::EndContentionPeriod (void)
 }
 
 void
+DmgWifiMac::BeamLinkMaintenanceTimeout (void)
+{
+  NS_LOG_FUNCTION (this);
+  m_beamLinkMaintenanceTimerExpired (m_peerStationAid, m_peerStationAddress, GetRemainingAllocationTime ());
+}
+
+void
+DmgWifiMac::ScheduleServicePeriod (uint8_t blocks, Time spStart, Time spLength, Time spPeriod,
+                                   AllocationID allocationID, uint8_t peerAid, Mac48Address peerAddress, bool isSource)
+{
+  NS_LOG_FUNCTION (this << blocks << spStart << spLength << spPeriod
+                   << uint32_t (allocationID) << uint32_t (peerAid) << peerAddress << isSource);
+  /* We allocate multiple blocks of this allocation as in (9.33.6 Channel access in scheduled DTI) */
+  /* A_start + (i – 1) × A_period */
+  if (spPeriod > 0)
+    {
+      for (uint8_t i = 0; i < blocks; i++)
+        {
+          NS_LOG_INFO ("Schedule SP Block [" << i << "] at " << spStart << " till " << spStart + spLength);
+          Simulator::Schedule (spStart, &DmgWifiMac::StartServicePeriod, this,
+                               allocationID, spLength, peerAid, peerAddress, isSource);
+          Simulator::Schedule (spStart + spLength, &DmgWifiMac::EndServicePeriod, this);
+          spStart += spLength + spPeriod + GUARD_TIME;
+        }
+    }
+  else
+    {
+      /* Special case when Allocation Block Period=0 i.e. consecutive blocks *
+       * We try to avoid schedulling multiple blocks, so we schedule one big block */
+      spLength = spLength * blocks;
+      Simulator::Schedule (spStart, &DmgWifiMac::StartServicePeriod, this,
+                           allocationID, spLength, peerAid, peerAddress, isSource);
+      Simulator::Schedule (spStart + spLength, &DmgWifiMac::EndServicePeriod, this);
+    }
+}
+
+void
 DmgWifiMac::StartServicePeriod (AllocationID allocationID, Time length, uint8_t peerAid, Mac48Address peerAddress, bool isSource)
 {
-  NS_LOG_FUNCTION (this << length << uint32_t (peerAid) << peerAddress << isSource);
+  NS_LOG_FUNCTION (this << length << uint32_t (peerAid) << peerAddress << isSource << Simulator::Now ());
   m_currentAllocationID = allocationID;
   m_currentAllocation = SERVICE_PERIOD_ALLOCATION;
   m_currentAllocationLength = length;
@@ -361,6 +475,20 @@ DmgWifiMac::StartServicePeriod (AllocationID allocationID, Time length, uint8_t 
   if (isSource)
     {
       m_sp->InitiateTransmission ();
+    }
+  /* Check if we are maintaining the beamformed link during this service period */
+  BeamLinkMaintenanceTableI it = m_beamLinkMaintenanceTable.find (peerAid);
+  if (it != m_beamLinkMaintenanceTable.end ())
+    {
+      BeamLinkMaintenanceInfo info = it->second;
+      m_currentLinkMaintained = true;
+      m_currentBeamLinkMaintenanceInfo = info;
+      m_beamLinkMaintenanceTimeout = Simulator::Schedule (MicroSeconds (info.beamLinkMaintenanceTime),
+                                                          &DmgWifiMac::BeamLinkMaintenanceTimeout, this);
+    }
+  else
+    {
+      m_currentLinkMaintained = false;
     }
 }
 
@@ -390,6 +518,22 @@ DmgWifiMac::EndServicePeriod (void)
   m_servicePeriodEndedCallback (GetAddress (), m_peerStationAddress);
   m_sp->DisableChannelAccess ();
   m_sp->EndCurrentServicePeriod ();
+  /* Check if we have beamlink maintenance timer running */
+  if (m_beamLinkMaintenanceTimeout.IsRunning ())
+    {
+      BeamLinkMaintenanceTableI it = m_beamLinkMaintenanceTable.find (m_peerStationAid);
+      BeamLinkMaintenanceInfo info = it->second;
+      info.beamLinkMaintenanceTime -= m_currentAllocationLength.GetMicroSeconds ();
+      m_beamLinkMaintenanceTable[m_peerStationAid] = info;
+      m_beamLinkMaintenanceTimeout.Cancel ();
+    }
+  m_currentLinkMaintained = false;
+}
+
+Ptr<WifiMacQueue>
+DmgWifiMac::GetSPQueue (void) const
+{
+  return m_sp->GetQueue ();
 }
 
 Time
@@ -444,6 +588,22 @@ DmgWifiMac::MapRxSnr (Mac48Address address, SECTOR_ID sectorID, ANTENNA_ID anten
 }
 
 void
+DmgWifiMac::TransmitControlFrameImmediately (Ptr<const Packet> packet, WifiMacHeader &hdr)
+{
+  NS_LOG_FUNCTION (this << packet);
+  /* Send Frame immediately without DCA + DCF Manager */
+  MacLowTransmissionParameters params;
+  params.EnableOverrideDurationId (hdr.GetDuration ());
+  params.DisableRts ();
+  params.DisableAck ();
+  params.DisableNextData ();
+  m_low->StartTransmission (packet,
+                            &hdr,
+                            params,
+                            MakeCallback (&DmgWifiMac::FrameTxOk, this));
+}
+
+void
 DmgWifiMac::SendSswFbckAfterRss (Mac48Address receiver)
 {
   NS_LOG_FUNCTION (this << receiver);
@@ -488,19 +648,10 @@ DmgWifiMac::SendSswFbckAfterRss (Mac48Address receiver)
   m_phy->GetDirectionalAntenna ()->SetCurrentTxSectorID (antennaConfigTx.first);
   m_phy->GetDirectionalAntenna ()->SetCurrentTxAntennaID (antennaConfigTx.second);
 
-  /* Send Control Frames directly without DCA + DCF Manager */
-  MacLowTransmissionParameters params;
-  params.EnableOverrideDurationId (hdr.GetDuration ());
-  params.DisableRts ();
-  params.DisableAck ();
-  params.DisableNextData ();
-  m_low->StartTransmission (packet,
-                            &hdr,
-                            params,
-                            MakeCallback (&DmgWifiMac::FrameTxOk, this));
+  TransmitControlFrameImmediately ( packet, hdr);
 }
 
-/* Information Request and Response */
+/* Information Request and Response Exchange */
 
 void
 DmgWifiMac::SendInformationRequest (Mac48Address to, ExtInformationRequest &requestHdr)
@@ -550,6 +701,27 @@ DmgWifiMac::SendInformationResponse (Mac48Address to, ExtInformationResponse &re
   packet->AddHeader (actionHdr);
 
   m_dca->Queue (packet, hdr);
+}
+
+void
+DmgWifiMac::SteerTxAntennaToward (Mac48Address address)
+{
+  NS_LOG_FUNCTION (this << address);
+  STATION_ANTENNA_CONFIG_MAP::iterator it = m_bestAntennaConfig.find (address);
+  if (it != m_bestAntennaConfig.end ())
+    {
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = m_bestAntennaConfig[address].first;
+      /* Change Tx Antenna Configuration */
+      m_phy->GetDirectionalAntenna ()->SetCurrentTxSectorID (antennaConfigTx.first);
+      m_phy->GetDirectionalAntenna ()->SetCurrentTxAntennaID (antennaConfigTx.second);
+      NS_LOG_DEBUG ("Change Transmit Antenna Sector Config to SectorID=" << uint32_t (antennaConfigTx.first)
+                    << ", AntennaID=" << uint32_t (antennaConfigTx.second));
+      m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+    }
+  else
+    {
+      NS_LOG_DEBUG ("No antenna configuration available for DMG STA=" << address);
+    }
 }
 
 void
@@ -697,7 +869,9 @@ DmgWifiMac::SendBrpFrame (Mac48Address receiver, BRP_Request_Field &requestField
   m_dmgAtiDca->Queue (packet, hdr);
 }
 
-/* Currently, we use BRP to train receive sector since we did not have RXSS in A-BFT */
+/*
+ *  Currently, we use BRP to train receive sector since we did not have RXSS in A-BFT
+ */
 void
 DmgWifiMac::InitiateBrpSetupSubphase (Mac48Address receiver)
 {
@@ -789,6 +963,47 @@ DmgWifiMac::InitiateBrpTransaction (Mac48Address receiver)
   SendBrpFrame (receiver, requestField, element);
 }
 
+Time
+DmgWifiMac::GetSectorSweepDuration (uint8_t sectors)
+{
+  return ((sswTxTime) * sectors + GetSbifs () * (sectors - 1));
+}
+
+Time
+DmgWifiMac::GetSectorSweepSlotTime (uint8_t fss)
+{
+  Time time;
+  time = aAirPropagationTime
+       + GetSectorSweepDuration (fss)  /* aSSDuration */
+       + sswFbckTxTime
+       + GetMbifs () * 2;
+  time = MicroSeconds (ceil ((double) time.GetNanoSeconds () / 1000));
+  return time;
+}
+
+Time
+DmgWifiMac::CalculateBeamformingTrainingDuration (uint8_t peerSectors)
+{
+  Time duration;
+  duration += (GetNumberOfSectors () + peerSectors - 2) * GetSbifs ();
+  duration += (GetNumberOfSectors () + peerSectors) *  (sswTxTime + aAirPropagationTime);
+  duration += sswFbckTxTime + sswAckTxTime + 2 * aAirPropagationTime;
+  duration += GetMbifs () * 3;
+  return duration;
+}
+
+uint8_t
+DmgWifiMac::GetNumberOfSectors (void) const
+{
+  return m_phy->GetDirectionalAntenna ()->GetNumberOfSectors ();
+}
+
+uint8_t
+DmgWifiMac::GetNumberOfAntennas (void) const
+{
+  return m_phy->GetDirectionalAntenna ()->GetNumberOfAntennas ();
+}
+
 void
 DmgWifiMac::ManagementTxOk (const WifiMacHeader &hdr)
 {
@@ -839,7 +1054,7 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
         {
         case WifiActionHeader::BLOCK_ACK:
           {
-            if (m_currentAllocation == CBAP_ALLOCATION)
+            if ((m_currentAllocation == CBAP_ALLOCATION) || (GetTypeOfStation () == DMG_ADHOC))
               {
                 packet->AddHeader (actionHdr);
                 RegularWifiMac::Receive (packet, hdr);
@@ -853,14 +1068,14 @@ DmgWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                     {
                       MgtAddBaRequestHeader reqHdr;
                       packet->RemoveHeader (reqHdr);
-                      m_sp->SendAddBaResponse (&reqHdr, from);
+//                      m_sp->SendAddBaResponse (&reqHdr, from);
                       return;
                     }
                   case WifiActionHeader::BLOCK_ACK_ADDBA_RESPONSE:
                     {
                       MgtAddBaResponseHeader respHdr;
                       packet->RemoveHeader (respHdr);
-                      m_sp->GotAddBaResponse (&respHdr, from);
+//                      m_sp->GotAddBaResponse (&respHdr, from);
                       return;
                     }
                   case WifiActionHeader::BLOCK_ACK_DELBA:

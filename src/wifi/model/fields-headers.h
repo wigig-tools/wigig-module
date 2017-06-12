@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef FIELDS_HEADERS_H
@@ -111,20 +111,20 @@ private:
 
 typedef enum  {
   SERVICE_PERIOD_ALLOCATION = 0,
-  CBAP_ALLOCATION
+  CBAP_ALLOCATION = 1
 } AllocationType;
 
 typedef uint8_t AllocationID;
 
 /**
  * \ingroup wifi
- * \brief Dynamic Allocation Info Field.
+ * \brief Dynamic Allocation Information Field.
  */
-class Dynamic_Allocation_Info_Field : public ObjectBase
+class DynamicAllocationInfoField : public ObjectBase
 {
 public:
-  Dynamic_Allocation_Info_Field ();
-  ~Dynamic_Allocation_Info_Field ();
+  DynamicAllocationInfoField ();
+  ~DynamicAllocationInfoField ();
 
   static TypeId GetTypeId (void);
   virtual TypeId GetInstanceTypeId (void) const;
@@ -144,23 +144,22 @@ public:
   */
   void SetAllocationType (AllocationType value);
   /**
-  * Set Source AID.
+  * Set source AID.
   * \param
   */
   void SetSourceAID (uint8_t aid);
   /**
-  * Set the Destination AID.
-  *
+  * Setd destination AID.
   * \param
   */
   void SetDestinationAID (uint8_t aid);
   /**
-  * Set the Allocation Duration.
+  * Set the furation of the current allocation .
   * \param
   */
   void SetAllocationDuration (uint16_t duration);
   /**
-  * Set the Reserved Field value.
+  * Set the value of the reserved field .
   * \param
   */
   void SetReserved (uint8_t reserved);
@@ -177,10 +176,13 @@ private:
   AllocationType m_allocationType;
   uint8_t m_sourceAID;
   uint8_t m_destinationAID;
-  uint8_t m_allocationDuration;
+  uint16_t m_allocationDuration;
   uint8_t m_reserved;
 
 };
+
+typedef std::vector<DynamicAllocationInfoField> DynamicAllocationInfoList;
+typedef DynamicAllocationInfoList::const_iterator DynamicAllocationInfoListCI;
 
 /*******************************************
  *    Sector Sweep Feedback Field (8.4a.3)
@@ -439,6 +441,101 @@ private:
   BeamLinkMaintenanceUnitIndex m_unitIndex;
   uint8_t m_value;
   bool m_isMaster;
+
+};
+
+/******************************************
+* Beacon Clustering Control Field (8-34c&d)
+*******************************************/
+
+typedef enum {
+  NOT_PARTICIPATING = 0,
+  SYNC_PCP_AP = 1,
+  PARTICIPATING = 2
+} ClusterMemberRole;
+
+/**
+ * \ingroup wifi
+ * Implement the header for Clustering Control Field.
+ */
+class ExtDMGClusteringControlField : public ObjectBase
+{
+public:
+  ExtDMGClusteringControlField ();
+  ~ExtDMGClusteringControlField ();
+
+  static TypeId GetTypeId (void);
+  virtual TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  Buffer::Iterator Serialize (Buffer::Iterator start) const;
+  Buffer::Iterator Deserialize (Buffer::Iterator start);
+
+  void SetDiscoveryMode (bool value);
+  bool GetDiscoveryMode (void) const;
+
+  /** Clustering Control field format if the Discovery Mode is False **/
+
+  /**
+   * If ECPAC Policy Enforced field is set to 0, the Beacon SP Duration subfield indicates the duration, in units
+   * of 8 μs, of the Beacon SPs in the cluster. If ECPAC Policy Enforced field is set to 1, the Beacon SP Duration
+   * subfield indicates the maximum duration, in units of 8 μs, of the beacon header interval (BHI) of the BSS,
+   * and the minimum duration of Beacon SPs in the cluster (see 9.34.2.2).
+   * \param duration
+   */
+  void SetBeaconSpDuration (uint8_t duration);
+  /**
+   * The cluster to which the transmitter of the Clustering Control field belongs is identified by the Cluster ID
+   * subfield. The MAC address of the synchronization PCP (S-PCP)/S-AP is the Cluster ID of the cluster.
+   * \param clusterID
+   */
+  void SetClusterID (Mac48Address clusterID);
+  /**
+   * The Cluster Member Role subfield identifies the role that the transmitting STA assumes within the cluster.
+   * A value of 0 means that the STA is currently not participating in clustering. A value of 1 means that the STA
+   * acts as the S-PCP/S-AP of the cluster. A value of 2 means that the STA participates in the cluster, but not as
+   * the S-PCP/S-AP. The value 3 is reserved.
+   * \param role
+   */
+  void SetClusterMemberRole (ClusterMemberRole role);
+  /**
+   * The ClusterMaxMem subfield defines the maximum number of PCPs and/or APs, including the S-PCP/S-AP, that can
+   * participate in the cluster. The value of the ClusterMaxMem subfield is computed in relation to the beacon interval
+   * value (9.34.2). The value 0 is reserved. Values 8 and above are reserved if the ECPAC Policy Enforced field is set
+   * to 0. The value 1 is assigned to the S-PCP/S-AP.
+   * \param max
+   */
+  void SetClusterMaxMem (uint8_t max);
+  void SetReserved (uint16_t value);
+
+  uint8_t GetBeaconSpDuration (void) const;
+  Mac48Address GetClusterID (void) const;
+  ClusterMemberRole GetClusterMemberRole (void) const;
+  uint8_t GetClusterMaxMem (void) const;
+  uint16_t GetReserved (void) const;
+
+  /** Clustering Control field format if the Discovery Mode is True **/
+
+  /**
+   * The A-BFT Responder Address subfield contains the MAC address of the STA that is allowed to transmit
+   * during the A-BFT, if present, that follows the BTI.
+   * \param address The MAC address of the A-BFT Responder Address.
+   */
+  void SetABFT_ResponderAddress (Mac48Address address);
+
+  Mac48Address GetABFT_ResponderAddress (void) const;
+
+private:
+  bool m_discoveryMode;
+  /* With Discovery Mode Disabled */
+  uint8_t m_beaconSpDuration;
+  Mac48Address m_clusterID;
+  uint8_t m_clusterMemberRole;
+  uint8_t m_clusterMaxMem;
+
+  /* With Discovery Mode Enabled */
+  Mac48Address m_responderAddress;
+  uint16_t m_reserved;
 
 };
 

@@ -33,6 +33,67 @@
  * the procedure for relay search and relay link establishment defined in the amendment.
  */
 
+
+
+
+
+
+/**
+ *
+ * Simulation Objective:
+ * This script is used to evaluate IEEE 802.11ad relay operation for TCP connection using Link Switching Type working in
+ * Half Duplex Decode and Forward relay mode. IEEE 802.11ad defines relay operation mode for SP protection against sudden
+ * link interruptions.
+ *
+ * Network Topology:
+ * The scenario consists of 3 DMG STAs (West STA, East STA and, one RDS) and a single PCP/AP.
+ *
+ *                           DMG AP (0,1)
+ *
+ *
+ * West STA (-1.73,0)                         East STA (1.73,0)
+ *
+ *
+ *                            RDS (0,-1)
+ *
+ * Simulation Description:
+ * In this simulation scenario we use TCP as transport protocol. TCP requires bi-directional transmission. So we need to
+ * establish forward and reverse SP allocations since the standard supports only unicast transmission for single SP allocation.
+ * As a result, we create the following two SP allocations:
+ *
+ * SP1 for TCP Segments: West DMG STA -----> East DMG STA (8ms)
+ * SP2 for TCP ACKs    : East DMG STA -----> West DMG STA (8ms)
+ *
+ * We swap betweeen those two SPs allocations during DTI access period up-to certain number of blocks as following:
+ *
+ * |-----SP1-----| |-----SP2-----| |-----SP1-----| |-----SP2-----| |-----SP1-----| |-----SP2-----|
+ *
+ * We add guard time between these consecutive SP allocations around 5us for protection.
+ *
+ * At the beginning each station requests information regarding the capabilities of all other stations. Once this is completed
+ * West STA initiates Relay Discovery Procedure. During the relay discovery procedure, WEST STA performs Beamforming Training
+ * with EAST STA and all the available RDSs. After WEST STA completes BF with the EAST STA it can establish service period for
+ * direct communication without gonig throught the DMG PCP/AP. Once the RLS is completed, we repeat the same previous steps to
+ * establish relay link from East STA to West STA. At this point, we schedule the previous SP allocations during DTI period.
+ *
+ * During the course of the simulation, we implicitly inform all the stations about relay switching decision. The user can enable
+ * or disable relay switching per SP allocation.
+ *
+ * Running Simulation:
+ * ./waf --run "evaluate_halfduplex_relay --simulationTime=10 --pcap=true"
+ *
+ * Output:
+ * The simulation generates the following traces:
+ * 1. PCAP traces for each station.
+ * 2. ASCII traces corresponding to TCP socket information (CWND, RWND, and RTT).
+ * 3. ASCII traces corresponding to Wifi MAC Queue size changes for each DMG STA.
+ */
+
+
+
+
+
+
 NS_LOG_COMPONENT_DEFINE ("EvaluateFullDuplexRelayOperation");
 
 using namespace ns3;
@@ -77,8 +138,8 @@ RlsCompleted (Mac48Address address)
   /* Schedule an SP for the communication between the source REDS and destination REDS */
   std::cout << "Allocating static service period for communication between " << srcRedsMac->GetAddress ()
             << " and " << dstRedsMac->GetAddress () << std::endl;
-  apWifiMac->AddAllocationPeriod (1, SERVICE_PERIOD_ALLOCATION, true, srcRedsMac->GetAssociationID (),
-                                  dstRedsMac->GetAssociationID (), 0, 32767);
+  apWifiMac->AllocateSingleContiguousBlock (1, SERVICE_PERIOD_ALLOCATION, true, srcRedsMac->GetAssociationID (),
+                                            dstRedsMac->GetAssociationID (), 0, 32767);
 }
 
 void
@@ -145,8 +206,7 @@ SelectRelay (ChannelMeasurementInfoList rdsMeasurements, ChannelMeasurementInfoL
 void
 TearDownRelay (Ptr<YansWifiChannel> channel)
 {
-  srcRedsMac->TeardownRelay (rdsMac->GetAddress (), dstRedsMac->GetAddress (),
-                             srcRedsMac->GetAssociationID (),
+  srcRedsMac->TeardownRelay (srcRedsMac->GetAssociationID (),
                              dstRedsMac->GetAssociationID (),
                              rdsMac->GetAssociationID ());
 }
@@ -422,7 +482,7 @@ main (int argc, char *argv[])
   Simulator::Schedule (Seconds (1.10), &DmgStaWifiMac::RequestInformation, dstRedsMac, rdsMac->GetAddress ());
 
   /* Initiate Relay Discovery Procedure */
-  Simulator::Schedule (Seconds (3), &DmgStaWifiMac::StartRelayDiscovery, srcRedsMac, dstRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (3.0), &DmgStaWifiMac::StartRelayDiscovery, srcRedsMac, dstRedsMac->GetAddress ());
 
   /* Schedule link switch event */
   Simulator::Schedule (Seconds (switchTime), &InsertPacketDropper);

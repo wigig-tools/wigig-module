@@ -9,28 +9,28 @@
 
 #include "ns3/mac48-address.h"
 #include "ns3/net-device.h"
+#include "ns3/queue-item.h"
 #include "ns3/packet.h"
 #include "ns3/traced-callback.h"
 #include "wifi-phy-standard.h"
-#include <string>
 #include <map>
 
 namespace ns3 {
 
 class WifiRemoteStationManager;
-class WifiChannel;
 class WifiPhy;
 class WifiMac;
+class NetDeviceQueueInterface;
 
 /* Note only one technology should be operational (Tx/Rx Data) at anytime */
 
-typedef struct {
+struct WifiTechnology {
   Ptr<WifiPhy> Phy;
   Ptr<WifiMac> Mac;
   Ptr<WifiRemoteStationManager> StationManager;
   enum WifiPhyStandard Standard;
   bool Operational;                                 /* Flag to indicate whether this technology is operational or not */
-} WifiTechnology;
+} ;
 
 typedef std::map<enum WifiPhyStandard, WifiTechnology> WifiTechnologyList;
 
@@ -46,6 +46,10 @@ typedef std::map<Mac48Address, Ptr<WifiMac> > TransmissionTechnologyMap;
 class MultiBandNetDevice : public NetDevice
 {
 public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
   static TypeId GetTypeId (void);
 
   MultiBandNetDevice ();
@@ -106,36 +110,38 @@ public:
    */
   Ptr<WifiRemoteStationManager> GetRemoteStationManager (void) const;
 
+
   //inherited from NetDevice base class.
-  virtual void SetIfIndex (const uint32_t index);
-  virtual uint32_t GetIfIndex (void) const;
-  virtual Ptr<Channel> GetChannel (void) const;
-  virtual void SetAddress (Address address);
-  virtual Address GetAddress (void) const;
-  virtual bool SetMtu (const uint16_t mtu);
-  virtual uint16_t GetMtu (void) const;
-  virtual bool IsLinkUp (void) const;
-  virtual void AddLinkChangeCallback (Callback<void> callback);
-  virtual bool IsBroadcast (void) const;
-  virtual Address GetBroadcast (void) const;
-  virtual bool IsMulticast (void) const;
-  virtual Address GetMulticast (Ipv4Address multicastGroup) const;
-  virtual bool IsPointToPoint (void) const;
-  virtual bool IsBridge (void) const;
-  virtual bool Send (Ptr<Packet> packet, const Address& dest, uint16_t protocolNumber);
-  virtual Ptr<Node> GetNode (void) const;
-  virtual void SetNode (Ptr<Node> node);
-  virtual bool NeedsArp (void) const;
-  virtual void SetReceiveCallback (NetDevice::ReceiveCallback cb);
-  virtual Address GetMulticast (Ipv6Address addr) const;
-  virtual bool SendFrom (Ptr<Packet> packet, const Address& source, const Address& dest, uint16_t protocolNumber);
-  virtual void SetPromiscReceiveCallback (PromiscReceiveCallback cb);
-  virtual bool SupportsSendFrom (void) const;
+  void SetIfIndex (const uint32_t index);
+  uint32_t GetIfIndex (void) const;
+  Ptr<Channel> GetChannel (void) const;
+  void SetAddress (Address address);
+  Address GetAddress (void) const;
+  bool SetMtu (const uint16_t mtu);
+  uint16_t GetMtu (void) const;
+  bool IsLinkUp (void) const;
+  void AddLinkChangeCallback (Callback<void> callback);
+  bool IsBroadcast (void) const;
+  Address GetBroadcast (void) const;
+  bool IsMulticast (void) const;
+  Address GetMulticast (Ipv4Address multicastGroup) const;
+  bool IsPointToPoint (void) const;
+  bool IsBridge (void) const;
+  bool Send (Ptr<Packet> packet, const Address& dest, uint16_t protocolNumber);
+  Ptr<Node> GetNode (void) const;
+  void SetNode (Ptr<Node> node);
+  bool NeedsArp (void) const;
+  void SetReceiveCallback (NetDevice::ReceiveCallback cb);
+  Address GetMulticast (Ipv6Address addr) const;
+  bool SendFrom (Ptr<Packet> packet, const Address& source, const Address& dest, uint16_t protocolNumber);
+  void SetPromiscReceiveCallback (PromiscReceiveCallback cb);
+  bool SupportsSendFrom (void) const;
+
 
 protected:
-  virtual void DoDispose (void);
-  virtual void DoInitialize (void);
-  virtual void NotifyNewAggregate (void);
+  void DoDispose (void);
+  void DoInitialize (void);
+  void NotifyNewAggregate (void);
   /**
    * Receive a packet from the lower layer and pass the
    * packet up the stack.
@@ -146,8 +152,26 @@ protected:
    */
   void ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to);
 
+
 private:
-  // This value conforms to the 802.11 specification
+  /**
+   * \brief Copy constructor
+   * \param o object to copy
+   *
+   * Defined and unimplemented to avoid misuse
+   */
+  MultiBandNetDevice (const MultiBandNetDevice &o);
+
+  /**
+   * \brief Assignment operator
+   * \param o object to copy
+   * \returns the copied object
+   *
+   * Defined and unimplemented to avoid misuse
+   */
+  MultiBandNetDevice &operator = (const MultiBandNetDevice &o);
+
+  /// This value conforms to the 802.11 specification
   static const uint16_t MAX_MSDU_SIZE = 7920;
 
   /**
@@ -160,20 +184,25 @@ private:
    */
   void LinkDown (void);
   /**
-   * Return the WifiChannel this device is connected to.
+   * Return the Channel this device is connected to.
    *
-   * \return WifiChannel
+   * \return Ptr to Channel object
    */
-  Ptr<WifiChannel> DoGetChannel (void) const;
+  Ptr<Channel> DoGetChannel (void) const;
   /**
    * Complete the configuration of this Wi-Fi device by
    * connecting all lower components (e.g. MAC, WifiRemoteStation) together.
    */
   void CompleteConfig (void);
+  /**
+   * Perform the actions needed to support flow control and dynamic queue limits
+   */
+  void FlowControlConfig (void);
 
   /**
    * \brief Determine the tx queue for a given packet
    * \param item the packet
+   * \returns the access category
    *
    * Modelled after the Linux function ieee80211_select_queue (net/mac80211/wme.c).
    * A SocketPriority tag is attached to the packet (or the existing one is
@@ -214,28 +243,28 @@ private:
    */
   uint8_t SelectQueue (Ptr<QueueItem> item) const;
 
-  uint32_t m_ifIndex;
-  bool m_linkUp;
-  TracedCallback<> m_linkChanges;
-  bool m_configComplete;
-
+  Ptr<Node> m_node;                           		//!< Node to which this device is attached to.
   Ptr<WifiPhy> m_phy;                               //!< Current Active PHY layer.
   Ptr<WifiMac> m_mac;                               //!< Current Active MAC layer.
   Ptr<WifiRemoteStationManager> m_stationManager;   //!< Current Active Station Manager.
   Ptr<NetDeviceQueueInterface> m_queueInterface;    //!< NetDevice queue interface
-  enum WifiPhyStandard m_standard;                  //!< Current Active standard.
+  WifiPhyStandard m_standard;                  		//!< Current Active standard.
 
-  NetDevice::ReceiveCallback m_forwardUp;
-  NetDevice::PromiscReceiveCallback m_promiscRx;
-  TracedCallback<Ptr<const Packet>, Mac48Address> m_rxLogger;
-  TracedCallback<Ptr<const Packet>, Mac48Address> m_txLogger;
+  NetDevice::ReceiveCallback m_forwardUp; //!< forward up callback
+  NetDevice::PromiscReceiveCallback m_promiscRx; //!< promiscious receive callback
 
-  Ptr<Node> m_node;                           //!< Node to which this device is attached to.
-  mutable uint16_t m_mtu;                     //!< Common MTU Size supported by underlying devices.
+  TracedCallback<Ptr<const Packet>, Mac48Address> m_rxLogger; //!< receive trace callback
+  TracedCallback<Ptr<const Packet>, Mac48Address> m_txLogger; //!< transmit trace callback
+
   WifiTechnologyList m_list;                  //!< List of technologies supported by this device.
   TransmissionTechnologyMap m_technologyMap;  //!< Map between peer station and the corresponding transmission technology.
   Mac48Address m_address;                     //!< Address of this Multi-Band Device (Mac48Address).
 
+  uint32_t m_ifIndex; //!< IF index
+  bool m_linkUp; //!< link up
+  TracedCallback<> m_linkChanges; //!< link change callback
+  mutable uint16_t m_mtu; //!< MTU
+  bool m_configComplete; //!< configuration complete
 };
 
 } //namespace ns3

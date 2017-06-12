@@ -11,22 +11,33 @@
 #include "common-functions.h"
 
 /**
+ * Simulation Objective:
  * This script is used to evaluate IEEE 802.11ad Fast Session Transfer Mechanism with the presence of blockage.
- * This is the script used to generate the results in the paper. Network topology is simple and consists of
+ * This is the script used to generate the results in the paper.
+ *
+ * Network Topology:
+ * The scenario consists of signle DMG STA and single PCP/AP.
+ *
+ *          DMG PCP/AP (0,0)                       DMG STA (+1,0)
+ *
+ * Simulation Description:
+ * Network topology is simple and consists of
  * One Access Point + One Station operating initially in the 60GHz band. We introduce link interruption which causes
  * The nodes to swtich to the 2.4GHz band.
  *
+ * Running Simulation:
  * To use this script simply type the following run command:
  * ./waf --run "evaluate_fst_mechanism --llt=10000 --dataRate=5Gbps"
  *
  * To generate PCAP files, type the following run command:
  * ./waf --run "evaluate_fst_mechanism --llt=10000 --dataRate=5Gbps --pcap=1"
  *
- * The simulation generates two PCAP files for each node. One PCAP file corresponds to 11ad Band
- * and the other PCAP for 11n band. In the 11ad PCAP files, you can check the setup of FSTS.
- * In the 11n PCAP file you can see the exchange of FST ACK Request/Response frames.
- *
- * The current implementation can support LLT=0 and LLT>0.
+ * Simulation Output:
+ * The simulation generates the following traces:
+ * 1. PCAP traces for each station. The simulation generates two PCAP files for each node.
+ * One PCAP file corresponds to 11ad Band and the other PCAP for 11n band.
+ * In the 11ad PCAP files, you can check the setup of FSTS. In the 11n PCAP file you can
+ * see the exchange of FST ACK Request/Response frames.
  */
 
 NS_LOG_COMPONENT_DEFINE ("EvaluateFstMechanism");
@@ -105,7 +116,7 @@ main(int argc, char *argv[])
   /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
   Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::WifiMacQueue::MaxPacketNumber", UintegerValue (queueSize));
+//  Config::SetDefault ("ns3::WifiMacQueue::MaxPacketNumber", UintegerValue (queueSize));
 
   /**** Allocate 802.11ad Wifi MAC ****/
   /* Add a DMG upper mac */
@@ -116,7 +127,7 @@ main(int argc, char *argv[])
   /* Simple propagation delay model */
   adWifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
-  adWifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (56.16e9));
+  adWifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup Physical Layer ****/
   YansWifiPhyHelper adWifiPhy = YansWifiPhyHelper::Default ();
@@ -196,22 +207,23 @@ main(int argc, char *argv[])
 
   MultiBandWifiHelper multibandHelper;
   /* Configure AP with different wifi technologies */
-  Ssid ssid = Ssid ("network");
+  Ssid ssid = Ssid ("FST");
   adWifiMac.SetType ("ns3::DmgApWifiMac",
                      "Ssid", SsidValue (ssid),
-                     "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true),
                      "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the highest maximum size allowed by the standard
                      "BE_MaxAmsduSize", UintegerValue (7935),
                      "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                      "BeaconInterval", TimeValue (MicroSeconds (102400)),
                      "BeaconTransmissionInterval", TimeValue (MicroSeconds (400)),
-                     "ATIDuration", TimeValue (MicroSeconds (300)));
+                     "ATIPresent", BooleanValue (false),
+                     "SupportMultiBand", BooleanValue (true));
 
   nWifiMac.SetType ("ns3::ApWifiMac",
                     "Ssid", SsidValue (ssid),
-                    "QosSupported", BooleanValue (true), "HtSupported", BooleanValue (true),
                     "BE_MaxAmpduSize", UintegerValue (65535), //Enable A-MPDU with the highest maximum size allowed by the standard
-                    "BE_MaxAmsduSize", UintegerValue (7935));
+                    "BE_MaxAmsduSize", UintegerValue (7935),
+                    "QosSupported", BooleanValue (true), "HtSupported", BooleanValue (true),
+                    "SupportMultiBand", BooleanValue (true));
 
   NetDeviceContainer apDevice;
   apDevice = multibandHelper.Install (technologyList, apWifiNode);
@@ -222,15 +234,17 @@ main(int argc, char *argv[])
                      "ActiveProbing", BooleanValue (false),
                      "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the highest maximum size allowed by the standard
                      "BE_MaxAmsduSize", UintegerValue (7935),
-                     "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true),
-                     "LLT", UintegerValue (llt));
+                     "DmgSupported", BooleanValue (true),
+                     "LLT", UintegerValue (llt),
+                     "SupportMultiBand", BooleanValue (true));
 
   nWifiMac.SetType ("ns3::StaWifiMac",
                     "Ssid", SsidValue (ssid),
                     "ActiveProbing", BooleanValue (false),
                     "BE_MaxAmpduSize", UintegerValue (65535), //Enable A-MPDU with the highest maximum size allowed by the standard
                     "BE_MaxAmsduSize", UintegerValue (7935),
-                    "QosSupported", BooleanValue (true), "HtSupported", BooleanValue (true));
+                    "QosSupported", BooleanValue (true), "HtSupported", BooleanValue (true),
+                    "SupportMultiBand", BooleanValue (true));
 
   NetDeviceContainer staDevices;
   staDevices = multibandHelper.Install (technologyList, staWifiNode);
@@ -297,11 +311,11 @@ main(int argc, char *argv[])
         {
           if (item->first == WIFI_PHY_STANDARD_80211ad)
             {
-              adWifiPhy.EnableMultiBandPcap ("adAccessPoint", apMultiBandDevice, item->second.Phy);
+              adWifiPhy.EnableMultiBandPcap ("Traces/adAccessPoint", apMultiBandDevice, item->second.Phy);
             }
           else if (item->first == WIFI_PHY_STANDARD_80211n_5GHZ)
             {
-              nWifiPhy.EnableMultiBandPcap ("nAccessPoint", apMultiBandDevice, item->second.Phy);
+              nWifiPhy.EnableMultiBandPcap ("Traces/nAccessPoint", apMultiBandDevice, item->second.Phy);
             }
         }
       /* STA Technologies PCAP */
@@ -309,11 +323,11 @@ main(int argc, char *argv[])
         {
           if (item->first == WIFI_PHY_STANDARD_80211ad)
             {
-              adWifiPhy.EnableMultiBandPcap ("adStation", staMultiBandDevice, item->second.Phy);
+              adWifiPhy.EnableMultiBandPcap ("Traces/adStation", staMultiBandDevice, item->second.Phy);
             }
           else if (item->first == WIFI_PHY_STANDARD_80211n_5GHZ)
             {
-              nWifiPhy.EnableMultiBandPcap ("nStation", staMultiBandDevice, item->second.Phy);
+              nWifiPhy.EnableMultiBandPcap ("Traces/nStation", staMultiBandDevice, item->second.Phy);
             }
         }
     }

@@ -22,12 +22,9 @@
  *
  * Adapted from ht-wifi-network.cc example
  */
-#include <sstream>
-#include <iomanip>
 
+#include <iomanip>
 #include "ns3/core-module.h"
-#include "ns3/config-store-module.h"
-#include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/wifi-module.h"
 #include "ns3/mobility-module.h"
@@ -166,29 +163,33 @@ int main (int argc, char *argv[])
           else if (i > 31 && i <= 39)
             {
               phy.Set ("ShortGuardEnabled", BooleanValue (false));
-              phy.Set ("RxAntennas", UintegerValue (2));
-              phy.Set ("TxAntennas", UintegerValue (2));
+              phy.Set ("Antennas", UintegerValue (2));
+              phy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              phy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 20;
             }
           else if (i > 39 && i <= 47)
             {
               phy.Set ("ShortGuardEnabled", BooleanValue (true));
-              phy.Set ("RxAntennas", UintegerValue (2));
-              phy.Set ("TxAntennas", UintegerValue (2));
+              phy.Set ("Antennas", UintegerValue (2));
+              phy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              phy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 20;
             }
           else if (i > 47 && i <= 55)
             {
               phy.Set ("ShortGuardEnabled", BooleanValue (false));
-              phy.Set ("RxAntennas", UintegerValue (2));
-              phy.Set ("TxAntennas", UintegerValue (2));
+              phy.Set ("Antennas", UintegerValue (2));
+              phy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              phy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 40;
             }
           else if (i > 55 && i <= 63)
             {
               phy.Set ("ShortGuardEnabled", BooleanValue (true));
-              phy.Set ("RxAntennas", UintegerValue (2));
-              phy.Set ("TxAntennas", UintegerValue (2));
+              phy.Set ("Antennas", UintegerValue (2));
+              phy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              phy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 40;
             }
         }
@@ -236,29 +237,33 @@ int main (int argc, char *argv[])
           else if (i > 31 && i <= 39)
             {
               spectrumPhy.Set ("ShortGuardEnabled", BooleanValue (false));
-              spectrumPhy.Set ("RxAntennas", UintegerValue (2));
-              spectrumPhy.Set ("TxAntennas", UintegerValue (2));
+              spectrumPhy.Set ("Antennas", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 20;
             }
           else if (i > 39 && i <= 47)
             {
               spectrumPhy.Set ("ShortGuardEnabled", BooleanValue (true));
-              spectrumPhy.Set ("RxAntennas", UintegerValue (2));
-              spectrumPhy.Set ("TxAntennas", UintegerValue (2));
+              spectrumPhy.Set ("Antennas", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 20;
             }
           else if (i > 47 && i <= 55)
             {
               spectrumPhy.Set ("ShortGuardEnabled", BooleanValue (false));
-              spectrumPhy.Set ("RxAntennas", UintegerValue (2));
-              spectrumPhy.Set ("TxAntennas", UintegerValue (2));
+              spectrumPhy.Set ("Antennas", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 40;
             }
           else if (i > 55 && i <= 63)
             {
               spectrumPhy.Set ("ShortGuardEnabled", BooleanValue (true));
-              spectrumPhy.Set ("RxAntennas", UintegerValue (2));
-              spectrumPhy.Set ("TxAntennas", UintegerValue (2));
+              spectrumPhy.Set ("Antennas", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedTxSpatialStreams", UintegerValue (2));
+              spectrumPhy.Set ("MaxSupportedRxSpatialStreams", UintegerValue (2));
               channelWidth = 40;
             }
         }
@@ -266,7 +271,6 @@ int main (int argc, char *argv[])
         {
           NS_FATAL_ERROR ("Unsupported WiFi type " << wifiType);
         }
-
 
       WifiHelper wifi;
       wifi.SetStandard (WIFI_PHY_STANDARD_80211n_5GHZ);
@@ -652,7 +656,6 @@ int main (int argc, char *argv[])
       stack.Install (wifiStaNode);
 
       Ipv4AddressHelper address;
-
       address.SetBase ("192.168.1.0", "255.255.255.0");
       Ipv4InterfaceContainer staNodeInterface;
       Ipv4InterfaceContainer apNodeInterface;
@@ -661,19 +664,17 @@ int main (int argc, char *argv[])
       apNodeInterface = address.Assign (apDevice);
 
       /* Setting applications */
-      ApplicationContainer serverApp, sinkApp;
-      //UDP flow
-      UdpServerHelper myServer (9);
-      serverApp = myServer.Install (wifiStaNode.Get (0));
+      uint16_t port = 9;
+      UdpServerHelper server (port);
+      ApplicationContainer serverApp = server.Install (wifiStaNode.Get (0));
       serverApp.Start (Seconds (0.0));
       serverApp.Stop (Seconds (simulationTime + 1));
 
-      UdpClientHelper myClient (staNodeInterface.GetAddress (0), 9);
-      myClient.SetAttribute ("MaxPackets", UintegerValue (4294967295u));
-      myClient.SetAttribute ("Interval", TimeValue (Time ("0.00002"))); //packets/s
-      myClient.SetAttribute ("PacketSize", UintegerValue (payloadSize));
-
-      ApplicationContainer clientApp = myClient.Install (wifiApNode.Get (0));
+      UdpClientHelper client (staNodeInterface.GetAddress (0), port);
+      client.SetAttribute ("MaxPackets", UintegerValue (4294967295u));
+      client.SetAttribute ("Interval", TimeValue (Time ("0.00002"))); //packets/s
+      client.SetAttribute ("PacketSize", UintegerValue (payloadSize));
+      ApplicationContainer clientApp = client.Install (wifiApNode.Get (0));
       clientApp.Start (Seconds (1.0));
       clientApp.Stop (Seconds (simulationTime + 1));
 

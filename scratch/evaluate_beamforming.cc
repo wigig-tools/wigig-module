@@ -106,8 +106,8 @@ main(int argc, char *argv[])
   CommandLine cmd;
 
   cmd.AddValue ("applicationType", "Type of the Tx Application: onoff or bulk", applicationType);
-  cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
-  cmd.AddValue ("socketType", "Type of the Socket (ns3::TcpSocketFactory, ns3::UdpSocketFactory)", socketType);
+  cmd.AddValue ("payloadSize", "Application payload size in bytes", payloadSize);
+  cmd.AddValue ("socketType", "Type of the ns-3 Socket (ns3::TcpSocketFactory, ns3::UdpSocketFactory)", socketType);
   cmd.AddValue ("maxPackets", "Maximum number of packets to send", maxPackets);
   cmd.AddValue ("dataRate", "Payload size in bytes", dataRate);
   cmd.AddValue ("tcpVariant", "Transport protocol to use: TcpTahoe, TcpReno, TcpNewReno, TcpWestwood, TcpWestwoodPlus ", tcpVariant);
@@ -158,13 +158,13 @@ main(int argc, char *argv[])
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
-  wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
-  wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
+  wifiPhy.Set ("TxPowerStart", DoubleValue (20.0));
+  wifiPhy.Set ("TxPowerEnd", DoubleValue (20.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   wifiPhy.Set ("TxGain", DoubleValue (0));
   wifiPhy.Set ("RxGain", DoubleValue (0));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (3));
+  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   /* Set the phy layer error model */
@@ -184,20 +184,19 @@ main(int argc, char *argv[])
   apWifiNode = wifiNodes.Get (0);
   staWifiNode = wifiNodes.Get (1);
 
-  /**** Allocate a default DMG Wifi MAC ****/
+  /**** Allocate DMG Wifi MAC ****/
   DmgWifiMacHelper wifiMac = DmgWifiMacHelper::Default ();
 
-  Ssid ssid = Ssid ("test802.11ad");
+  Ssid ssid = Ssid ("Beamforming");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue(ssid),
-                   "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true),
                    "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the highest maximum size allowed by the standard
                    "BE_MaxAmsduSize", UintegerValue (0),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "EnableBeaconRandomization", BooleanValue (true),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
                    "BeaconTransmissionInterval", TimeValue (MicroSeconds (400)),
-                   "ATIDuration", TimeValue (MicroSeconds (300)));
+                   "ATIPresent", BooleanValue (false));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apWifiNode);
@@ -206,8 +205,7 @@ main(int argc, char *argv[])
                    "Ssid", SsidValue (ssid),
                    "ActiveProbing", BooleanValue (false),
                    "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the highest maximum size allowed by the standard
-                   "BE_MaxAmsduSize", UintegerValue (0),
-                   "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true));
+                   "BE_MaxAmsduSize", UintegerValue (0));
 
   NetDeviceContainer staDevice;
   staDevice = wifi.Install (wifiPhy, wifiMac, staWifiNode);
@@ -294,7 +292,7 @@ main(int argc, char *argv[])
   Simulator::Stop (Seconds (simulationTime));
   Simulator::Run ();
 
-  cout << "Average received throughput [Mbps] = " << averagethroughput/(simulationTime - 2) << endl;
+  cout << "Average received throughput [Mbps] = " << averagethroughput/(simulationTime - 1) << endl;
   cout << "End Simulation at " << Simulator::Now ().GetSeconds () << endl;
 
   Simulator::Destroy ();

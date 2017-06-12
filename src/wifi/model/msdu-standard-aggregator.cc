@@ -20,9 +20,7 @@
 
 #include "ns3/log.h"
 #include "ns3/uinteger.h"
-#include "amsdu-subframe-header.h"
 #include "msdu-standard-aggregator.h"
-#include "mac-low.h"
 
 namespace ns3 {
 
@@ -67,7 +65,7 @@ MsduStandardAggregator::GetMaxAmsduSize (void) const
 
 bool
 MsduStandardAggregator::Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket,
-                                   Mac48Address src, Mac48Address dest)
+                                   Mac48Address src, Mac48Address dest) const
 {
   NS_LOG_FUNCTION (this);
   Ptr<Packet> currentPacket;
@@ -93,56 +91,10 @@ MsduStandardAggregator::Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggrega
       return true;
     }
   return false;
-}
-
-bool
-MsduStandardAggregator::Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket, WifiMacHeader &hdr,
-                                   Mac48Address src, Mac48Address dest, Ptr<MacLow> maclow, Time duration)
-{
-  NS_LOG_FUNCTION (this);
-  Ptr<Packet> currentPacket;
-  AmsduSubframeHeader currentHdr;
-
-  uint32_t padding = CalculatePadding (aggregatedPacket);
-  uint32_t actualSize = aggregatedPacket->GetSize ();
-
-  if ((14 + packet->GetSize () + actualSize + padding) <= m_maxAmsduLength)
-    {
-      if (padding)
-        {
-          Ptr<Packet> pad = Create<Packet> (padding);
-          aggregatedPacket->AddAtEnd (pad);
-        }
-      currentHdr.SetDestinationAddr (dest);
-      currentHdr.SetSourceAddr (src);
-      currentHdr.SetLength (packet->GetSize ());
-      currentPacket = packet->Copy ();
-
-      currentPacket->AddHeader (currentHdr);
-      aggregatedPacket->AddAtEnd (currentPacket);
-
-      return (maclow->CalculateDmgTransactionDuration (aggregatedPacket, hdr) <= duration);
-    }
-  return false;
-}
-
-bool
-MsduStandardAggregator::CanBeAggregated (uint32_t packetSize, Ptr<Packet> aggregatedPacket)
-{
-  uint32_t padding = CalculatePadding (aggregatedPacket);
-  uint32_t actualSize = aggregatedPacket->GetSize ();
-  if ((14 + packetSize + actualSize + padding) <= m_maxAmsduLength)
-    {
-      return true;
-    }
-  else
-    {
-      return false;
-    }
 }
 
 uint32_t
-MsduStandardAggregator::CalculatePadding (Ptr<const Packet> packet)
+MsduStandardAggregator::CalculatePadding (Ptr<const Packet> packet) const
 {
   return (4 - (packet->GetSize () % 4 )) % 4;
 }

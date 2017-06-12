@@ -1,4 +1,4 @@
-        WLAN IEEE 802.11ad Model in ns-3, Version 0.2
+        WLAN IEEE 802.11ad Model in ns-3, Version 0.3
         ---------------------------------------------
 
 Introduction:
@@ -10,14 +10,19 @@ The implemented model supports the following features:
 2. Beamforming Training (BT) in BHI and DTI.
 3. Abstract DMG PHY layer for DMG CTRL/SC/OFDM.
 4. Fast Session Transfer (FST) Mechanism.
-5. DMG Relay Support (Full Duplex).
+5. DMG Relay Support (Full Duplex and Half Dyplex modes).
 6. DMG PLCP Model for 802.11ad frame.
 7. 60 GHz Directional Antenna Model.
+8. Half Duplex DMG Relay Support.
+9. Dynamic Channel Allocation (Polling).
+10. Beamformed Link Maintenance.
+11. Decentralized Clustering.
+12. Spatial Sharing.
 
-The implementation is based on the available model of WLAN IEEE 802.11 in ns-3. 
-The following paper includes a background on IEEE 802.11ad, implementation details,
+The implementation is based on the existing model of WLAN IEEE 802.11 in ns-3. 
+The following papers include a background on IEEE 802.11ad, implementation details,
 and evaluation section for this model. If you use our model in your research, 
-please cite the following paper: 
+please cite the following papers: 
 
 Implementation and Evaluation of a WLAN IEEE 802.11ad Model in ns-3.
 Hany Assasa, Joerg Widmer (June 2016)
@@ -25,19 +30,23 @@ The Workshop on ns-3 (WNS3 2016), 15-16 June 2016, Seattle, WA, USA
 
 Link: http://dl.acm.org/citation.cfm?id=2915377
 
+Extending the IEEE 802.11ad Model: Scheduled Access, Spatial Reuse, 
+Clustering, and Relaying
+Hany Assasa, Joerg Widmer (June 2017) 
+The Workshop on ns-3 (WNS3), 13-14 June 2017, Porto, Portugal
+
+http://eprints.networks.imdea.org/id/eprint/1566
+
+
 
 Project Road-map:
 -----------------
 We are planning to develop and add the following features to the project:
 
-1. Half Duplex DMG Relay Support.
-2. Fast Link Adaptation.
-3. Dynamic Channel Allocation (Polling).
-4. Reverse Direction Protocol (RDP).
-5. Statistical Channel Model + Raytracing Model for Millimeter-Wave Band.
-6. Beamformed Link Maintenance.
-7. Decentralized Clustering.
-8. Spatial Sharing.
+1. Fast Link Adaptation.
+2. Reverse Direction Protocol (RDP).
+3. Statistical Channel Model + Raytracing Model for Millimeter-Wave Band.
+4. Complex error model for 802.11ad transmission modes.
 
 If you are willing to work on one of the previous features, we are happy to collaborate.
 
@@ -51,8 +60,6 @@ The current implementation is based on ns3-26. In order to save time and evaluat
 ./waf build
 
 The previous command builds the required models only to run IEEE 802.11ad with its provided scripts in debug mode. 
-This is the prefered mode if you are testing a new scenario. Run single isntance of your simulation using this mode, if you get the expected output then proceed with the optimized build.
-The optimized build omits assertion across the code so you will not be able to figure out in which contect did you violate the execution.
 
 To build the project in optimized mode for fast execution type the following command:
 
@@ -69,9 +76,9 @@ At the beginning of each script, there is a some regarding the simulated scenari
 
 
 Bug Reporting:
----------------------
-In case of a bug is encountered during the usage of the original model, please report the problem
-to the following email address (hany.assasa@gmail.com). In the email, please include the following:
+--------------
+In case of a bug, please report the problem to the following email address (hany.assasa@gmail.com). 
+In the email, please include the following:
 
 1. Simulation file with small description on the simulated scenario and the expected output.
 2. Exact run parameters which caused the simulation to crash.

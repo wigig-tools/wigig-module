@@ -63,7 +63,7 @@ public:
    * \param ulEarfcn the UL EARFCN
    * \param dlEarfcn the DL EARFCN
    */
-  virtual void SetEarfcn (uint16_t ulEarfcn, uint16_t dlEarfcn) = 0;
+  virtual void SetEarfcn (uint32_t ulEarfcn, uint32_t dlEarfcn) = 0;
   
   /** 
    * Add a new UE to the cell
@@ -146,12 +146,17 @@ template <class C>
 class MemberLteEnbCphySapProvider : public LteEnbCphySapProvider
 {
 public:
+  /**
+   * Constructor
+   *
+   * \param owner the owner class
+   */
   MemberLteEnbCphySapProvider (C* owner);
 
   // inherited from LteEnbCphySapProvider
   virtual void SetCellId (uint16_t cellId);
   virtual void SetBandwidth (uint8_t ulBandwidth, uint8_t dlBandwidth);
-  virtual void SetEarfcn (uint16_t ulEarfcn, uint16_t dlEarfcn);
+  virtual void SetEarfcn (uint32_t ulEarfcn, uint32_t dlEarfcn);
   virtual void AddUe (uint16_t rnti);
   virtual void RemoveUe (uint16_t rnti);
   virtual void SetPa (uint16_t rnti, double pa);
@@ -163,7 +168,7 @@ public:
   
 private:
   MemberLteEnbCphySapProvider ();
-  C* m_owner;
+  C* m_owner; ///< the owner class
 };
 
 template <class C>
@@ -194,7 +199,7 @@ MemberLteEnbCphySapProvider<C>::SetBandwidth (uint8_t ulBandwidth, uint8_t dlBan
 
 template <class C>
 void 
-MemberLteEnbCphySapProvider<C>::SetEarfcn (uint16_t ulEarfcn, uint16_t dlEarfcn)
+MemberLteEnbCphySapProvider<C>::SetEarfcn (uint32_t ulEarfcn, uint32_t dlEarfcn)
 {
   m_owner->DoSetEarfcn (ulEarfcn, dlEarfcn);
 }
@@ -264,13 +269,18 @@ template <class C>
 class MemberLteEnbCphySapUser : public LteEnbCphySapUser
 {
 public:
+  /**
+   * Constructor
+   *
+   * \param owner the owner class
+   */
   MemberLteEnbCphySapUser (C* owner);
 
   // methods inherited from LteEnbCphySapUser go here
 
 private:
   MemberLteEnbCphySapUser ();
-  C* m_owner;
+  C* m_owner; ///< the owner class
 };
 
 template <class C>

@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015 IMDEA NEtworks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -54,11 +54,25 @@ MgtProbeRequestHeader::GetSsid (void) const
   return m_ssid;
 }
 
+void
+MgtProbeRequestHeader::SetSupportedRates (SupportedRates rates)
+{
+  m_rates = rates;
+}
+
+SupportedRates
+MgtProbeRequestHeader::GetSupportedRates (void) const
+{
+  return m_rates;
+}
+
 uint32_t
 MgtProbeRequestHeader::GetSerializedSize (void) const
 {
   uint32_t size = 0;
   size += m_ssid.GetSerializedSize ();
+  size += m_rates.GetSerializedSize ();
+  size += m_rates.extended.GetSerializedSize ();
   size += GetInformationElementsSerializedSize ();
   return size;
 }
@@ -83,7 +97,8 @@ MgtProbeRequestHeader::GetInstanceTypeId (void) const
 void
 MgtProbeRequestHeader::Print (std::ostream &os) const
 {
-  os << "ssid=" << m_ssid;
+  os << "ssid=" << m_ssid
+     << "rates=" << m_rates;
   PrintInformationElements (os);
 }
 
@@ -92,6 +107,8 @@ MgtProbeRequestHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
   i = m_ssid.Serialize (i);
+  i = m_rates.Serialize (i);
+  i = m_rates.extended.Serialize (i);
   i = SerializeInformationElements (i);
 }
 
@@ -100,6 +117,8 @@ MgtProbeRequestHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
   i = m_ssid.Deserialize (i);
+  i = m_rates.Deserialize (i);
+  i = m_rates.extended.DeserializeIfPresent (i);
   i = DeserializeInformationElements (i);
   return i.GetDistanceFrom (start);
 }
@@ -134,6 +153,18 @@ uint64_t
 MgtProbeResponseHeader::GetBeaconIntervalUs (void) const
 {
   return m_beaconInterval;
+}
+
+void
+MgtProbeResponseHeader::SetSupportedRates (SupportedRates rates)
+{
+  m_rates = rates;
+}
+
+SupportedRates
+MgtProbeResponseHeader::GetSupportedRates (void) const
+{
+  return m_rates;
 }
 
 void
@@ -185,6 +216,8 @@ MgtProbeResponseHeader::GetSerializedSize (void) const
   size += 2; //beacon interval
   size += m_capability.GetSerializedSize ();
   size += m_ssid.GetSerializedSize ();
+  size += m_rates.GetSerializedSize ();
+  size += m_rates.extended.GetSerializedSize ();
   size += GetInformationElementsSerializedSize ();
   return size;
 }
@@ -194,6 +227,7 @@ MgtProbeResponseHeader::Print (std::ostream &os) const
 {
   os << "Timestamp=" << m_timestamp << "," <<
         "BeaconInterval=" << m_beaconInterval  << "," <<
+        "rates=" << m_rates << ", "
         "ssid=" << m_ssid;
   PrintInformationElements (os);
 }
@@ -210,6 +244,8 @@ MgtProbeResponseHeader::Serialize (Buffer::Iterator start) const
   i.WriteHtolsbU16 (m_beaconInterval / 1024);
   i = m_capability.Serialize (i);
   i = m_ssid.Serialize (i);
+  i = m_rates.Serialize (i);
+  i = m_rates.extended.Serialize (i);
   i = SerializeInformationElements (i);
 }
 
@@ -222,6 +258,8 @@ MgtProbeResponseHeader::Deserialize (Buffer::Iterator start)
   m_beaconInterval *= 1024;
   i = m_capability.Deserialize (i);
   i = m_ssid.Deserialize (i);
+  i = m_rates.Deserialize (i);
+  i = m_rates.extended.DeserializeIfPresent (i);
   i = DeserializeInformationElements (i);
   return i.GetDistanceFrom (start);
 }
@@ -296,6 +334,18 @@ MgtAssocRequestHeader::GetSsid (void) const
   return m_ssid;
 }
 
+void
+MgtAssocRequestHeader::SetSupportedRates (SupportedRates rates)
+{
+  m_rates = rates;
+}
+
+SupportedRates
+MgtAssocRequestHeader::GetSupportedRates (void) const
+{
+  return m_rates;
+}
+
 TypeId
 MgtAssocRequestHeader::GetTypeId (void)
 {
@@ -320,6 +370,8 @@ MgtAssocRequestHeader::GetSerializedSize (void) const
   size += m_capability.GetSerializedSize ();
   size += 2;
   size += m_ssid.GetSerializedSize ();
+  size += m_rates.GetSerializedSize ();
+  size += m_rates.extended.GetSerializedSize ();
   size += GetInformationElementsSerializedSize ();
   return size;
 }
@@ -327,7 +379,8 @@ MgtAssocRequestHeader::GetSerializedSize (void) const
 void
 MgtAssocRequestHeader::Print (std::ostream &os) const
 {
-  os << "ssid=" << m_ssid;
+  os << "ssid=" << m_ssid  << ", "
+     << "rates=" << m_rates;
   PrintInformationElements (os);
 }
 
@@ -338,6 +391,8 @@ MgtAssocRequestHeader::Serialize (Buffer::Iterator start) const
   i = m_capability.Serialize (i);
   i.WriteHtolsbU16 (m_listenInterval);
   i = m_ssid.Serialize (i);
+  i = m_rates.Serialize (i);
+  i = m_rates.extended.Serialize (i);
   i = SerializeInformationElements (i);
 }
 
@@ -348,6 +403,8 @@ MgtAssocRequestHeader::Deserialize (Buffer::Iterator start)
   i = m_capability.Deserialize (i);
   m_listenInterval = i.ReadLsbtohU16 ();
   i = m_ssid.Deserialize (i);
+  i = m_rates.Deserialize (i);
+  i = m_rates.extended.DeserializeIfPresent (i);
   i = DeserializeInformationElements (i);
   return i.GetDistanceFrom (start);
 }
@@ -403,6 +460,18 @@ MgtAssocResponseHeader::GetCapabilities (void) const
   return m_capability;
 }
 
+void
+MgtAssocResponseHeader::SetSupportedRates (SupportedRates rates)
+{
+  m_rates = rates;
+}
+
+SupportedRates
+MgtAssocResponseHeader::GetSupportedRates (void) const
+{
+  return m_rates;
+}
+
 TypeId
 MgtAssocResponseHeader::GetTypeId (void)
 {
@@ -427,6 +496,8 @@ MgtAssocResponseHeader::GetSerializedSize (void) const
   size += m_capability.GetSerializedSize ();
   size += m_code.GetSerializedSize ();
   size += 2; //aid
+  size += m_rates.GetSerializedSize ();
+  size += m_rates.extended.GetSerializedSize ();
   size += GetInformationElementsSerializedSize ();
   return size;
 }
@@ -434,7 +505,8 @@ MgtAssocResponseHeader::GetSerializedSize (void) const
 void
 MgtAssocResponseHeader::Print (std::ostream &os) const
 {
-  os << "status code=" << m_code;
+  os << "status code=" << m_code << ", "
+     << "rates=" << m_rates;
   PrintInformationElements (os);
 }
 
@@ -445,6 +517,8 @@ MgtAssocResponseHeader::Serialize (Buffer::Iterator start) const
   i = m_capability.Serialize (i);
   i = m_code.Serialize (i);
   i.WriteHtolsbU16 (m_aid);
+  i = m_rates.Serialize (i);
+  i = m_rates.extended.Serialize (i);
   i = SerializeInformationElements (i);
 }
 
@@ -455,6 +529,8 @@ MgtAssocResponseHeader::Deserialize (Buffer::Iterator start)
   i = m_capability.Deserialize (i);
   i = m_code.Deserialize (i);
   m_aid = i.ReadLsbtohU16 ();
+  i = m_rates.Deserialize (i);
+  i = m_rates.extended.DeserializeIfPresent (i);
   i = DeserializeInformationElements (i);
   return i.GetDistanceFrom (start);
 }
@@ -989,6 +1065,8 @@ DmgAddTSResponseFrame::GetSerializedSize (void) const
 {
   uint32_t size = 0;
   size += 1;                                      //Dialog token
+  size += m_status.GetSerializedSize ();          //Status Code
+  size += m_tsDelayElement.GetSerializedSize ();  //TS Delay
   size += m_dmgTspecElement.GetSerializedSize (); //DMG TSPEC
   return size;
 }
@@ -1060,6 +1138,92 @@ DmgTspecElement
 DmgAddTSResponseFrame::GetDmgTspec (void) const
 {
   return m_dmgTspecElement;
+}
+
+/***************************************************
+*               Delete TS Frame (8.5.3.4)
+****************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (DelTsFrame);
+
+DelTsFrame::DelTsFrame ()
+  : m_reasonCode (0)
+{
+}
+
+TypeId
+DelTsFrame::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::DelTsFrame")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<DelTsFrame> ()
+  ;
+  return tid;
+}
+
+TypeId
+DelTsFrame::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+DelTsFrame::Print (std::ostream &os) const
+{
+}
+
+uint32_t
+DelTsFrame::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 3;                                        //TS Info
+  size += 2;                                        //Reason Code
+  size += m_dmgAllocationInfo.GetSerializedSize (); //DMG Allocation Info
+  return size;
+}
+
+void
+DelTsFrame::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.Write (m_tsInfo, 3);
+  i.WriteHtolsbU16 (m_reasonCode);
+  i = m_dmgAllocationInfo.Serialize (i);
+}
+
+uint32_t
+DelTsFrame::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  i.Read (m_tsInfo, 3);
+  m_reasonCode = i.ReadLsbtohU16 ();
+  i = m_dmgAllocationInfo.Deserialize (i);
+  return i.GetDistanceFrom (start);
+}
+
+void
+DelTsFrame::SetReasonCode (uint16_t reason)
+{
+  m_reasonCode = reason;
+}
+
+void
+DelTsFrame::SetDmgAllocationInfo (DmgAllocationInfo info)
+{
+  m_dmgAllocationInfo = info;
+}
+
+uint16_t
+DelTsFrame::GetReasonCode (void) const
+{
+  return m_reasonCode;
+}
+
+DmgAllocationInfo
+DelTsFrame::GetDmgAllocationInfo (void) const
+{
+  return m_dmgAllocationInfo;
 }
 
 /***************************************************
@@ -1518,7 +1682,209 @@ MgtDelBaHeader::SetParameterSet (uint16_t params)
 }
 
 /***************************************************
-*      Link Measurement Report Frame (8.5.7.5)
+*      Radio Measurement Request Frame (8.5.7.2)
+****************************************************/
+
+RadioMeasurementRequest::RadioMeasurementRequest ()
+  : m_dialogToken (0),
+    m_numOfRepetitions (0)
+{
+}
+
+TypeId
+RadioMeasurementRequest::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::RadioMeasurementRequest")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<RadioMeasurementRequest> ()
+  ;
+  return tid;
+}
+
+TypeId
+RadioMeasurementRequest::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+RadioMeasurementRequest::Print (std::ostream &os) const
+{
+
+}
+
+uint32_t
+RadioMeasurementRequest::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 3;
+  for (WifiInfoElementList::const_iterator iter = m_list.begin (); iter != m_list.end (); iter++)
+    {
+      size += (*iter)->GetSerializedSize ();
+    }
+  return size;
+}
+
+void
+RadioMeasurementRequest::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  i.WriteHtolsbU16 (m_numOfRepetitions);
+  for (WifiInfoElementList::const_iterator iter = m_list.begin (); iter != m_list.end (); iter++)
+    {
+      i = (*iter)->Serialize (i);
+    }
+}
+
+uint32_t
+RadioMeasurementRequest::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  Ptr<DirectionalChannelQualityRequestElement> element;
+  m_dialogToken = i.ReadU8 ();
+  m_numOfRepetitions = i.ReadLsbtohU16 ();
+  while (!i.IsEnd ())
+    {
+      element = Create<DirectionalChannelQualityRequestElement> ();
+      i = element->Deserialize (i);
+      m_list.push_back (element);
+  }
+  return i.GetDistanceFrom (start);
+}
+
+void
+RadioMeasurementRequest::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+RadioMeasurementRequest::SetNumberOfRepetitions (uint16_t repetitions)
+{
+  m_numOfRepetitions = repetitions;
+}
+
+void
+RadioMeasurementRequest::AddMeasurementRequestElement (Ptr<WifiInformationElement> elem)
+{
+  m_list.push_back (elem);
+}
+
+uint8_t
+RadioMeasurementRequest::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+uint16_t
+RadioMeasurementRequest::GetNumberOfRepetitions (void) const
+{
+  return m_numOfRepetitions;
+}
+
+WifiInfoElementList
+RadioMeasurementRequest::GetListOfMeasurementRequestElement (void) const
+{
+  return m_list;
+}
+
+/***************************************************
+*      Radio Measurement Request Frame (8.5.7.3)
+****************************************************/
+
+RadioMeasurementReport::RadioMeasurementReport ()
+  : m_dialogToken (0)
+{
+}
+
+TypeId
+RadioMeasurementReport::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::RadioMeasurementReport")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<RadioMeasurementReport> ()
+  ;
+  return tid;
+}
+
+TypeId
+RadioMeasurementReport::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+RadioMeasurementReport::Print (std::ostream &os) const
+{
+
+}
+
+uint32_t
+RadioMeasurementReport::GetSerializedSize (void) const
+{
+  uint32_t size = 1;
+  for (WifiInfoElementList::const_iterator iter = m_list.begin (); iter != m_list.end (); iter++)
+    {
+      size += (*iter)->GetSerializedSize ();
+    }
+  return size;
+}
+
+void
+RadioMeasurementReport::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  for (WifiInfoElementList::const_iterator iter = m_list.begin (); iter != m_list.end (); iter++)
+    {
+      i = (*iter)->Serialize (i);
+    }
+}
+
+uint32_t
+RadioMeasurementReport::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  Ptr<DirectionalChannelQualityReportElement> element;
+  m_dialogToken = i.ReadU8 ();
+  while (!i.IsEnd ())
+    {
+      element = Create<DirectionalChannelQualityReportElement> ();
+      i = element->Deserialize (i);
+      m_list.push_back (element);
+  }
+  return i.GetDistanceFrom (start);
+}
+
+void
+RadioMeasurementReport::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+RadioMeasurementReport::AddMeasurementReportElement (Ptr<WifiInformationElement> elem)
+{
+  m_list.push_back (elem);
+}
+
+uint8_t
+RadioMeasurementReport::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+WifiInfoElementList
+RadioMeasurementReport::GetListOfMeasurementReportElement (void) const
+{
+  return m_list;
+}
+
+/***************************************************
+*      Link Measurement Request Frame (8.5.7.5)
 ****************************************************/
 
 LinkMeasurementRequest::LinkMeasurementRequest ()

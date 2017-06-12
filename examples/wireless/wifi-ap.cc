@@ -23,11 +23,7 @@
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/mobility-module.h"
-#include "ns3/config-store-module.h"
 #include "ns3/wifi-module.h"
-#include "ns3/athstats-helper.h"
-
-#include <iostream>
 
 using namespace ns3;
 
@@ -96,12 +92,12 @@ GetPosition (Ptr<Node> node)
   return mobility->GetPosition ();
 }
 
-static void 
-AdvancePosition (Ptr<Node> node) 
+static void
+AdvancePosition (Ptr<Node> node)
 {
   Vector pos = GetPosition (node);
   pos.x += 5.0;
-  if (pos.x >= 210.0) 
+  if (pos.x >= 210.0)
     {
       return;
     }

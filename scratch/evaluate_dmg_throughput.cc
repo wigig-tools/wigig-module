@@ -138,7 +138,7 @@ main(int argc, char *argv[])
       wifiPhy.Set ("TxGain", DoubleValue (0));
       wifiPhy.Set ("RxGain", DoubleValue (0));
       /* Sensitivity model includes implementation loss and noise figure */
-      wifiPhy.Set ("RxNoiseFigure", DoubleValue (3));
+      wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
       wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
       wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
       /* Set the phy layer error model */
@@ -164,10 +164,9 @@ main(int argc, char *argv[])
       /* Add a DMG upper mac */
       DmgWifiMacHelper wifiMac = DmgWifiMacHelper::Default ();
 
-      Ssid ssid = Ssid ("test802.11ad");
+      Ssid ssid = Ssid ("Test802.11ad");
       wifiMac.SetType ("ns3::DmgApWifiMac",
                        "Ssid", SsidValue(ssid),
-                       "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true),
                        "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the highest maximum size allowed by the standard
                        "BE_MaxAmsduSize", UintegerValue (7935),
                        "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
@@ -182,8 +181,7 @@ main(int argc, char *argv[])
                        "Ssid", SsidValue (ssid),
                        "ActiveProbing", BooleanValue (false),
                        "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the highest maximum size allowed by the standard
-                       "BE_MaxAmsduSize", UintegerValue (7935),
-                       "QosSupported", BooleanValue (true), "DmgSupported", BooleanValue (true));
+                       "BE_MaxAmsduSize", UintegerValue (7935));
 
       NetDeviceContainer staDevice;
       staDevice = wifi.Install (wifiPhy, wifiMac, staWifiNode);

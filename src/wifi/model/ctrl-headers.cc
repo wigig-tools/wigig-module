@@ -19,9 +19,7 @@
  * Authors: Mirko Banchi <mk.banchi@gmail.com>
  *          Hany Assasa <hany.assasa@gmail.com>
  */
-
 #include "ns3/address-utils.h"
-#include "ns3/fatal-error.h"
 #include "ns3/log.h"
 #include "ctrl-headers.h"
 
@@ -40,18 +38,15 @@ CtrlBAckRequestHeader::CtrlBAckRequestHeader ()
     m_multiTid (false),
     m_compressed (false)
 {
-  NS_LOG_FUNCTION (this);
 }
 
 CtrlBAckRequestHeader::~CtrlBAckRequestHeader ()
 {
-  NS_LOG_FUNCTION (this);
 }
 
 TypeId
 CtrlBAckRequestHeader::GetTypeId (void)
 {
-  NS_LOG_FUNCTION_NOARGS ();
   static TypeId tid = TypeId ("ns3::CtrlBAckRequestHeader")
     .SetParent<Header> ()
     .SetGroupName ("Wifi")
@@ -63,21 +58,18 @@ CtrlBAckRequestHeader::GetTypeId (void)
 TypeId
 CtrlBAckRequestHeader::GetInstanceTypeId (void) const
 {
-  NS_LOG_FUNCTION (this);
   return GetTypeId ();
 }
 
 void
 CtrlBAckRequestHeader::Print (std::ostream &os) const
 {
-  NS_LOG_FUNCTION (this << &os);
   os << "TID_INFO=" << m_tidInfo << ", StartingSeq=" << std::hex << m_startingSeq << std::dec;
 }
 
 uint32_t
 CtrlBAckRequestHeader::GetSerializedSize () const
 {
-  NS_LOG_FUNCTION (this);
   uint32_t size = 0;
   size += 2; //Bar control
   if (!m_multiTid)
@@ -101,7 +93,6 @@ CtrlBAckRequestHeader::GetSerializedSize () const
 void
 CtrlBAckRequestHeader::Serialize (Buffer::Iterator start) const
 {
-  NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
   i.WriteHtolsbU16 (GetBarControl ());
   if (!m_multiTid)
@@ -124,7 +115,6 @@ CtrlBAckRequestHeader::Serialize (Buffer::Iterator start) const
 uint32_t
 CtrlBAckRequestHeader::Deserialize (Buffer::Iterator start)
 {
-  NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
   SetBarControl (i.ReadLsbtohU16 ());
   if (!m_multiTid)
@@ -148,7 +138,6 @@ CtrlBAckRequestHeader::Deserialize (Buffer::Iterator start)
 uint16_t
 CtrlBAckRequestHeader::GetBarControl (void) const
 {
-  NS_LOG_FUNCTION (this);
   uint16_t res = 0;
   if (m_barAckPolicy)
     {
@@ -169,7 +158,6 @@ CtrlBAckRequestHeader::GetBarControl (void) const
 void
 CtrlBAckRequestHeader::SetBarControl (uint16_t bar)
 {
-  NS_LOG_FUNCTION (this << bar);
   m_barAckPolicy = ((bar & 0x01) == 1) ? true : false;
   m_multiTid = (((bar >> 1) & 0x01) == 1) ? true : false;
   m_compressed = (((bar >> 2) & 0x01) == 1) ? true : false;
@@ -179,28 +167,24 @@ CtrlBAckRequestHeader::SetBarControl (uint16_t bar)
 uint16_t
 CtrlBAckRequestHeader::GetStartingSequenceControl (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (m_startingSeq << 4) & 0xfff0;
 }
 
 void
 CtrlBAckRequestHeader::SetStartingSequenceControl (uint16_t seqControl)
 {
-  NS_LOG_FUNCTION (this << seqControl);
   m_startingSeq = (seqControl >> 4) & 0x0fff;
 }
 
 void
 CtrlBAckRequestHeader::SetHtImmediateAck (bool immediateAck)
 {
-  NS_LOG_FUNCTION (this << immediateAck);
   m_barAckPolicy = immediateAck;
 }
 
 void
-CtrlBAckRequestHeader::SetType (enum BlockAckType type)
+CtrlBAckRequestHeader::SetType (BlockAckType type)
 {
-  NS_LOG_FUNCTION (this << type);
   switch (type)
     {
     case BASIC_BLOCK_ACK:
@@ -224,28 +208,24 @@ CtrlBAckRequestHeader::SetType (enum BlockAckType type)
 void
 CtrlBAckRequestHeader::SetTidInfo (uint8_t tid)
 {
-  NS_LOG_FUNCTION (this << static_cast<uint32_t> (tid));
   m_tidInfo = static_cast<uint16_t> (tid);
 }
 
 void
 CtrlBAckRequestHeader::SetStartingSequence (uint16_t seq)
 {
-  NS_LOG_FUNCTION (this << seq);
   m_startingSeq = seq;
 }
 
 bool
 CtrlBAckRequestHeader::MustSendHtImmediateAck (void) const
 {
-  NS_LOG_FUNCTION (this);
   return m_barAckPolicy;
 }
 
 uint8_t
 CtrlBAckRequestHeader::GetTidInfo (void) const
 {
-  NS_LOG_FUNCTION (this);
   uint8_t tid = static_cast<uint8_t> (m_tidInfo);
   return tid;
 }
@@ -253,28 +233,24 @@ CtrlBAckRequestHeader::GetTidInfo (void) const
 uint16_t
 CtrlBAckRequestHeader::GetStartingSequence (void) const
 {
-  NS_LOG_FUNCTION (this);
   return m_startingSeq;
 }
 
 bool
 CtrlBAckRequestHeader::IsBasic (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (!m_multiTid && !m_compressed) ? true : false;
 }
 
 bool
 CtrlBAckRequestHeader::IsCompressed (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (!m_multiTid && m_compressed) ? true : false;
 }
 
 bool
 CtrlBAckRequestHeader::IsMultiTid (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (m_multiTid && m_compressed) ? true : false;
 }
 
@@ -290,13 +266,11 @@ CtrlBAckResponseHeader::CtrlBAckResponseHeader ()
     m_multiTid (false),
     m_compressed (false)
 {
-  NS_LOG_FUNCTION (this);
   memset (&bitmap, 0, sizeof (bitmap));
 }
 
 CtrlBAckResponseHeader::~CtrlBAckResponseHeader ()
 {
-  NS_LOG_FUNCTION (this);
 }
 
 TypeId
@@ -319,14 +293,12 @@ CtrlBAckResponseHeader::GetInstanceTypeId (void) const
 void
 CtrlBAckResponseHeader::Print (std::ostream &os) const
 {
-  NS_LOG_FUNCTION (this << &os);
   os << "TID_INFO=" << m_tidInfo << ", StartingSeq=" << std::hex << m_startingSeq << std::dec;
 }
 
 uint32_t
 CtrlBAckResponseHeader::GetSerializedSize (void) const
 {
-  NS_LOG_FUNCTION (this);
   uint32_t size = 0;
   size += 2; //Bar control
   if (!m_multiTid)
@@ -357,7 +329,6 @@ CtrlBAckResponseHeader::GetSerializedSize (void) const
 void
 CtrlBAckResponseHeader::Serialize (Buffer::Iterator start) const
 {
-  NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
   i.WriteHtolsbU16 (GetBaControl ());
   if (!m_multiTid)
@@ -381,7 +352,6 @@ CtrlBAckResponseHeader::Serialize (Buffer::Iterator start) const
 uint32_t
 CtrlBAckResponseHeader::Deserialize (Buffer::Iterator start)
 {
-  NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
   SetBaControl (i.ReadLsbtohU16 ());
   if (!m_multiTid)
@@ -406,14 +376,12 @@ CtrlBAckResponseHeader::Deserialize (Buffer::Iterator start)
 void
 CtrlBAckResponseHeader::SetHtImmediateAck (bool immediateAck)
 {
-  NS_LOG_FUNCTION (this << immediateAck);
   m_baAckPolicy = immediateAck;
 }
 
 void
-CtrlBAckResponseHeader::SetType (enum BlockAckType type)
+CtrlBAckResponseHeader::SetType (BlockAckType type)
 {
-  NS_LOG_FUNCTION (this << type);
   switch (type)
     {
     case BASIC_BLOCK_ACK:
@@ -437,28 +405,24 @@ CtrlBAckResponseHeader::SetType (enum BlockAckType type)
 void
 CtrlBAckResponseHeader::SetTidInfo (uint8_t tid)
 {
-  NS_LOG_FUNCTION (this << static_cast<uint32_t> (tid));
   m_tidInfo = static_cast<uint16_t> (tid);
 }
 
 void
 CtrlBAckResponseHeader::SetStartingSequence (uint16_t seq)
 {
-  NS_LOG_FUNCTION (this << seq);
   m_startingSeq = seq;
 }
 
 bool
 CtrlBAckResponseHeader::MustSendHtImmediateAck (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (m_baAckPolicy) ? true : false;
 }
 
 uint8_t
 CtrlBAckResponseHeader::GetTidInfo (void) const
 {
-  NS_LOG_FUNCTION (this);
   uint8_t tid = static_cast<uint8_t> (m_tidInfo);
   return tid;
 }
@@ -466,35 +430,30 @@ CtrlBAckResponseHeader::GetTidInfo (void) const
 uint16_t
 CtrlBAckResponseHeader::GetStartingSequence (void) const
 {
-  NS_LOG_FUNCTION (this);
   return m_startingSeq;
 }
 
 bool
 CtrlBAckResponseHeader::IsBasic (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (!m_multiTid && !m_compressed) ? true : false;
 }
 
 bool
 CtrlBAckResponseHeader::IsCompressed (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (!m_multiTid && m_compressed) ? true : false;
 }
 
 bool
 CtrlBAckResponseHeader::IsMultiTid (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (m_multiTid && m_compressed) ? true : false;
 }
 
 uint16_t
 CtrlBAckResponseHeader::GetBaControl (void) const
 {
-  NS_LOG_FUNCTION (this);
   uint16_t res = 0;
   if (m_baAckPolicy)
     {
@@ -515,7 +474,6 @@ CtrlBAckResponseHeader::GetBaControl (void) const
 void
 CtrlBAckResponseHeader::SetBaControl (uint16_t ba)
 {
-  NS_LOG_FUNCTION (this << ba);
   m_baAckPolicy = ((ba & 0x01) == 1) ? true : false;
   m_multiTid = (((ba >> 1) & 0x01) == 1) ? true : false;
   m_compressed = (((ba >> 2) & 0x01) == 1) ? true : false;
@@ -525,21 +483,18 @@ CtrlBAckResponseHeader::SetBaControl (uint16_t ba)
 uint16_t
 CtrlBAckResponseHeader::GetStartingSequenceControl (void) const
 {
-  NS_LOG_FUNCTION (this);
   return (m_startingSeq << 4) & 0xfff0;
 }
 
 void
 CtrlBAckResponseHeader::SetStartingSequenceControl (uint16_t seqControl)
 {
-  NS_LOG_FUNCTION (this << seqControl);
   m_startingSeq = (seqControl >> 4) & 0x0fff;
 }
 
 Buffer::Iterator
 CtrlBAckResponseHeader::SerializeBitmap (Buffer::Iterator start) const
 {
-  NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
   if (!m_multiTid)
     {
@@ -572,7 +527,6 @@ CtrlBAckResponseHeader::SerializeBitmap (Buffer::Iterator start) const
 Buffer::Iterator
 CtrlBAckResponseHeader::DeserializeBitmap (Buffer::Iterator start)
 {
-  NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
   if (!m_multiTid)
     {
@@ -605,7 +559,6 @@ CtrlBAckResponseHeader::DeserializeBitmap (Buffer::Iterator start)
 void
 CtrlBAckResponseHeader::SetReceivedPacket (uint16_t seq)
 {
-  NS_LOG_FUNCTION (this << seq);
   if (!IsInBitmap (seq))
     {
       return;
@@ -639,7 +592,6 @@ CtrlBAckResponseHeader::SetReceivedPacket (uint16_t seq)
 void
 CtrlBAckResponseHeader::SetReceivedFragment (uint16_t seq, uint8_t frag)
 {
-  NS_LOG_FUNCTION (this << seq << static_cast<uint32_t> (frag));
   NS_ASSERT (frag < 16);
   if (!IsInBitmap (seq))
     {
@@ -673,7 +625,6 @@ CtrlBAckResponseHeader::SetReceivedFragment (uint16_t seq, uint8_t frag)
 bool
 CtrlBAckResponseHeader::IsPacketReceived (uint16_t seq) const
 {
-  NS_LOG_FUNCTION (this << seq);
   if (!IsInBitmap (seq))
     {
       return false;
@@ -708,7 +659,6 @@ CtrlBAckResponseHeader::IsPacketReceived (uint16_t seq) const
 bool
 CtrlBAckResponseHeader::IsFragmentReceived (uint16_t seq, uint8_t frag) const
 {
-  NS_LOG_FUNCTION (this << seq << static_cast<uint32_t> (frag));
   NS_ASSERT (frag < 16);
   if (!IsInBitmap (seq))
     {
@@ -746,7 +696,6 @@ CtrlBAckResponseHeader::IsFragmentReceived (uint16_t seq, uint8_t frag) const
 uint8_t
 CtrlBAckResponseHeader::IndexInBitmap (uint16_t seq) const
 {
-  NS_LOG_FUNCTION (this << seq);
   uint8_t index;
   if (seq >= m_startingSeq)
     {
@@ -763,28 +712,24 @@ CtrlBAckResponseHeader::IndexInBitmap (uint16_t seq) const
 bool
 CtrlBAckResponseHeader::IsInBitmap (uint16_t seq) const
 {
-  NS_LOG_FUNCTION (this << seq);
   return (seq - m_startingSeq + 4096) % 4096 < 64;
 }
 
 const uint16_t*
 CtrlBAckResponseHeader::GetBitmap (void) const
 {
-  NS_LOG_FUNCTION (this);
   return bitmap.m_bitmap;
 }
 
 uint64_t
 CtrlBAckResponseHeader::GetCompressedBitmap (void) const
 {
-  NS_LOG_FUNCTION (this);
   return bitmap.m_compressedBitmap;
 }
 
 void
 CtrlBAckResponseHeader::ResetBitmap (void)
 {
-  NS_LOG_FUNCTION (this);
   memset (&bitmap, 0, sizeof (bitmap));
 }
 
@@ -842,7 +787,6 @@ CtrlDmgPoll::Serialize (Buffer::Iterator start) const
 {
   NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
-
   i.WriteHtolsbU16 (m_responseOffset);
 }
 
@@ -851,9 +795,7 @@ CtrlDmgPoll::Deserialize (Buffer::Iterator start)
 {
   NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
-
   m_responseOffset = i.ReadLsbtohU16 ();
-
   return i.GetDistanceFrom (start);
 }
 
@@ -943,7 +885,7 @@ CtrlDMG_SPR::Deserialize (Buffer::Iterator start)
 }
 
 void
-CtrlDMG_SPR::SetDynamicAllocationInfo (Dynamic_Allocation_Info_Field field)
+CtrlDMG_SPR::SetDynamicAllocationInfo (DynamicAllocationInfoField field)
 {
   m_dynamic = field;
 }
@@ -954,7 +896,7 @@ CtrlDMG_SPR::SetBFControl (BF_Control_Field value)
   m_bfControl = value;
 }
 
-Dynamic_Allocation_Info_Field
+DynamicAllocationInfoField
 CtrlDMG_SPR::CtrlDMG_SPR::GetDynamicAllocationInfo (void) const
 {
   return m_dynamic;

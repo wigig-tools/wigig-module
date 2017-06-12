@@ -204,8 +204,8 @@ void PacketSink::HandleRead (Ptr<Socket> socket)
         {
           Time tx = timestamp.GetTimestamp ();
           accummulator += Simulator::Now () - tx;
-          m_totalPackets++;
         }
+      m_totalPackets++;
     }
 }
 

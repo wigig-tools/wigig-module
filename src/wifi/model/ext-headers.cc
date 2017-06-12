@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/address-utils.h"
@@ -641,6 +641,10 @@ ExtDMGBeacon::GetSerializedSize (void) const
   size += 2;                                          // Beacon Interval (See 8.4.1.3)
   size += m_beaconIntervalCtrl.GetSerializedSize ();  // Beacon Interval Control (See 8.4.1.3)
   size += m_dmgParameters.GetSerializedSize ();       // DMG Parameters (See 8.4.1.46)
+  if (m_beaconIntervalCtrl.IsCCPresent ())            // Cluster Control Information
+    {
+      size += m_cluster.GetSerializedSize ();
+    }
   size += m_ssid.GetSerializedSize ();
   size += GetInformationElementsSerializedSize ();
   return size;
@@ -663,11 +667,16 @@ ExtDMGBeacon::Serialize (Buffer::Iterator start) const
   // 5. DMG Parameters.
   /* Other Information Elements */
   Buffer::Iterator i = start;
+
   i.WriteHtolsbU64 (Simulator::Now ().GetMicroSeconds ());
   i = m_ssw.Serialize (i);
   i.WriteHtolsbU16 (m_beaconInterval / 1024);
   i = m_beaconIntervalCtrl.Serialize (i);
   i = m_dmgParameters.Serialize (i);
+  if (m_beaconIntervalCtrl.IsCCPresent ())
+    {
+      i = m_cluster.Serialize (i);
+    }
   i = m_ssid.Serialize (i);
   i = SerializeInformationElements (i);
 }
@@ -676,14 +685,20 @@ uint32_t
 ExtDMGBeacon::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
+
   m_timestamp = i.ReadLsbtohU64 ();
   i = m_ssw.Deserialize (i);
   m_beaconInterval = i.ReadLsbtohU16 ();
   m_beaconInterval *= 1024;
   i = m_beaconIntervalCtrl.Deserialize (i);
   i = m_dmgParameters.Deserialize (i);
+  if (m_beaconIntervalCtrl.IsCCPresent ())
+    {
+      i = m_cluster.Deserialize (i);
+    }
   i = m_ssid.Deserialize (i);
   i = DeserializeInformationElements (i);
+
   return i.GetDistanceFrom (start);
 }
 
@@ -734,6 +749,13 @@ ExtDMGBeacon::SetDMGParameters (ExtDMGParameters &parameters)
 }
 
 void
+ExtDMGBeacon::SetClusterControlField (ExtDMGClusteringControlField &cluster)
+{
+  NS_LOG_FUNCTION (this << &cluster);
+  m_cluster = cluster;
+}
+
+void
 ExtDMGBeacon::SetSsid (Ssid ssid)
 {
   m_ssid = ssid;
@@ -779,6 +801,13 @@ ExtDMGBeacon::GetDMGParameters (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_dmgParameters;
+}
+
+ExtDMGClusteringControlField
+ExtDMGBeacon::GetClusterControlField (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return m_cluster;
 }
 
 Ssid

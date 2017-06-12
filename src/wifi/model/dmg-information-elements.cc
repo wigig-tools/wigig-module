@@ -1,6 +1,6 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -12,6 +12,532 @@
 NS_LOG_COMPONENT_DEFINE ("DmgInformationElements");
 
 namespace ns3 {
+
+/***************************************************
+*      Measurement Request Element (8.4.2.23)
+****************************************************/
+
+MeasurementRequestElement::MeasurementRequestElement ()
+  : m_measurementToken (0),
+    m_measurementRequestMode (0),
+    m_measurementType (BASIC_REQUEST)
+{
+}
+
+WifiInformationElementId
+MeasurementRequestElement::ElementId () const
+{
+  return IE_MEASUREMENT_REQUEST;
+}
+
+uint8_t
+MeasurementRequestElement::GetInformationFieldSize () const
+{
+  return 3;
+}
+
+void
+MeasurementRequestElement::SetMeasurementToken (uint8_t token)
+{
+  m_measurementToken = token;
+}
+
+void
+MeasurementRequestElement::SetMeasurementRequestMode (bool parallel, bool enable, bool request, bool report, bool durationMandatory)
+{
+  m_measurementRequestMode = 0;
+  m_measurementRequestMode |= parallel & 0x1;
+  m_measurementRequestMode |= (enable & 0x1) << 1;
+  m_measurementRequestMode |= (request & 0x1) << 2;
+  m_measurementRequestMode |= (report & 0x1) << 3;
+  m_measurementRequestMode |= (durationMandatory & 0x1) << 4;
+}
+
+void
+MeasurementRequestElement::SetMeasurementType (MeasurementType type)
+{
+  m_measurementType = type;
+}
+
+uint8_t
+MeasurementRequestElement::GetMeasurementToken (void) const
+{
+  return m_measurementToken;
+}
+
+bool
+MeasurementRequestElement::IsParallelMode (void) const
+{
+  bool value = m_measurementRequestMode & 0x1;
+  return value;
+}
+
+bool
+MeasurementRequestElement::IsEnableMode (void) const
+{
+  bool value = (m_measurementRequestMode >> 1) & 0x1;
+  return value;
+}
+
+bool
+MeasurementRequestElement::IsRequestMode (void) const
+{
+  bool value = (m_measurementRequestMode >> 2) & 0x1;
+  return value;
+}
+
+bool
+MeasurementRequestElement::IsReportMode (void) const
+{
+  bool value = (m_measurementRequestMode >> 3) & 0x1;
+  return value;
+}
+
+bool
+MeasurementRequestElement::IsDurationMandatory (void) const
+{
+  bool value = (m_measurementRequestMode >> 4) & 0x1;
+  return value;
+}
+
+MeasurementType
+MeasurementRequestElement::GetMeasurementType (void) const
+{
+  return m_measurementType;
+}
+
+/***************************************************
+* Directional Channel Quality Request (8.4.2.23.16)
+****************************************************/
+
+DirectionalChannelQualityRequestElement::DirectionalChannelQualityRequestElement ()
+  : m_operatingClass (0),
+    m_channelNumber (0),
+    m_aid (0),
+    m_measurementStartTime (0),
+    m_measurementDuration (0),
+    m_numberOfTimeBlocks (0)
+{
+}
+
+uint8_t
+DirectionalChannelQualityRequestElement::GetInformationFieldSize () const
+{
+  return MeasurementRequestElement::GetInformationFieldSize () + 16;
+}
+
+void
+DirectionalChannelQualityRequestElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  /* Measurement Request Fields */
+  start.WriteU8 (m_measurementToken);
+  start.WriteU8 (m_measurementRequestMode);
+  start.WriteU8 (static_cast<uint8_t> (m_measurementType));
+  /* Directional Channel Quality Request Element Fields */
+  start.WriteU8 (m_operatingClass);
+  start.WriteU8 (m_channelNumber);
+  start.WriteU8 (m_aid);
+  start.WriteU8 (m_reserved);
+  start.WriteU8 (static_cast<uint8_t> (m_measurementMethod));
+  start.WriteHtolsbU64 (m_measurementStartTime);
+  start.WriteHtolsbU16 (m_measurementDuration);
+  start.WriteU8 (m_numberOfTimeBlocks);
+}
+
+uint8_t
+DirectionalChannelQualityRequestElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  /* Measurement Request Fields */
+  m_measurementToken = i.ReadU8 ();
+  m_measurementRequestMode = i.ReadU8 ();
+  m_measurementType = static_cast<MeasurementType> (i.ReadU8 ());
+  /* Directional Channel Quality Request Element Fields */
+  m_operatingClass = i.ReadU8 ();
+  m_channelNumber = i.ReadU8 ();
+  m_aid = i.ReadU8 ();
+  m_reserved = i.ReadU8 ();
+  m_measurementMethod = static_cast<MeasurementMethod> (i.ReadU8 ());
+  m_measurementStartTime = i.ReadLsbtohU64 ();
+  m_measurementDuration = i.ReadLsbtohU16 ();
+  m_numberOfTimeBlocks = i.ReadU8 ();
+  return length;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetOperatingClass (uint8_t oclass)
+{
+  m_operatingClass = oclass;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetChannelNumber (uint8_t number)
+{
+  m_channelNumber = number;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetAid (uint8_t aid)
+{
+  m_aid = aid;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetReservedField (uint8_t field)
+{
+  m_reserved = field;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetMeasurementMethod (MeasurementMethod method)
+{
+  m_measurementMethod = method;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetMeasurementStartTime (uint64_t startTime)
+{
+  m_measurementStartTime = startTime;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetMeasurementDuration (uint16_t duration)
+{
+  m_measurementDuration = duration;
+}
+
+void
+DirectionalChannelQualityRequestElement::SetNumberOfTimeBlocks (uint8_t blocks)
+{
+  m_numberOfTimeBlocks = blocks;
+}
+
+uint8_t
+DirectionalChannelQualityRequestElement::GetOperatingClass (void) const
+{
+  return m_operatingClass;
+}
+
+uint8_t
+DirectionalChannelQualityRequestElement::GetChannelNumber (void) const
+{
+  return m_channelNumber;
+}
+
+uint8_t
+DirectionalChannelQualityRequestElement::GetAid (void) const
+{
+  return m_aid;
+}
+
+uint8_t
+DirectionalChannelQualityRequestElement::GetReservedField (void) const
+{
+  return m_reserved;
+}
+
+MeasurementMethod
+DirectionalChannelQualityRequestElement::GetMeasurementMethod (void) const
+{
+  return m_measurementMethod;
+}
+
+uint64_t
+DirectionalChannelQualityRequestElement::GetMeasurementStartTime (void) const
+{
+  return m_measurementStartTime;
+}
+
+uint16_t
+DirectionalChannelQualityRequestElement::GetMeasurementDuration (void) const
+{
+  return m_measurementDuration;
+}
+
+uint8_t
+DirectionalChannelQualityRequestElement::GetNumberOfTimeBlocks (void) const
+{
+  return m_numberOfTimeBlocks;
+}
+
+ATTRIBUTE_HELPER_CPP (DirectionalChannelQualityRequestElement);
+
+std::ostream &
+operator << (std::ostream &os, const DirectionalChannelQualityRequestElement &element)
+{
+  return os;
+}
+
+std::istream &
+operator >> (std::istream &is, DirectionalChannelQualityRequestElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*      Measurement Report Element (8.4.2.24)
+****************************************************/
+
+MeasurementReportElement::MeasurementReportElement ()
+  : m_measurementToken (0),
+    m_measurementReportMode (0),
+    m_measurementType (BASIC_REQUEST)
+{
+}
+
+WifiInformationElementId
+MeasurementReportElement::ElementId () const
+{
+  return IE_MEASUREMENT_REPORT;
+}
+
+uint8_t
+MeasurementReportElement::GetInformationFieldSize () const
+{
+  return 3;
+}
+
+void
+MeasurementReportElement::SetMeasurementToken (uint8_t token)
+{
+  m_measurementToken = token;
+}
+
+void
+MeasurementReportElement::SetMeasurementReportMode (bool late, bool incapable, bool refused)
+{
+  m_measurementReportMode = 0;
+  m_measurementReportMode |= late & 0x1;
+  m_measurementReportMode |= (incapable & 0x1) << 1;
+  m_measurementReportMode |= (refused & 0x1) << 2;
+}
+
+void
+MeasurementReportElement::SetMeasurementType (MeasurementType type)
+{
+  m_measurementType = type;
+}
+
+uint8_t
+MeasurementReportElement::GetMeasurementToken (void) const
+{
+  return m_measurementToken;
+}
+
+bool
+MeasurementReportElement::IsLateMode (void) const
+{
+  return (m_measurementReportMode & 0x1);
+}
+
+bool
+MeasurementReportElement::IsIncapableMode (void) const
+{
+  return ((m_measurementReportMode >> 1) & 0x1);
+}
+
+bool
+MeasurementReportElement::IsRefusedMode (void) const
+{
+  return ((m_measurementReportMode >> 2) & 0x1);
+}
+
+MeasurementType
+MeasurementReportElement::GetMeasurementType (void) const
+{
+  return m_measurementType;
+}
+
+/***************************************************
+* Directional Channel Quality Report (8.4.2.24.15)
+****************************************************/
+
+DirectionalChannelQualityReportElement::DirectionalChannelQualityReportElement ()
+  : m_operatingClass (0),
+    m_channelNumber (0),
+    m_aid (0),
+    m_measurementMethod (0),
+    m_measurementStartTime (0),
+    m_measurementDuration (0),
+    m_numberOfTimeBlocks (0)
+{
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::GetInformationFieldSize () const
+{
+  return MeasurementReportElement::GetInformationFieldSize () + 16 + m_numberOfTimeBlocks;
+}
+
+void
+DirectionalChannelQualityReportElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  /* Measurement Report Fields */
+  start.WriteU8 (m_measurementToken);
+  start.WriteU8 (m_measurementReportMode);
+  start.WriteU8 (static_cast<uint8_t> (m_measurementType));
+  /* Directional Channel Quality Request Element Fields */
+  start.WriteU8 (m_operatingClass);
+  start.WriteU8 (m_channelNumber);
+  start.WriteU8 (m_aid);
+  start.WriteU8 (m_reserved);
+  start.WriteU8 (m_measurementMethod);
+  start.WriteHtolsbU64 (m_measurementStartTime);
+  start.WriteHtolsbU16 (m_measurementDuration);
+  start.WriteU8 (m_numberOfTimeBlocks);
+  for (TimeBlockMeasurementListCI it = m_measurementList.begin (); it != m_measurementList.end (); it++)
+    {
+      start.WriteU8 ((*it));
+    }
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  /* Measurement Request Fields */
+  m_measurementToken = i.ReadU8 ();
+  m_measurementReportMode = i.ReadU8 ();
+  m_measurementType = static_cast<MeasurementType> (i.ReadU8 ());
+  /* Directional Channel Quality Report Element Fields */
+  m_operatingClass = i.ReadU8 ();
+  m_channelNumber = i.ReadU8 ();
+  m_aid = i.ReadU8 ();
+  m_reserved = i.ReadU8 ();
+  m_measurementMethod = i.ReadU8 ();
+  m_measurementStartTime = i.ReadLsbtohU64 ();
+  m_measurementDuration = i.ReadLsbtohU16 ();
+  m_numberOfTimeBlocks = i.ReadU8 ();
+  TimeBlockMeasurement measurement;
+  for (uint8_t j = 0; j < m_numberOfTimeBlocks; j++)
+    {
+      measurement = i.ReadU8 ();
+      m_measurementList.push_back (measurement);
+    }
+  return length;
+}
+
+void
+DirectionalChannelQualityReportElement::SetOperatingClass (uint8_t oclass)
+{
+  m_operatingClass = oclass;
+}
+
+void
+DirectionalChannelQualityReportElement::SetChannelNumber (uint8_t number)
+{
+  m_channelNumber = number;
+}
+
+void
+DirectionalChannelQualityReportElement::SetAid (uint8_t aid)
+{
+  m_aid = aid;
+}
+
+void
+DirectionalChannelQualityReportElement::SetReservedField (uint8_t field)
+{
+  m_reserved = field;
+}
+
+void
+DirectionalChannelQualityReportElement::SetMeasurementMethod (uint8_t method)
+{
+  m_measurementMethod = method;
+}
+
+void
+DirectionalChannelQualityReportElement::SetMeasurementStartTime (uint64_t startTime)
+{
+  m_measurementStartTime = startTime;
+}
+
+void
+DirectionalChannelQualityReportElement::SetMeasurementDuration (uint16_t duration)
+{
+  m_measurementDuration = duration;
+}
+
+void
+DirectionalChannelQualityReportElement::SetNumberOfTimeBlocks (uint8_t blocks)
+{
+  m_numberOfTimeBlocks = blocks;
+}
+
+void
+DirectionalChannelQualityReportElement::AddTimeBlockMeasurement (TimeBlockMeasurement measurement)
+{
+  m_measurementList.push_back (measurement);
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::GetOperatingClass (void) const
+{
+  return m_operatingClass;
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::GetChannelNumber (void) const
+{
+  return m_channelNumber;
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::GetAid (void) const
+{
+  return m_aid;
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::GetReservedField (void) const
+{
+  return m_reserved;
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::GetMeasurementMethod (void) const
+{
+  return m_measurementMethod;
+}
+
+uint64_t
+DirectionalChannelQualityReportElement::GetMeasurementStartTime (void) const
+{
+  return m_measurementStartTime;
+}
+
+uint16_t
+DirectionalChannelQualityReportElement::GetMeasurementDuration (void) const
+{
+  return m_measurementDuration;
+}
+
+uint8_t
+DirectionalChannelQualityReportElement::GetNumberOfTimeBlocks (void) const
+{
+  return m_numberOfTimeBlocks;
+}
+
+TimeBlockMeasurementList
+DirectionalChannelQualityReportElement::GetTimeBlockMeasurementList (void) const
+{
+  return m_measurementList;
+}
+
+ATTRIBUTE_HELPER_CPP (DirectionalChannelQualityReportElement);
+
+std::ostream &
+operator << (std::ostream &os, const DirectionalChannelQualityReportElement &element)
+{
+  return os;
+}
+
+std::istream &
+operator >> (std::istream &is, DirectionalChannelQualityReportElement &element)
+{
+  return is;
+}
 
 /***************************************************
 *             Request Element 8.4.2.51
@@ -1522,7 +2048,8 @@ DmgAllocationInfo::DmgAllocationInfo ()
     m_truncatable (false),
     m_extendable (false),
     m_lpScUsed (false),
-    m_up (0)
+    m_up (0),
+    m_destAid (0)
 {
 }
 
@@ -1574,13 +2101,13 @@ DmgAllocationInfo::Deserialize (Buffer::Iterator start)
   m_allocationID = val1 & 0xF;
   m_allocationType = (val1 >> 4) & 0x7;
   m_allocationFormat = (val1 >> 7) & 0x1;
-  m_pseudoStatic = (val1 >> 7) & 0x1;
-  m_truncatable = (val1 >> 8) & 0x1;
-  m_extendable = (val1 >> 9) & 0x1;
+  m_pseudoStatic = (val1 >> 8) & 0x1;
+  m_truncatable = (val1 >> 9) & 0x1;
+  m_extendable = (val1 >> 10) & 0x1;
   m_lpScUsed = (val1 >> 11) & 0x1;
   m_up = (val1 >> 12) & 0x7;
-  m_destAid |= (val1 >> 15) & 0x1;
-  m_destAid |= (val2 >> 1);
+  m_destAid = (val1 >> 15) & 0x1;
+  m_destAid |= (val2 << 1);
 
   return i;
 }
@@ -1860,9 +2387,11 @@ DmgTspecElement::SetBfControl (BF_Control_Field &ctrl)
 }
 
 void
-DmgTspecElement::SetAllocationPeriod (uint16_t period)
+DmgTspecElement::SetAllocationPeriod (uint16_t period, bool multiple)
 {
-  m_allocationPeriod = period;
+  NS_ASSERT (period <= 32767);
+  m_allocationPeriod = uint16_t (multiple) << 15;
+  m_allocationPeriod |= period;
 }
 
 void
@@ -1905,7 +2434,13 @@ DmgTspecElement::GetBfControl (void) const
 uint16_t
 DmgTspecElement::GetAllocationPeriod (void) const
 {
-  return m_allocationPeriod;
+  return (m_allocationPeriod & 0x7FFF);
+}
+
+bool
+DmgTspecElement::IsAllocationPeriodMultipleBI (void) const
+{
+  return ((m_allocationPeriod >> 15) & 0x1);
 }
 
 uint16_t
@@ -3228,6 +3763,292 @@ operator >> (std::istream &is, SessionTransitionElement &element)
 }
 
 /***************************************************
+*   Cluster Report Element Field (Figure 8-401ax)
+****************************************************/
+
+ClusterReportElement::ClusterReportElement ()
+  : m_clusterRequest (false),
+    m_clusterReport (false),
+    m_schedulePresent (false),
+    m_tsconstPresent (false),
+    m_ecpacPolicyEnforced (false),
+    m_ecpacPolicyPresent (false)
+{
+}
+
+WifiInformationElementId
+ClusterReportElement::ElementId () const
+{
+  return IE_CLUSTER_REPORT;
+}
+
+uint8_t
+ClusterReportElement::GetInformationFieldSize () const
+{
+  uint8_t size = 0;
+  size +=1;
+  if (m_clusterReport)
+    {
+      size += 18;
+      if (m_ecpacPolicyPresent)
+        {
+
+        }
+      if (m_schedulePresent)
+        {
+          size += m_scheduleElement.GetSerializedSize ();
+        }
+      if (m_tsconstPresent)
+        {
+          size += 1 + m_constraintList.size () * 14;
+        }
+    }
+  return size;
+}
+
+void
+ClusterReportElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  uint8_t reportControl = 0;
+
+  /** Cluster Report Control **/
+  reportControl |= m_clusterRequest & 0x1;
+  reportControl |= (m_clusterReport & 0x1) << 1;
+  reportControl |= (m_schedulePresent & 0x1) << 2;
+  reportControl |= (m_tsconstPresent & 0x1) << 3;
+  reportControl |= (m_ecpacPolicyEnforced & 0x1) << 4;
+  reportControl |= (m_ecpacPolicyPresent & 0x1) << 5;
+  i.WriteU8 (reportControl);
+
+  /* Element Body */
+  if (m_clusterReport)
+    {
+      WriteTo (i, m_bssID);
+      i.WriteHtolsbU32 (m_timestamp);
+      i = m_clusteringControl.Serialize (i);
+      if (m_ecpacPolicyPresent)
+        {
+
+        }
+      if (m_schedulePresent)
+        {
+          i = m_scheduleElement.Serialize (i);
+        }
+      if (m_tsconstPresent)
+        {
+          i.WriteU8 (m_constraintList.size ());
+          for (ConstraintListCI it = m_constraintList.begin (); it != m_constraintList.end (); it++)
+            {
+              i = it->Serialize (i);
+            }
+        }
+    }
+}
+
+uint8_t
+ClusterReportElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  uint8_t reportControl = 0;
+
+  /** Cluster Report Control **/
+  reportControl = i.ReadU8 ();
+  m_clusterRequest = reportControl & 0x1;
+  m_clusterReport = (reportControl >> 1) & 0x1;
+  m_schedulePresent = (reportControl >> 2) & 0x1;
+  m_tsconstPresent = (reportControl >> 3) & 0x1;
+  m_ecpacPolicyEnforced = (reportControl >> 4) & 0x1;
+  m_ecpacPolicyPresent = (reportControl >> 5) & 0x1;
+
+  /* Element Body */
+  if (m_clusterReport)
+    {
+      ReadFrom (i, m_bssID);
+      m_timestamp = i.ReadLsbtohU32 ();
+      i = m_clusteringControl.Deserialize (i);
+      if (m_ecpacPolicyPresent)
+        {
+
+        }
+      if (m_schedulePresent)
+        {
+          i = m_scheduleElement.Deserialize (i);
+        }
+      if (m_tsconstPresent)
+        {
+          uint8_t numberOfConstraints = i.ReadU8 ();
+          while (numberOfConstraints != 0)
+            {
+              ConstraintSubfield constraint;
+              i = constraint.Deserialize (i);
+              m_constraintList.push_back (constraint);
+              numberOfConstraints--;
+            }
+        }
+    }
+  return length;
+}
+
+void
+ClusterReportElement::SetClusterRequest (bool request)
+{
+  m_clusterReport = request;
+}
+
+void
+ClusterReportElement::SetClusterReport (bool report)
+{
+  m_clusterReport = report;
+}
+
+void
+ClusterReportElement::SetSchedulePresent (bool present)
+{
+  m_schedulePresent = present;
+}
+
+void
+ClusterReportElement::SetTsConstPresent (bool present)
+{
+  m_tsconstPresent = present;
+}
+
+void
+ClusterReportElement::SetEcpacPolicyEnforced (bool enforced)
+{
+  m_ecpacPolicyEnforced = enforced;
+}
+
+void
+ClusterReportElement::SetEcpacPolicyPresent (bool present)
+{
+  m_ecpacPolicyPresent = present;
+}
+
+void
+ClusterReportElement::SetReportedBssID (Mac48Address bssid)
+{
+  m_bssID = bssid;
+}
+
+void
+ClusterReportElement::SetReferenceTimestamp (uint32_t timestamp)
+{
+  m_timestamp = timestamp;
+}
+
+void
+ClusterReportElement::SetClusteringControl (ExtDMGClusteringControlField &field)
+{
+  m_clusteringControl = field;
+}
+
+void
+ClusterReportElement::SetEcpacPolicyElement ()
+{
+
+}
+
+void
+ClusterReportElement::AddTrafficSchedulingConstraint (ConstraintSubfield &constraint)
+{
+  NS_ASSERT_MSG (m_constraintList.size () <= 15, "Cannot add more than 15 TSCONST fields");
+  m_constraintList.push_back (constraint);
+}
+
+bool
+ClusterReportElement::GetClusterRequest (void) const
+{
+  return m_clusterRequest;
+}
+
+bool
+ClusterReportElement::GetClusterReport (void) const
+{
+  return m_clusterReport;
+}
+
+bool
+ClusterReportElement::GetSchedulePresent (void) const
+{
+  return m_schedulePresent;
+}
+
+bool
+ClusterReportElement::GetTsConstPresent (void) const
+{
+  return m_tsconstPresent;
+}
+
+bool
+ClusterReportElement::GetEcpacPolicyEnforced (void) const
+{
+  return m_ecpacPolicyEnforced;
+}
+
+bool
+ClusterReportElement::GetEcpacPolicyPresent (void) const
+{
+  return m_ecpacPolicyPresent;
+}
+
+Mac48Address
+ClusterReportElement::GetReportedBssID (void) const
+{
+  return m_bssID;
+}
+
+uint32_t
+ClusterReportElement::GetReferenceTimestamp (void) const
+{
+  return m_timestamp;
+}
+
+ExtDMGClusteringControlField
+ClusterReportElement::GetClusteringControl (void) const
+{
+  return m_clusteringControl;
+}
+
+void
+ClusterReportElement::GetEcpacPolicyElement (void) const
+{
+}
+
+ExtendedScheduleElement
+ClusterReportElement::GetExtendedScheduleElement (void) const
+{
+  return m_scheduleElement;
+}
+
+uint8_t
+ClusterReportElement::GetNumberOfContraints (void) const
+{
+  return m_constraintList.size ();
+}
+
+ConstraintList
+ClusterReportElement::GetTrafficSchedulingConstraintList (void) const
+{
+  return m_constraintList;
+}
+
+ATTRIBUTE_HELPER_CPP (ClusterReportElement);
+
+std::ostream
+&operator << (std::ostream &os, const ClusterReportElement &element)
+{
+  return os;
+}
+
+std::istream
+&operator >> (std::istream &is, ClusterReportElement &element)
+{
+  return is;
+}
+
+/***************************************************
 *   Relay Capabilities Info field (Figure 8-401ba)
 ****************************************************/
 
@@ -3825,6 +4646,191 @@ operator << (std::ostream &os, const QuietPeriodResponseElement &element)
 
 std::istream &
 operator >> (std::istream &is, QuietPeriodResponseElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*           ECPAC Policy Element 8.4.2.157
+****************************************************/
+
+EcpacPolicyElement::EcpacPolicyElement ()
+  : m_bhiEnforced (false),
+    m_txssCbapEnforced (false),
+    m_protectedPeriodEnforced (false),
+    m_timestampOffsetBitmap (0),
+    m_txssCbapOffset (0),
+    m_txssCbapDuration (0),
+    m_txssCbapMaxMem (0)
+{
+}
+
+WifiInformationElementId
+EcpacPolicyElement::ElementId () const
+{
+  return IE_ECPAC_POLICY;
+}
+
+uint8_t
+EcpacPolicyElement::GetInformationFieldSize () const
+{
+  uint8_t size = 11;
+  if (m_txssCbapEnforced)
+    {
+      size += 4;
+    }
+  return size;
+}
+
+void
+EcpacPolicyElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+
+  uint8_t policyDetail = 0;
+  policyDetail |= m_bhiEnforced & 0x1;
+  policyDetail |= (m_txssCbapEnforced & 0x1) << 1;
+  policyDetail |= m_bhiEnforced & 0x1;
+  i.WriteU8 (policyDetail);
+
+  WriteTo (i, m_ccsrID);
+  i.WriteHtolsbU32 (m_timestampOffsetBitmap);
+  if (m_txssCbapEnforced)
+    {
+      i.WriteHtolsbU16 (m_txssCbapOffset);
+      i.WriteU8 (m_txssCbapDuration);
+      i.WriteU8 (m_txssCbapMaxMem);
+    }
+}
+
+uint8_t
+EcpacPolicyElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+
+  uint8_t policyDetail =   i.ReadU8 ();;
+  m_bhiEnforced = (policyDetail & 0x1);
+  m_txssCbapEnforced = (policyDetail >> 1) & 0x1;
+  m_bhiEnforced = (policyDetail >> 2) & 0x1;
+
+  ReadFrom (i, m_ccsrID);
+  m_timestampOffsetBitmap = i.ReadLsbtohU32 ();
+  if (m_txssCbapEnforced)
+    {
+      m_txssCbapOffset = i.ReadLsbtohU16 ();
+      m_txssCbapDuration = i.ReadU8 ();
+      m_txssCbapMaxMem = i.ReadU8 ();
+    }
+
+  return length;
+}
+
+void
+EcpacPolicyElement::SetBhiEnforced (bool enforced)
+{
+  m_bhiEnforced = enforced;
+}
+
+void
+EcpacPolicyElement::SetTxssCbapEnforced (bool enforced)
+{
+  m_txssCbapEnforced = enforced;
+}
+
+void
+EcpacPolicyElement::SetProtectedPeriodEnforced (bool enforced)
+{
+  m_protectedPeriodEnforced = enforced;
+}
+
+void
+EcpacPolicyElement::SetCCSRID (Mac48Address ccsrID)
+{
+  m_ccsrID = ccsrID;
+}
+
+void
+EcpacPolicyElement::SetTimestampOffsetBitmap (uint32_t bitmap)
+{
+  m_timestampOffsetBitmap = bitmap;
+}
+
+void
+EcpacPolicyElement::SetTxssCbapOffset (uint16_t offset)
+{
+  m_txssCbapOffset = offset;
+}
+
+void
+EcpacPolicyElement::SetTxssCbapDuration (uint8_t duration)
+{
+  m_txssCbapDuration = duration;
+}
+
+void
+EcpacPolicyElement::SetTxssCbapMaxMem (uint8_t max)
+{
+  m_txssCbapMaxMem = max;
+}
+
+bool
+EcpacPolicyElement::GetBhiEnforced (void) const
+{
+  return m_bhiEnforced;
+}
+
+bool
+EcpacPolicyElement::GetTxssCbapEnforced (void) const
+{
+  return m_txssCbapEnforced;
+}
+
+bool
+EcpacPolicyElement::GetProtectedPeriodEnforced (void) const
+{
+  return m_protectedPeriodEnforced;
+}
+
+Mac48Address
+EcpacPolicyElement::GetCCSRID (void) const
+{
+  return m_ccsrID;
+}
+
+uint32_t
+EcpacPolicyElement::GetTimestampOffsetBitmap (void) const
+{
+  return m_timestampOffsetBitmap;
+}
+
+uint16_t
+EcpacPolicyElement::GetTxssCbapOffset (void) const
+{
+  return m_txssCbapOffset;
+}
+
+uint8_t
+EcpacPolicyElement::GetTxssCbapDuration (void) const
+{
+  return m_txssCbapDuration;
+}
+
+uint8_t
+EcpacPolicyElement::GetTxssCbapMaxMem (void) const
+{
+  return m_txssCbapMaxMem;
+}
+
+ATTRIBUTE_HELPER_CPP (EcpacPolicyElement);
+
+std::ostream
+&operator << (std::ostream &os, const EcpacPolicyElement &element)
+{
+  return os;
+}
+
+std::istream
+&operator >> (std::istream &is, EcpacPolicyElement &element)
 {
   return is;
 }

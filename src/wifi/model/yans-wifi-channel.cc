@@ -18,18 +18,14 @@
  * Author: Mathieu Lacage, <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "ns3/packet.h"
 #include "ns3/simulator.h"
-#include "ns3/mobility-model.h"
-#include "ns3/net-device.h"
-#include "ns3/node.h"
 #include "ns3/log.h"
 #include "ns3/pointer.h"
-#include "ns3/object-factory.h"
 #include "yans-wifi-channel.h"
-#include "yans-wifi-phy.h"
 #include "ns3/propagation-loss-model.h"
 #include "ns3/propagation-delay-model.h"
+#include "wifi-utils.h"
+#include <fstream>
 
 namespace ns3 {
 
@@ -41,7 +37,7 @@ TypeId
 YansWifiChannel::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::YansWifiChannel")
-    .SetParent<WifiChannel> ()
+    .SetParent<Channel> ()
     .SetGroupName ("Wifi")
     .AddConstructor<YansWifiChannel> ()
     .AddAttribute ("PropagationLossModel", "A pointer to the propagation loss model attached to this channel.",
@@ -58,13 +54,14 @@ YansWifiChannel::GetTypeId (void)
 
 YansWifiChannel::YansWifiChannel ()
   : m_blockage (0),
-    m_packetDropper (0)
+    m_packetDropper (0),
+    m_experimentalMode (false)
 {
 }
 
 YansWifiChannel::~YansWifiChannel ()
 {
-  NS_LOG_FUNCTION_NOARGS ();
+  NS_LOG_FUNCTION (this);
   m_phyList.clear ();
 }
 
@@ -113,15 +110,47 @@ YansWifiChannel::RemovePacketDropper (void)
 }
 
 void
-YansWifiChannel::Send (Ptr<YansWifiPhy> sender, Ptr<const Packet> packet, double txPowerDbm,
-                       WifiTxVector txVector, WifiPreamble preamble, enum mpduType mpdutype, Time duration) const
+YansWifiChannel::LoadReceivedSignalStrengthFile (std::string fileName, Time updateFreuqnecy)
 {
-  NS_LOG_FUNCTION (this << sender << packet << txPowerDbm << txVector << preamble << mpdutype << duration);
-  Ptr<MobilityModel> senderMobility = sender->GetMobility ()->GetObject<MobilityModel> ();
+  NS_LOG_FUNCTION (this << "Loading Received signal strength file" << fileName);
+  std::ifstream file;
+  file.open (fileName.c_str (), std::ifstream::in);
+  NS_ASSERT_MSG (file.good (), " file not found");
+  std::string line;
+  double strength;
+  while (std::getline (file, line))
+    {
+      std::stringstream value (line);
+      value >> strength;
+      m_receivedSignalStrength.push_back (strength);
+    }
+  m_currentSignalStrengthIndex = 0;
+  m_experimentalMode = true;
+  m_updateFrequency = updateFreuqnecy;
+  /* Schedule Update event */
+  Simulator::Schedule (m_updateFrequency, &YansWifiChannel::UpdateSignalStrengthValue, this);
+}
+
+void
+YansWifiChannel::UpdateSignalStrengthValue (void)
+{
+  NS_LOG_FUNCTION (this);
+  m_currentSignalStrengthIndex++;
+  if (m_currentSignalStrengthIndex == m_receivedSignalStrength.size ())
+    {
+      m_currentSignalStrengthIndex = 0;
+    }
+  Simulator::Schedule (m_updateFrequency, &YansWifiChannel::UpdateSignalStrengthValue, this);
+}
+
+void
+YansWifiChannel::Send (Ptr<YansWifiPhy> sender, Ptr<const Packet> packet, double txPowerDbm, Time duration) const
+{
+  NS_LOG_FUNCTION (this << sender << packet << txPowerDbm << duration.GetSeconds ());
+  Ptr<MobilityModel> senderMobility = sender->GetMobility ();
   NS_ASSERT (senderMobility != 0);
   uint32_t j = 0; /* Phy ID */
   Vector sender_pos = senderMobility->GetPosition ();
-//  Ptr<AbstractAntenna> senderAnt = sender->GetAntenna();
   Ptr<DirectionalAntenna> senderAnt = sender->GetDirectionalAntenna ();
   double rxPowerDbm;
   Time delay; /* Propagation delay of the signal */
@@ -130,7 +159,7 @@ YansWifiChannel::Send (Ptr<YansWifiPhy> sender, Ptr<const Packet> packet, double
     {
       if (sender != (*i))
         {
-          // For now don't account for inter channel interference.
+          //For now don't account for inter channel interference nor channel bonding
           if ((*i)->GetChannelNumber () != sender->GetChannelNumber ())
             {
               continue;
@@ -149,73 +178,63 @@ YansWifiChannel::Send (Ptr<YansWifiPhy> sender, Ptr<const Packet> packet, double
           double azimuthTx = CalculateAzimuthAngle (sender_pos, receiverMobility->GetPosition ());
           double azimuthRx = CalculateAzimuthAngle (receiverMobility->GetPosition (), sender_pos);
 
-          /* Check if the destination node fall within the tx sector */
-//          if (senderAnt->IsPeerNodeInTheCurrentSector (azimuth))
-//            {
-              delay = m_delay->GetDelay (senderMobility, receiverMobility);
+          delay = m_delay->GetDelay (senderMobility, receiverMobility);
 
-              if (senderAnt != 0)
+          if (senderAnt != 0)
+            {
+              NS_LOG_DEBUG ("POWER: azimuthTx=" << azimuthTx
+                            << ", azimuthRx=" << azimuthRx
+                            << ", txPowerDbm=" << txPowerDbm
+                            << ", RxPower=" << m_loss->CalcRxPower (txPowerDbm, senderMobility, receiverMobility)
+                            << ", Gtx=" << senderAnt->GetTxGainDbi (azimuthTx)
+                            << ", Grx=" << (*i)->GetDirectionalAntenna ()->GetRxGainDbi (azimuthRx));
+
+              if (m_experimentalMode)
                 {
-  //                double elevation = CalculateElevationAngle (sender_pos, receiverMobility->GetPosition());
-  //                NS_LOG_DEBUG("POWER: txPowerDbm=" << txPowerDbm
-  //                          << ", RxPower=" << m_loss->CalcRxPower (txPowerDbm, senderMobility, receiverMobility)
-  //                          << ", Gtx=" << sender_ant->GetTxGainDbi (azimuth, elevation)
-  //                          << ", Grx=" << (*i)->GetAntenna ()->GetRxGainDbi (azimuth + M_PI, -elevation));
-  //                rxPowerDbm = m_loss->CalcRxPower (txPowerDbm, senderMobility, receiverMobility) +
-  //                             sender_ant->GetTxGainDbi (azimuth, elevation) +                // Sender's antenna gain.
-  //                             (*i)->GetAntenna ()->GetRxGainDbi (azimuth + M_PI, -elevation); // Receiver's antenna gain.
-
-                  NS_LOG_DEBUG ("POWER: azimuthTx=" << azimuthTx
-                                << ", azimuthRx=" << azimuthRx
-                                << ", txPowerDbm=" << txPowerDbm
-                                << ", RxPower=" << m_loss->CalcRxPower (txPowerDbm, senderMobility, receiverMobility)
-                                << ", Gtx=" << senderAnt->GetTxGainDbi (azimuthTx)
-                                << ", Grx=" << (*i)->GetDirectionalAntenna ()->GetRxGainDbi (azimuthRx));
-
+                  rxPowerDbm = m_receivedSignalStrength[m_currentSignalStrengthIndex];
+                }
+              else
+                {
                   rxPowerDbm = m_loss->CalcRxPower (txPowerDbm, senderMobility, receiverMobility) +
                                senderAnt->GetTxGainDbi (azimuthTx) +                            // Sender's antenna gain.
                                (*i)->GetDirectionalAntenna ()->GetRxGainDbi (azimuthRx);        // Receiver's antenna gain.
-
-                  /* External Attenuator */
-                  if ((m_blockage != 0) &&
-                      (((m_srcWifiPhy == sender) && (m_dstWifiPhy == (*i))) ||
-                       ((m_srcWifiPhy == (*i)) && (m_dstWifiPhy == sender))))
-                    {
-                      NS_LOG_DEBUG ("Blockage is inserted");
-                      rxPowerDbm += m_blockage ();
-                    }
                 }
-              else
+
+              /* External Attenuator */
+              if ((m_blockage != 0) &&
+                  (((m_srcWifiPhy == sender) && (m_dstWifiPhy == (*i))) ||
+                   ((m_srcWifiPhy == (*i)) && (m_dstWifiPhy == sender))))
                 {
-                  rxPowerDbm = m_loss->CalcRxPower (txPowerDbm, senderMobility, receiverMobility) ;
+                  NS_LOG_DEBUG ("Blockage is inserted");
+                  rxPowerDbm += m_blockage ();
                 }
+            }
+          else
+            {
+              rxPowerDbm = m_loss->CalcRxPower (txPowerDbm, senderMobility, receiverMobility) ;
+            }
 
-              NS_LOG_DEBUG ("propagation: txPower=" << txPowerDbm << "dbm, rxPower=" << rxPowerDbm << "dbm, " <<
-                            "distance=" << senderMobility->GetDistanceFrom (receiverMobility) << "m, delay=" << delay);
+          NS_LOG_DEBUG ("propagation: txPower=" << txPowerDbm << "dbm, rxPower=" << rxPowerDbm << "dbm, " <<
+                        "distance=" << senderMobility->GetDistanceFrom (receiverMobility) << "m, delay=" << delay);
 
-              Ptr<Packet> copy = packet->Copy ();   /* Copy of the packet to be received. */
-              Ptr<Object> dstNetDevice = m_phyList[j]->GetDevice ();
-              uint32_t dstNode;	/* Destination node (Receiver) */
-              if (dstNetDevice == 0)
-                {
-                  dstNode = 0xffffffff;
-                }
-              else
-                {
-                  dstNode = dstNetDevice->GetObject<NetDevice> ()->GetNode ()->GetId ();
-                }
+          Ptr<Packet> copy = packet->Copy ();   /* Copy of the packet to be received. */
+          Ptr<Object> dstNetDevice = m_phyList[j]->GetDevice ();
+          uint32_t dstNode;	/* Destination node (Receiver) */
+          if (dstNetDevice == 0)
+            {
+              dstNode = 0xffffffff;
+            }
+          else
+            {
+              dstNode = dstNetDevice->GetObject<NetDevice> ()->GetNode ()->GetId ();
+            }
 
-              /* We are sending PSDU Packet */
-              struct Parameters parameters;
-              parameters.rxPowerDbm = rxPowerDbm;
-              parameters.type = mpdutype;
-              parameters.duration = duration;
-              parameters.txVector = txVector;
-              parameters.preamble = preamble;
-              NS_LOG_DEBUG ("Receiving Node ID=" << dstNode);
+          /* We are sending PSDU Packet */
+          NS_LOG_DEBUG ("Receiving Node ID=" << dstNode);
 
-              Simulator::ScheduleWithContext (dstNode, delay, &YansWifiChannel::Receive, this, j, copy, parameters);
-//            }
+	  Simulator::ScheduleWithContext (dstNode,
+					  delay, &YansWifiChannel::Receive, this,
+					  (*i), copy, rxPowerDbm, duration);
         }
     }
 }
@@ -262,12 +281,12 @@ YansWifiChannel::SendTrn (Ptr<YansWifiPhy> sender, double txPowerDbm, WifiTxVect
     }
 }
 
+
 void
-YansWifiChannel::Receive (uint32_t i, Ptr<Packet> packet, struct Parameters parameters) const
+YansWifiChannel::Receive (Ptr<YansWifiPhy> phy, Ptr<Packet> packet, double rxPowerDbm, Time duration) const
 {
-  NS_LOG_FUNCTION (this << i << packet);
-  m_phyList[i]->StartReceivePreambleAndHeader (packet, parameters.rxPowerDbm, parameters.txVector,
-                                               parameters.preamble, parameters.type, parameters.duration);
+  NS_LOG_FUNCTION (this << phy << packet << rxPowerDbm << duration.GetSeconds ());
+  phy->StartReceivePreambleAndHeader (packet, DbmToW (rxPowerDbm + phy->GetRxGain ()), duration);
 }
 
 void
@@ -327,6 +346,7 @@ YansWifiChannel::Add (Ptr<YansWifiPhy> phy)
 int64_t
 YansWifiChannel::AssignStreams (int64_t stream)
 {
+  NS_LOG_FUNCTION (this << stream);
   int64_t currentStream = stream;
   currentStream += m_loss->AssignStreams (stream);
   return (currentStream - stream);

@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015 HANY ASSASA
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -21,7 +21,7 @@
  *          Mirko Banchi <mk.banchi@gmail.com>
  *          Hany Assasa <hany.assasa@gmail.com>
  */
-#include "ns3/assert.h"
+
 #include "ns3/address-utils.h"
 #include "wifi-mac-header.h"
 
@@ -75,6 +75,7 @@ WifiMacHeader::WifiMacHeader ()
     m_trainingFieldLength (0)
 {
 }
+
 WifiMacHeader::~WifiMacHeader ()
 {
 }
@@ -212,7 +213,7 @@ WifiMacHeader::SetMultihopAction (void)
 }
 
 void
-WifiMacHeader::SetType (enum WifiMacType type)
+WifiMacHeader::SetType (WifiMacType type)
 {
   switch (type)
     {
@@ -504,8 +505,7 @@ WifiMacHeader::SetQosNoEosp ()
   m_qosEosp = 0;
 }
 
-void
-WifiMacHeader::SetQosAckPolicy (enum QosAckPolicy policy)
+void WifiMacHeader::SetQosAckPolicy (QosAckPolicy policy)
 {
   switch (policy)
     {
@@ -557,6 +557,21 @@ void WifiMacHeader::SetQosTxopLimit (uint8_t txop)
   m_qosStuff = txop;
 }
 
+void WifiMacHeader::SetQosMeshControlPresent (void)
+{
+  //Mark bit 0 of this variable instead of bit 8, since m_qosStuff is
+  //shifted by one byte when serialized
+  m_qosStuff = m_qosStuff | 0x01; //bit 8 of QoS Control Field
+}
+
+void WifiMacHeader::SetQosNoMeshControlPresent ()
+{
+  //Clear bit 0 of this variable instead of bit 8, since m_qosStuff is
+  //shifted by one byte when serialized
+  m_qosStuff = m_qosStuff & 0xfe; //bit 8 of QoS Control Field
+}
+
+
 Mac48Address
 WifiMacHeader::GetAddr1 (void) const
 {
@@ -581,7 +596,7 @@ WifiMacHeader::GetAddr4 (void) const
   return m_addr4;
 }
 
-enum WifiMacType
+WifiMacType
 WifiMacHeader::GetType (void) const
 {
   switch (m_ctrlType)
@@ -591,43 +606,30 @@ WifiMacHeader::GetType (void) const
         {
         case 0:
           return WIFI_MAC_MGT_ASSOCIATION_REQUEST;
-          break;
         case 1:
           return WIFI_MAC_MGT_ASSOCIATION_RESPONSE;
-          break;
         case 2:
           return WIFI_MAC_MGT_REASSOCIATION_REQUEST;
-          break;
         case 3:
           return WIFI_MAC_MGT_REASSOCIATION_RESPONSE;
-          break;
         case 4:
           return WIFI_MAC_MGT_PROBE_REQUEST;
-          break;
         case 5:
           return WIFI_MAC_MGT_PROBE_RESPONSE;
-          break;
         case 8:
           return WIFI_MAC_MGT_BEACON;
-          break;
         case 10:
           return WIFI_MAC_MGT_DISASSOCIATION;
-          break;
         case 11:
           return WIFI_MAC_MGT_AUTHENTICATION;
-          break;
         case 12:
           return WIFI_MAC_MGT_DEAUTHENTICATION;
-          break;
         case 13:
           return WIFI_MAC_MGT_ACTION;
-          break;
         case 14:
           return WIFI_MAC_MGT_ACTION_NO_ACK;
-          break;
         case 15:
           return WIFI_MAC_MGT_MULTIHOP_ACTION;
-          break;
         }
       break;
     case TYPE_CTL:
@@ -635,49 +637,35 @@ WifiMacHeader::GetType (void) const
         {
         case SUBTYPE_CTL_BACKREQ:
           return WIFI_MAC_CTL_BACKREQ;
-          break;
         case SUBTYPE_CTL_BACKRESP:
           return WIFI_MAC_CTL_BACKRESP;
-          break;
         case SUBTYPE_CTL_RTS:
           return WIFI_MAC_CTL_RTS;
-          break;
         case SUBTYPE_CTL_CTS:
           return WIFI_MAC_CTL_CTS;
-          break;
         case SUBTYPE_CTL_ACK:
           return WIFI_MAC_CTL_ACK;
-          break;
         case SUBTYPE_CTL_EXTENSION:
           switch (m_ctrlFrameExtension)
             {
             case SUBTYPE_CTL_EXTENSION_POLL:
               return WIFI_MAC_CTL_DMG_POLL;
-              break;
             case SUBTYPE_CTL_EXTENSION_SPR:
               return WIFI_MAC_CTL_DMG_SPR;
-              break;
             case SUBTYPE_CTL_EXTENSION_GRANT:
               return WIFI_MAC_CTL_DMG_GRANT;
-              break;
             case SUBTYPE_CTL_EXTENSION_DMG_CTS:
               return WIFI_MAC_CTL_DMG_CTS;
-              break;
             case SUBTYPE_CTL_EXTENSION_DMG_DTS:
               return WIFI_MAC_CTL_DMG_DTS;
-              break;
             case SUBTYPE_CTL_EXTENSION_GRANT_ACK:
               return WIFI_MAC_CTL_DMG_GRANT_ACK;
-              break;
             case SUBTYPE_CTL_EXTENSION_SSW:
               return WIFI_MAC_CTL_DMG_SSW;
-              break;
             case SUBTYPE_CTL_EXTENSION_SSW_FBCK:
               return WIFI_MAC_CTL_DMG_SSW_FBCK;
-              break;
             case SUBTYPE_CTL_EXTENSION_SSW_ACK:
               return WIFI_MAC_CTL_DMG_SSW_ACK;
-              break;
             }
         }
       break;
@@ -686,49 +674,34 @@ WifiMacHeader::GetType (void) const
         {
         case 0:
           return WIFI_MAC_DATA;
-          break;
         case 1:
           return WIFI_MAC_DATA_CFACK;
-          break;
         case 2:
           return WIFI_MAC_DATA_CFPOLL;
-          break;
         case 3:
           return WIFI_MAC_DATA_CFACK_CFPOLL;
-          break;
         case 4:
           return WIFI_MAC_DATA_NULL;
-          break;
         case 5:
           return WIFI_MAC_DATA_NULL_CFACK;
-          break;
         case 6:
           return WIFI_MAC_DATA_NULL_CFPOLL;
-          break;
         case 7:
           return WIFI_MAC_DATA_NULL_CFACK_CFPOLL;
-          break;
         case 8:
           return WIFI_MAC_QOSDATA;
-          break;
         case 9:
           return WIFI_MAC_QOSDATA_CFACK;
-          break;
         case 10:
           return WIFI_MAC_QOSDATA_CFPOLL;
-          break;
         case 11:
           return WIFI_MAC_QOSDATA_CFACK_CFPOLL;
-          break;
         case 12:
           return WIFI_MAC_QOSDATA_NULL;
-          break;
         case 14:
           return WIFI_MAC_QOSDATA_NULL_CFPOLL;
-          break;
         case 15:
           return WIFI_MAC_QOSDATA_NULL_CFACK_CFPOLL;
-          break;
         }
 	break;
 
@@ -737,13 +710,12 @@ WifiMacHeader::GetType (void) const
 	    {
 	    case 0:
 	      return WIFI_MAC_EXTENSION_DMG_BEACON;
-	      break;
 	    }
 	    break;
     }
   // NOTREACHED
   NS_ASSERT (false);
-  return (enum WifiMacType) - 1;
+  return (WifiMacType) - 1;
 }
 
 bool
@@ -802,10 +774,8 @@ WifiMacHeader::IsCfpoll (void) const
     case WIFI_MAC_QOSDATA_NULL_CFPOLL:
     case WIFI_MAC_QOSDATA_NULL_CFACK_CFPOLL:
       return true;
-      break;
     default:
       return false;
-      break;
     }
 }
 
@@ -1061,27 +1031,23 @@ WifiMacHeader::GetQosTid (void) const
   return m_qosTid;
 }
 
-enum WifiMacHeader::QosAckPolicy
+WifiMacHeader::QosAckPolicy
 WifiMacHeader::GetQosAckPolicy (void) const
 {
   switch (m_qosAckPolicy)
     {
     case 0:
       return NORMAL_ACK;
-      break;
     case 1:
       return NO_ACK;
-      break;
     case 2:
       return NO_EXPLICIT_ACK;
-      break;
     case 3:
       return BLOCK_ACK;
-      break;
     }
   // NOTREACHED
   NS_ASSERT (false);
-  return (enum QosAckPolicy) - 1;
+  return (QosAckPolicy) - 1;
 }
 
 uint8_t
@@ -1095,7 +1061,6 @@ uint16_t
 WifiMacHeader::GetFrameControl (void) const
 {
   uint16_t val = 0;
-
   val |= (m_ctrlType << 2) & (0x3 << 2);
   val |= (m_ctrlSubtype << 4) & (0xf << 4);
   val |= (m_ctrlMoreData << 13) & (0x1 << 13);
@@ -1222,28 +1187,18 @@ WifiMacHeader::GetSize (void) const
         case SUBTYPE_CTL_EXTENSION:
           switch (m_ctrlFrameExtension)
             {
-            case WIFI_MAC_CTL_DMG_POLL:
+            case SUBTYPE_CTL_EXTENSION_POLL:
+            case SUBTYPE_CTL_EXTENSION_SPR:
+            case SUBTYPE_CTL_EXTENSION_GRANT:
+            case SUBTYPE_CTL_EXTENSION_DMG_CTS:
+            case SUBTYPE_CTL_EXTENSION_SSW:
+            case SUBTYPE_CTL_EXTENSION_SSW_FBCK:
+            case SUBTYPE_CTL_EXTENSION_SSW_ACK:
+            case SUBTYPE_CTL_EXTENSION_GRANT_ACK:
               size = 2 + 2 + 6 + 6;
               break;
-            case WIFI_MAC_CTL_DMG_SPR:
-            case WIFI_MAC_CTL_DMG_GRANT:
-              size = 2 + 2 + 6 + 6;
-              break;
-            case WIFI_MAC_CTL_DMG_CTS:
-              size = 2 + 2 + 6 + 6;
-              break;
-            case WIFI_MAC_CTL_DMG_DTS:
-              size = 2 + 2 + 6 + 6 + 6;
-              break;
-            case WIFI_MAC_CTL_DMG_SSW:
-              size = 2 + 2 + 6 + 6;
-              break;
-            case WIFI_MAC_CTL_DMG_SSW_FBCK:
-            case WIFI_MAC_CTL_DMG_SSW_ACK:
-              size = 2 + 2 + 6 + 6;
-              break;
-            case WIFI_MAC_CTL_DMG_GRANT_ACK:
-              size = 2 + 2 + 6 + 6;
+            case SUBTYPE_CTL_EXTENSION_DMG_DTS:
+              size = 2 + 2 + 6;
               break;
             }
         }
@@ -1327,6 +1282,7 @@ case WIFI_MAC_ ## x: \
       FOO (CTL_BACKRESP);
       FOO (CTL_DMG_POLL);
       FOO (CTL_DMG_SPR);
+      FOO (CTL_DMG_GRANT);
       FOO (CTL_DMG_CTS);
       FOO (CTL_DMG_DTS);
       FOO (CTL_DMG_GRANT_ACK);

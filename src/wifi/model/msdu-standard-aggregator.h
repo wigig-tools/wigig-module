@@ -33,12 +33,28 @@ namespace ns3 {
 class MsduStandardAggregator : public MsduAggregator
 {
 public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
   static TypeId GetTypeId (void);
   MsduStandardAggregator ();
   ~MsduStandardAggregator ();
 
-  virtual void SetMaxAmsduSize (uint32_t maxSize);
-  virtual uint32_t GetMaxAmsduSize (void) const;
+  /**
+   * Sets the maximum A-MSDU size in bytes.
+   * Value 0 means that MSDU aggregation is disabled.
+   *
+   * \param maxSize the maximum A-MSDU size in bytes.
+   */
+  void SetMaxAmsduSize (uint32_t maxSize);
+  /**
+   * Returns the maximum A-MSDU size in bytes.
+   * Value 0 means that MSDU aggregation is disabled.
+   *
+   * \return the maximum A-MSDU size in bytes.
+   */
+  uint32_t GetMaxAmsduSize (void) const;
   /**
    * \param packet Packet we have to insert into <i>aggregatedPacket</i>.
    * \param aggregatedPacket Packet that will contain <i>packet</i>, if aggregation is possible,
@@ -51,13 +67,8 @@ public:
    * This method performs an MSDU aggregation.
    * Returns true if <i>packet</i> can be aggregated to <i>aggregatedPacket</i>, false otherwise.
    */
-  virtual bool Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket,
-                          Mac48Address src, Mac48Address dest);
+  bool Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket, Mac48Address src, Mac48Address dest) const;
 
-  virtual bool Aggregate (Ptr<const Packet> packet, Ptr<Packet> aggregatedPacket, WifiMacHeader &hdr,
-                          Mac48Address src, Mac48Address dest, Ptr<MacLow> maclow, Time duration);
-
-  virtual bool CanBeAggregated (uint32_t packetSize, Ptr<Packet> aggregatedPacket);
 
 private:
   /**
@@ -69,9 +80,9 @@ private:
    *
    * \return the number of octets required for padding
    */
-  uint32_t CalculatePadding (Ptr<const Packet> packet);
+  uint32_t CalculatePadding (Ptr<const Packet> packet) const;
 
-  uint32_t m_maxAmsduLength;
+  uint32_t m_maxAmsduLength; ///< maximum AMSDU length
 };
 
 } //namespace ns3

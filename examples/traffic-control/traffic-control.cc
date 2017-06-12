@@ -126,7 +126,7 @@ main (int argc, char *argv[])
 
   Ptr<NetDevice> nd = devices.Get (1);
   Ptr<PointToPointNetDevice> ptpnd = DynamicCast<PointToPointNetDevice> (nd);
-  Ptr<Queue> queue = ptpnd->GetQueue ();
+  Ptr<Queue<Packet> > queue = ptpnd->GetQueue ();
   queue->TraceConnectWithoutContext ("PacketsInQueue", MakeCallback (&DevicePacketsInQueueTrace));
 
   Ipv4AddressHelper address;
@@ -153,7 +153,9 @@ main (int argc, char *argv[])
   onoff.SetAttribute ("DataRate", StringValue ("50Mbps")); //bit/s
   ApplicationContainer apps;
 
-  AddressValue remoteAddress (InetSocketAddress (interfaces.GetAddress (0), port));
+  InetSocketAddress rmt (interfaces.GetAddress (0), port);
+  rmt.SetTos (0xb8);
+  AddressValue remoteAddress (rmt);
   onoff.SetAttribute ("Remote", remoteAddress);
   apps.Add (onoff.Install (nodes.Get (1)));
   apps.Start (Seconds (1.0));
@@ -173,13 +175,33 @@ main (int argc, char *argv[])
   std::cout << "  Offered Load: " << stats[1].txBytes * 8.0 / (stats[1].timeLastTxPacket.GetSeconds () - stats[1].timeFirstTxPacket.GetSeconds ()) / 1000000 << " Mbps" << std::endl;
   std::cout << "  Rx Packets:   " << stats[1].rxPackets << std::endl;
   std::cout << "  Rx Bytes:   " << stats[1].rxBytes << std::endl;
-  std::cout << "  Packets Dropped by Queue Disc:   " << stats[1].packetsDropped[Ipv4FlowProbe::DROP_QUEUE_DISC] << std::endl;
-  std::cout << "  Bytes Dropped by Queue Disc:   " << stats[1].bytesDropped[Ipv4FlowProbe::DROP_QUEUE_DISC] << std::endl;
-  std::cout << "  Packets Dropped by NetDevice:   " << stats[1].packetsDropped[Ipv4FlowProbe::DROP_QUEUE] << std::endl;
-  std::cout << "  Bytes Dropped by NetDevice:   " << stats[1].bytesDropped[Ipv4FlowProbe::DROP_QUEUE] << std::endl;
+  uint32_t packetsDroppedByQueueDisc = 0;
+  uint64_t bytesDroppedByQueueDisc = 0;
+  if (stats[1].packetsDropped.size () > Ipv4FlowProbe::DROP_QUEUE_DISC)
+    {
+      packetsDroppedByQueueDisc = stats[1].packetsDropped[Ipv4FlowProbe::DROP_QUEUE_DISC];
+      bytesDroppedByQueueDisc = stats[1].bytesDropped[Ipv4FlowProbe::DROP_QUEUE_DISC];
+    }
+  std::cout << "  Packets Dropped by Queue Disc:   " << packetsDroppedByQueueDisc << std::endl;
+  std::cout << "  Bytes Dropped by Queue Disc:   " << bytesDroppedByQueueDisc << std::endl;
+  uint32_t packetsDroppedByNetDevice = 0;
+  uint64_t bytesDroppedByNetDevice = 0;
+  if (stats[1].packetsDropped.size () > Ipv4FlowProbe::DROP_QUEUE)
+    {
+      packetsDroppedByNetDevice = stats[1].packetsDropped[Ipv4FlowProbe::DROP_QUEUE];
+      bytesDroppedByNetDevice = stats[1].bytesDropped[Ipv4FlowProbe::DROP_QUEUE];
+    }
+  std::cout << "  Packets Dropped by NetDevice:   " << packetsDroppedByNetDevice << std::endl;
+  std::cout << "  Bytes Dropped by NetDevice:   " << bytesDroppedByNetDevice << std::endl;
   std::cout << "  Throughput: " << stats[1].rxBytes * 8.0 / (stats[1].timeLastRxPacket.GetSeconds () - stats[1].timeFirstRxPacket.GetSeconds ()) / 1000000 << " Mbps" << std::endl;
   std::cout << "  Mean delay:   " << stats[1].delaySum.GetSeconds () / stats[1].rxPackets << std::endl;
   std::cout << "  Mean jitter:   " << stats[1].jitterSum.GetSeconds () / (stats[1].rxPackets - 1) << std::endl;
+  auto dscpVec = classifier->GetDscpCounts (1);
+  for (auto p : dscpVec)
+    {
+      std::cout << "  DSCP value:   0x" << std::hex << static_cast<uint32_t>(p.first) << std::dec
+                << "  count:   "<< p.second << std::endl;
+    }
 
   Simulator::Destroy ();
 

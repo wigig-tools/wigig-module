@@ -186,7 +186,7 @@ LteRlcAm::DoTransmitPdcpPdu (Ptr<Packet> p)
  */
 
 void
-LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId)
+LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId, uint8_t componentCarrierId, uint16_t rnti, uint8_t lcid)
 {
   NS_LOG_FUNCTION (this << m_rnti << (uint32_t) m_lcid << bytes);
 
@@ -269,6 +269,7 @@ LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId)
       params.lcid = m_lcid;
       params.layer = layer;
       params.harqProcessId = harqId;
+      params.componentCarrierId = componentCarrierId;
 
       m_macSapProvider->TransmitPdu (params);
 
@@ -285,7 +286,6 @@ LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId)
       NS_ASSERT (m_vtA < m_vtS);
       SequenceNumber10 sn;
       sn.SetModulusBase (m_vtA);
-      bool found = false;
       for (sn = m_vtA; sn < m_vtS; sn++) 
         {
           uint16_t seqNumberValue = sn.GetValue ();
@@ -299,7 +299,6 @@ LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId)
               if (( packet->GetSize () <= bytes )
                   || m_txOpportunityForRetxAlwaysBigEnough)
                 {
-                  found = true;
                   // According to 5.2.1, the data field is left as is, but we rebuild the header
                   LteRlcAmHeader rlcAmHeader;
                   packet->RemoveHeader (rlcAmHeader);
@@ -356,6 +355,7 @@ LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId)
                   params.lcid = m_lcid;
                   params.layer = layer;
                   params.harqProcessId = harqId;
+                  params.componentCarrierId = componentCarrierId;
                   
                   m_macSapProvider->TransmitPdu (params);
 
@@ -387,7 +387,7 @@ LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId)
                 }
             }
         }
-      NS_ASSERT_MSG (found, "m_retxBufferSize > 0, but no PDU considered for retx found");
+      NS_ASSERT_MSG (false, "m_retxBufferSize > 0, but no PDU considered for retx found");
     }
   else if ( m_txonBufferSize > 0 )
     {
@@ -736,6 +736,7 @@ LteRlcAm::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId)
   params.lcid = m_lcid;
   params.layer = layer;
   params.harqProcessId = harqId;
+  params.componentCarrierId = componentCarrierId;
 
   m_macSapProvider->TransmitPdu (params);
 }
@@ -748,7 +749,7 @@ LteRlcAm::DoNotifyHarqDeliveryFailure ()
 
 
 void
-LteRlcAm::DoReceivePdu (Ptr<Packet> p)
+LteRlcAm::DoReceivePdu (Ptr<Packet> p, uint16_t rnti, uint8_t lcid)
 {
   NS_LOG_FUNCTION (this << m_rnti << (uint32_t) m_lcid << p->GetSize ());
 

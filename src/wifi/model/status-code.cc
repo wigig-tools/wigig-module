@@ -19,8 +19,6 @@
  */
 
 #include "status-code.h"
-#include <string>
-#include <ostream>
 
 namespace ns3 {
 
@@ -40,22 +38,16 @@ StatusCode::SetFailure (void)
   m_code = 1;
 }
 
-void
-StatusCode::SetStatusCodeValue (enum StatusCodeValue value)
-{
-  m_code = value;
-}
-
 bool
 StatusCode::IsSuccess (void) const
 {
   return (m_code == 0);
 }
 
-enum StatusCodeValue
+StatusCodeValue
 StatusCode::GetStatusCodeValue (void) const
 {
-  return static_cast<enum StatusCodeValue> (m_code);
+  return static_cast<StatusCodeValue> (m_code);
 }
 
 uint32_t

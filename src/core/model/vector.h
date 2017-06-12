@@ -39,9 +39,9 @@ class Vector3D
 {
 public:
   /**
-   * \param _x x coordinate of vector
-   * \param _y y coordinate of vector
-   * \param _z z coordinate of vector
+   * \param [in] _x X coordinate of vector
+   * \param [in] _y Y coordinate of vector
+   * \param [in] _z Z coordinate of vector
    *
    * Create vector (_x, _y, _z)
    */
@@ -62,10 +62,14 @@ public:
    * z coordinate of vector
    */
   double z;
-  
+
+  double GetLength () const;
   friend double CalculateDistance (const Vector3D &a, const Vector3D &b);
   friend std::ostream &operator << (std::ostream &os, const Vector3D &vector);
   friend std::istream &operator >> (std::istream &is, Vector3D &vector);
+  friend bool operator < (const Vector3D &a, const Vector3D &b);
+  friend Vector3D operator + (const Vector3D &a, const Vector3D &b);
+  friend Vector3D operator - (const Vector3D &a, const Vector3D &b);
 };
 
 /**
@@ -76,8 +80,8 @@ class Vector2D
 {
 public:
   /**
-   * \param _x x coordinate of vector
-   * \param _y y coordinate of vector
+   * \param [in] _x X coordinate of vector
+   * \param [in] _y Y coordinate of vector
    *
    * Create vector (_x, _y)
    */
@@ -95,15 +99,19 @@ public:
    */
   double y;
 
+  double GetLength () const;
   friend double CalculateDistance (const Vector2D &a, const Vector2D &b);
   friend std::ostream &operator << (std::ostream &os, const Vector2D &vector);
   friend std::istream &operator >> (std::istream &is, Vector2D &vector);
+  friend bool operator < (const Vector2D &a, const Vector2D &b);
+  friend Vector2D operator + (const Vector2D &a, const Vector2D &b);
+  friend Vector2D operator - (const Vector2D &a, const Vector2D &b);
 };
 
 /**
- * \param a one point
- * \param b another point
- * \returns the cartesian distance between a and b.
+ * \param [in] a One point
+ * \param [in] b Another point
+ * \returns The cartesian distance between a and b.
  */
 double CalculateDistance (const Vector3D &a, const Vector3D &b);
 /**
@@ -120,9 +128,9 @@ double CalculateAzimuthAngle (const Vector3D &a, const Vector3D &b);
  */
 double CalculateElevationAngle (const Vector3D &a, const Vector3D &b);
 /**
- * \param a one point
- * \param b another point
- * \returns the cartesian distance between a and b.
+ * \param [in] a One point
+ * \param [in] b Another point
+ * \returns The cartesian distance between a and b.
  */
 double CalculateDistance (const Vector2D &a, const Vector2D &b);
 
@@ -177,19 +185,19 @@ std::istream &operator >> (std::istream &is, Vector2D &vector);
  * Vector alias typedef for compatibility with mobility models
  */
 typedef Vector3D Vector;
-/** 
+/**
  * \ingroup attribute_Vector3D
  * Vector alias typedef for compatibility with mobility models
  */
 typedef Vector3DValue VectorValue;
-/** 
+/**
  * \ingroup attribute_Vector3D
  * Vector alias typedef for compatibility with mobility models
  */
 typedef Vector3DChecker VectorChecker;
 
 
-// Document these by hand so they go in group attribute_Vector3D  
+// Document these by hand so they go in group attribute_Vector3D
 /**
  * \ingroup attribute_Vector3D
  * \fn ns3::Ptr<const ns3::AttributeAccessor> ns3::MakeVectorAccessor (T1 a1)
@@ -210,7 +218,7 @@ ATTRIBUTE_ACCESSOR_DEFINE (Vector);
  * \returns The AttributeChecker.
  * \see AttributeChecker
  */
-Ptr<const AttributeChecker> MakeVectorChecker (void);  
+Ptr<const AttributeChecker> MakeVectorChecker (void);
 
 } // namespace ns3
 

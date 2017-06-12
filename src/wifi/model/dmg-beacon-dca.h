@@ -13,94 +13,24 @@
 #include "ns3/object.h"
 #include "ns3/wifi-mac-header.h"
 #include "ns3/wifi-mode.h"
-#include "ns3/wifi-remote-station-manager.h"
-#include "ns3/dcf.h"
 #include "ext-headers.h"
+#include "dca-txop.h"
 
 namespace ns3 {
 
-class DcfState;
-class DcfManager;
-class WifiMacQueue;
-class MacLow;
-class WifiMacParameters;
-class WifiMac;
-
-class DmgBeaconDca : public Dcf
+class DmgBeaconDca : public DcaTxop
 {
 public:
   static TypeId GetTypeId (void);
-
-  /**
-   * typedef for a callback to invoke when a
-   * packet transmission was completed successfully.
-   */
-  typedef Callback <void, Ptr<const Packet>, const WifiMacHeader&> TxPacketOk;
-  /**
-   * typedef for a callback to invoke when a
-   * packet transmission was completed successfully.
-   */
-  typedef Callback <void, const WifiMacHeader&> TxOk;
-  /**
-   * typedef for a callback to invoke when a
-   * packet transmission was failed.
-   */
-  typedef Callback <void, const WifiMacHeader&> TxFailed;
 
   DmgBeaconDca ();
   ~DmgBeaconDca ();
 
   /**
-   * Set MacLow associated with this DcaTxop.
-   *
-   * \param low MacLow
+   * Initiate new BTI access period. This enforcces DMG Beacon DCA Class to sense the channel before
+   * the first DMG Beacon transmission.
    */
-  void SetLow (Ptr<MacLow> low);
-  /**
-   * Set DcfManager this DcaTxop is associated to.
-   *
-   * \param manager DcfManager
-   */
-  void SetManager (DcfManager *manager);
-  /**
-   * Set WifiRemoteStationsManager this DcaTxop is associated to.
-   *
-   * \param remoteManager WifiRemoteStationManager
-   */
-  void SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> remoteManager);
-  /**
-   * Set the upper layer MAC this DcaTxop is associated to.
-   *
-   * \return WifiMac
-   */
-  void SetWifiMac (Ptr<WifiMac> mac);
-  /**
-   * \param callback the callback to invoke when a
-   * transmission without ACK was completed successfully.
-   */
-  void SetTxOkNoAckCallback (TxOk callback) ;
-  /**
-   * \param callback the callback to invoke when a
-   * packet transmission was completed unsuccessfully.
-   */
-  void SetTxFailedCallback (TxFailed callback);
-  /**
-   * Return the packet queue associated with this DcaTxop.
-   *
-   * \return WifiMacQueue
-   */
-  Ptr<WifiMacQueue> GetQueue (void) const;
-
-  //Inherited
-  virtual void SetMinCw (uint32_t minCw);
-  virtual void SetMaxCw (uint32_t maxCw);
-  virtual void SetAifsn (uint32_t aifsn);
-  virtual void SetTxopLimit (Time txopLimit);
-  virtual uint32_t GetMinCw (void) const;
-  virtual uint32_t GetMaxCw (void) const;
-  virtual uint32_t GetAifsn (void) const;
-  virtual Time GetTxopLimit (void) const;
-
+  void InitiateBTI (void);
   /**
    * \param beacon The DMG Beacon Body.
    * \param hdr header of packet to send.
@@ -108,25 +38,18 @@ public:
    * Start channel access procedure to transmit one DMG Beacon.
    */
   void TransmitDmgBeacon (const ExtDMGBeacon &beacon, const WifiMacHeader &hdr);
+  /**
+   * Set the upper layer MAC this DcaTxop is associated to.
+   *
+   * \return WifiMac
+   */
+  void SetWifiMac (Ptr<WifiMac> mac);
 
 private:
-  class TransmissionListener;
-  class NavListener;
-  class PhyListener;
-  class Dcf;
-  friend class Dcf;
-  friend class TransmissionListener;
-
   DmgBeaconDca &operator = (const DmgBeaconDca &);
   DmgBeaconDca (const DmgBeaconDca &o);
 
   //Inherited from ns3::Object
-  /**
-   * Return the MacLow associated with this DcaTxop.
-   *
-   * \return MacLow
-   */
-  Ptr<MacLow> Low (void);
   void DoInitialize ();
   /* dcf notifications forwarded here */
   /**
@@ -157,18 +80,11 @@ private:
 
   virtual void DoDispose (void);
 
-  Dcf *m_dcf;
-  DcfManager *m_manager;
-  TxOk m_txOkNoAckCallback;
-  TxFailed m_txFailedCallback;
-  Ptr<MacLow> m_low;
-  Ptr<WifiRemoteStationManager> m_stationManager;
-  TransmissionListener *m_transmissionListener;
   Ptr<WifiMac> m_wifiMac;
-
   ExtDMGBeacon m_currentBeacon;
   WifiMacHeader m_currentHdr;
   bool m_transmittingBeacon;
+  bool m_senseChannel;
 };
 
 } //namespace ns3

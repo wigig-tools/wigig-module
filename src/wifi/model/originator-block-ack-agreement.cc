@@ -44,7 +44,7 @@ OriginatorBlockAckAgreement::~OriginatorBlockAckAgreement ()
 }
 
 void
-OriginatorBlockAckAgreement::SetState (enum State state)
+OriginatorBlockAckAgreement::SetState (State state)
 {
   m_state = state;
   if (state == INACTIVE)
@@ -54,7 +54,7 @@ OriginatorBlockAckAgreement::SetState (enum State state)
     }
 }
 
-enum OriginatorBlockAckAgreement::State
+OriginatorBlockAckAgreement::State
 OriginatorBlockAckAgreement::GetState (void) const
 {
   return m_state;

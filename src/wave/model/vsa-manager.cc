@@ -16,9 +16,9 @@
  * Author: Junling Bu <linlinjavaer@gmail.com>
  */
 #include "ns3/log.h"
-#include "ns3/assert.h"
 #include "ns3/simulator.h"
 #include "ns3/socket.h"
+#include "ns3/wifi-phy.h"
 #include "vsa-manager.h"
 #include "higher-tx-tag.h"
 #include "wave-net-device.h"
@@ -178,6 +178,7 @@ VsaManager::DoSendVsa (enum VsaTransmitInterval  interval, uint32_t channel,
   txVector.SetChannelWidth (10);
   txVector.SetTxPowerLevel (manager->GetManagementPowerLevel (channel));
   txVector.SetMode (manager->GetManagementDataRate (channel));
+  txVector.SetPreambleType (manager->GetManagementPreamble (channel));
   HigherLayerTxVectorTag tag = HigherLayerTxVectorTag (txVector, manager->GetManagementAdaptable (channel));
   vsc->AddPacketTag (tag);
 

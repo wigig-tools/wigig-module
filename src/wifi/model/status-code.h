@@ -21,8 +21,6 @@
 #ifndef STATUS_CODE_H
 #define STATUS_CODE_H
 
-#include <stdint.h>
-#include <ostream>
 #include "ns3/buffer.h"
 
 namespace ns3 {
@@ -31,6 +29,7 @@ enum StatusCodeValue
 {
   STATUS_CODE_SUCCESS = 0,
   STATUS_CODE_FAILURE = 1,
+  STATUS_CODE_REJECTED_WITH_SUGGESTED_CHANGES = 39,
   STATUS_CODE_REJECT_WITH_SCHEDULE = 83,
   STATUS_CODE_PENDING_ADMITTING_FST_SESSION = 86,
   STATUS_CODE_PERFORMING_FST_NOW = 87,
@@ -58,7 +57,7 @@ public:
    * Set status code value.
    * \param value The status code.
    */
-  void SetStatusCodeValue (enum StatusCodeValue value);
+  void SetStatusCodeValue (StatusCodeValue value);
 
   /**
    * Return whether the status code is success.
@@ -72,7 +71,7 @@ public:
    *
    * \return the value of the status code.
    */
-  enum StatusCodeValue GetStatusCodeValue (void) const;
+  StatusCodeValue GetStatusCodeValue (void) const;
 
   /**
    * \returns the expected size of the status code.
@@ -104,7 +103,7 @@ public:
 
 
 private:
-  uint16_t m_code;
+  uint16_t m_code; ///< status code
 };
 
 std::ostream &operator << (std::ostream &os, const StatusCode &code);

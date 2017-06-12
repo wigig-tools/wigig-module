@@ -181,9 +181,9 @@ DMG_SSW_Field::GetRXSSLength (void) const
  * Dynamic Allocation Info Field (8.4a.2)
  *****************************************/
 
-NS_OBJECT_ENSURE_REGISTERED (Dynamic_Allocation_Info_Field);
+NS_OBJECT_ENSURE_REGISTERED (DynamicAllocationInfoField);
 
-Dynamic_Allocation_Info_Field::Dynamic_Allocation_Info_Field ()
+DynamicAllocationInfoField::DynamicAllocationInfoField ()
   : m_tid (0),
     m_allocationType (SERVICE_PERIOD_ALLOCATION),
     m_sourceAID (0),
@@ -193,44 +193,44 @@ Dynamic_Allocation_Info_Field::Dynamic_Allocation_Info_Field ()
   NS_LOG_FUNCTION (this);
 }
 
-Dynamic_Allocation_Info_Field::~Dynamic_Allocation_Info_Field ()
+DynamicAllocationInfoField::~DynamicAllocationInfoField ()
 {
   NS_LOG_FUNCTION (this);
 }
 
 TypeId
-Dynamic_Allocation_Info_Field::GetTypeId (void)
+DynamicAllocationInfoField::GetTypeId (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
-  static TypeId tid = TypeId ("ns3::Dynamic_Allocation_Info_Field")
+  static TypeId tid = TypeId ("ns3::DynamicAllocationInfoField")
     .SetParent<Header> ()
-    .AddConstructor<Dynamic_Allocation_Info_Field> ()
+    .AddConstructor<DynamicAllocationInfoField> ()
     ;
   return tid;
 }
 
 TypeId
-Dynamic_Allocation_Info_Field::GetInstanceTypeId (void) const
+DynamicAllocationInfoField::GetInstanceTypeId (void) const
 {
   NS_LOG_FUNCTION (this);
   return GetTypeId ();
 }
 
 void
-Dynamic_Allocation_Info_Field::Print (std::ostream &os) const
+DynamicAllocationInfoField::Print (std::ostream &os) const
 {
   NS_LOG_FUNCTION (this << &os);
 }
 
 uint32_t
-Dynamic_Allocation_Info_Field::GetSerializedSize () const
+DynamicAllocationInfoField::GetSerializedSize () const
 {
   NS_LOG_FUNCTION (this);
   return 5;
 }
 
 Buffer::Iterator
-Dynamic_Allocation_Info_Field::Serialize (Buffer::Iterator start) const
+DynamicAllocationInfoField::Serialize (Buffer::Iterator start) const
 {
   NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
@@ -241,9 +241,9 @@ Dynamic_Allocation_Info_Field::Serialize (Buffer::Iterator start) const
   field1 |= (m_allocationType & 0x7) << 4;
   field1 |= m_sourceAID << 7;
   field1 |= m_destinationAID << 15;
-  field1 |= (m_allocationDuration & 0x1FF) << 23;
+  field1 |= uint32_t (m_allocationDuration & 0x1FF) << 23;
 
-  field2 |= (m_allocationDuration >> 7) & 0x7F;
+  field2 |= (m_allocationDuration >> 9) & 0x7F;
   field2 |= (m_reserved & 0x1) << 7;
 
   i.WriteHtolsbU32 (field1);
@@ -253,7 +253,7 @@ Dynamic_Allocation_Info_Field::Serialize (Buffer::Iterator start) const
 }
 
 Buffer::Iterator
-Dynamic_Allocation_Info_Field::Deserialize (Buffer::Iterator start)
+DynamicAllocationInfoField::Deserialize (Buffer::Iterator start)
 {
   NS_LOG_FUNCTION (this << &start);
   Buffer::Iterator i = start;
@@ -263,93 +263,93 @@ Dynamic_Allocation_Info_Field::Deserialize (Buffer::Iterator start)
   m_tid = field1 & 0xF;
   m_allocationType = static_cast<AllocationType> ((m_allocationType >> 4) & 0x7);
   m_sourceAID = (field1 >> 7) & 0xFF;
-  m_destinationAID = (field1 >> 7) & 0xFF;
+  m_destinationAID = (field1 >> 15) & 0xFF;
   m_allocationDuration = (static_cast<uint16_t>(field1 >> 23) & 0x1FF) |
-                         (static_cast<uint16_t>(field2 & 0x7F) << 7);
+                         (static_cast<uint16_t>(field2 & 0x7F) << 9);
   m_reserved = (field2 >> 7) & 0x1;
 
   return i;
 }
 
 void
-Dynamic_Allocation_Info_Field::SetTID (uint8_t tid)
+DynamicAllocationInfoField::SetTID (uint8_t tid)
 {
   NS_LOG_FUNCTION (this << tid);
   m_tid = tid;
 }
 
 void
-Dynamic_Allocation_Info_Field::SetAllocationType (AllocationType value)
+DynamicAllocationInfoField::SetAllocationType (AllocationType value)
 {
   NS_LOG_FUNCTION (this << value);
   m_allocationType = value;
 }
 
 void
-Dynamic_Allocation_Info_Field::SetSourceAID (uint8_t aid)
+DynamicAllocationInfoField::SetSourceAID (uint8_t aid)
 {
   NS_LOG_FUNCTION (this << aid);
   m_sourceAID = aid;
 }
 
 void
-Dynamic_Allocation_Info_Field::SetDestinationAID (uint8_t aid)
+DynamicAllocationInfoField::SetDestinationAID (uint8_t aid)
 {
   NS_LOG_FUNCTION (this << aid);
   m_destinationAID = aid;
 }
 
 void
-Dynamic_Allocation_Info_Field::SetAllocationDuration (uint16_t duration)
+DynamicAllocationInfoField::SetAllocationDuration (uint16_t duration)
 {
   NS_LOG_FUNCTION (this << duration);
   m_allocationDuration = duration;
 }
 
 void
-Dynamic_Allocation_Info_Field::SetReserved (uint8_t reserved)
+DynamicAllocationInfoField::SetReserved (uint8_t reserved)
 {
   NS_LOG_FUNCTION (this << reserved);
   m_reserved = reserved;
 }
 
 uint8_t
-Dynamic_Allocation_Info_Field::GetTID (void) const
+DynamicAllocationInfoField::GetTID (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_tid;
 }
 
 AllocationType
-Dynamic_Allocation_Info_Field::GetAllocationType (void) const
+DynamicAllocationInfoField::GetAllocationType (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_allocationType;
 }
 
 uint8_t
-Dynamic_Allocation_Info_Field::GetSourceAID (void) const
+DynamicAllocationInfoField::GetSourceAID (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_sourceAID;
 }
 
 uint8_t
-Dynamic_Allocation_Info_Field::GetDestinationAID (void) const
+DynamicAllocationInfoField::GetDestinationAID (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_destinationAID;
 }
 
 uint16_t
-Dynamic_Allocation_Info_Field::GetAllocationDuration (void) const
+DynamicAllocationInfoField::GetAllocationDuration (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_allocationDuration;
 }
 
 uint8_t
-Dynamic_Allocation_Info_Field::GetReserved (void)
+DynamicAllocationInfoField::GetReserved (void)
 {
   NS_LOG_FUNCTION (this);
   return m_reserved;
@@ -1163,6 +1163,185 @@ BF_Link_Maintenance_Field::IsMaster (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_isMaster;
+}
+
+/************************************************
+*  DMG Beacon Clustering Control Field (8-34c&d)
+*************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (ExtDMGClusteringControlField);
+
+ExtDMGClusteringControlField::ExtDMGClusteringControlField ()
+  : m_discoveryMode (false)
+{
+}
+
+ExtDMGClusteringControlField::~ExtDMGClusteringControlField ()
+{
+}
+
+TypeId
+ExtDMGClusteringControlField::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::ExtDMGClusteringControlField")
+    .SetParent<Header> ()
+    .AddConstructor<ExtDMGClusteringControlField> ()
+  ;
+  return tid;
+}
+
+TypeId
+ExtDMGClusteringControlField::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+uint32_t
+ExtDMGClusteringControlField::GetSerializedSize (void) const
+{
+  return 8;
+}
+
+void
+ExtDMGClusteringControlField::Print (std::ostream &os) const
+{
+  if (m_discoveryMode)
+    {
+
+    }
+  else
+    {
+
+    }
+}
+
+Buffer::Iterator
+ExtDMGClusteringControlField::Serialize (Buffer::Iterator start) const
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  if (m_discoveryMode)
+    {
+      WriteTo (i, m_responderAddress);
+      i.WriteHtolsbU16 (m_reserved);
+    }
+  else
+    {
+      uint8_t value = 0;
+      i.WriteU8 (m_beaconSpDuration);
+      WriteTo (i, m_clusterID);
+      value |= m_clusterMemberRole & 0x3;
+      value |= (m_clusterMaxMem & 0x1F) << 2;
+      value |= (m_reserved << 7);
+      i.WriteU8 (value);
+    }
+  return i;
+}
+
+Buffer::Iterator
+ExtDMGClusteringControlField::Deserialize (Buffer::Iterator start)
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  if (m_discoveryMode)
+    {
+      ReadFrom (i, m_responderAddress);
+      m_reserved = i.ReadLsbtohU16 ();
+    }
+  else
+    {
+      m_beaconSpDuration = i.ReadU8 ();
+      ReadFrom (i, m_clusterID);
+      uint8_t value = i.ReadU8 ();
+      m_clusterMemberRole = value & 0x3;
+      m_clusterMaxMem = (value >> 2) & 0x1F;
+      m_reserved = (value >> 7) & 0x1;
+    }
+  return i;
+}
+
+void
+ExtDMGClusteringControlField::SetDiscoveryMode (bool value)
+{
+  m_discoveryMode = value;
+}
+
+bool
+ExtDMGClusteringControlField::GetDiscoveryMode (void) const
+{
+  return m_discoveryMode;
+}
+
+void
+ExtDMGClusteringControlField::SetBeaconSpDuration (uint8_t duration)
+{
+  m_beaconSpDuration = duration;
+}
+
+void
+ExtDMGClusteringControlField::SetClusterID (Mac48Address clusterID)
+{
+  m_clusterID = clusterID;
+}
+
+void
+ExtDMGClusteringControlField::SetClusterMemberRole (ClusterMemberRole role)
+{
+  m_clusterMemberRole = static_cast<ClusterMemberRole> (role);
+}
+
+void
+ExtDMGClusteringControlField::SetClusterMaxMem (uint8_t max)
+{
+  m_clusterMaxMem = max;
+}
+
+void
+ExtDMGClusteringControlField::SetReserved (uint16_t value)
+{
+  m_reserved = value;
+}
+
+uint8_t
+ExtDMGClusteringControlField::GetBeaconSpDuration (void) const
+{
+  return m_beaconSpDuration;
+}
+
+Mac48Address
+ExtDMGClusteringControlField::GetClusterID (void) const
+{
+  return m_clusterID;
+}
+
+ClusterMemberRole
+ExtDMGClusteringControlField::GetClusterMemberRole (void) const
+{
+  return static_cast<ClusterMemberRole> (m_clusterMemberRole);
+}
+
+uint8_t
+ExtDMGClusteringControlField::GetClusterMaxMem (void) const
+{
+  return m_clusterMaxMem;
+}
+
+uint16_t
+ExtDMGClusteringControlField::GetReserved (void) const
+{
+  return m_reserved;
+}
+
+void
+ExtDMGClusteringControlField::SetABFT_ResponderAddress (Mac48Address address)
+{
+  m_responderAddress = address;
+}
+
+Mac48Address
+ExtDMGClusteringControlField::GetABFT_ResponderAddress (void) const
+{
+  return m_responderAddress;
 }
 
 }  // namespace ns3

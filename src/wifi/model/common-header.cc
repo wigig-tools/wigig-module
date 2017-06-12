@@ -12,9 +12,10 @@
 
 #include "supported-rates.h"
 #include "ht-capabilities.h"
-#include "ht-operations.h"
+#include "ht-operation.h"
 #include "erp-information.h"
 #include "vht-capabilities.h"
+#include "vht-operation.h"
 #include "dmg-capabilities.h"
 #include "dsss-parameter-set.h"
 #include "edca-parameter-set.h"
@@ -35,7 +36,15 @@ MgtFrame::AddWifiInformationElement (Ptr<WifiInformationElement> element)
 Ptr<WifiInformationElement>
 MgtFrame::GetInformationElement (WifiInformationElementId id)
 {
-  return m_map[id];
+  WifiInformationElementMap::const_iterator it = m_map.find (id);
+  if (it != m_map.end())
+    {
+      return it->second;
+    }
+  else
+    {
+      return 0;
+    }
 }
 
 uint32_t
@@ -107,11 +116,16 @@ MgtFrame::DeserializeInformationElements (Buffer::Iterator start)
               element = Create<VhtCapabilities> ();
               break;
             }
-          case IE_HT_OPERATIONS:
+          case IE_HT_OPERATION:
             {
-              element = Create<HtOperations> ();
+              element = Create<HtOperation> ();
               break;
             }
+        case IE_VHT_OPERATION:
+          {
+            element = Create<VhtOperation> ();
+            break;
+          }
           case IE_ERP_INFORMATION:
             {
               element = Create<ErpInformation> ();
@@ -122,7 +136,7 @@ MgtFrame::DeserializeInformationElements (Buffer::Iterator start)
               element = Create<EdcaParameterSet> ();
               break;
             }
-          case IE_DS_PARAMETER_SET:
+          case IE_DSSS_PARAMETER_SET:
             {
               element = Create<DsssParameterSet> ();
               break;

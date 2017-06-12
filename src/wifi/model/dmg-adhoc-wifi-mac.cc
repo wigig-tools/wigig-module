@@ -1,9 +1,8 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
-
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/string.h"
@@ -80,6 +79,16 @@ void
 DmgAdhocWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << to);
+  if (m_stationManager->IsBrandNew (to))
+    {
+      //In ad hoc mode, we assume that every destination supports all
+      //the rates we support.
+      m_stationManager->AddAllSupportedMcs (to);
+      m_stationManager->AddStationDmgCapabilities (to, GetDmgCapabilities ());
+      m_stationManager->AddAllSupportedModes (to);
+      m_stationManager->RecordDisassociated (to);
+    }
+
   WifiMacHeader hdr;
 
   // If we are not a QoS AP then we definitely want to use AC_BE to
@@ -168,6 +177,15 @@ DmgAdhocWifiMac::FrameTxOk (const WifiMacHeader &hdr)
 }
 
 void
+DmgAdhocWifiMac::TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr)
+{
+  NS_LOG_FUNCTION (this);
+  /* After transmission we stay in quasi-omni mode since we do not know which station will transmit to us */
+  m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+  DmgWifiMac::TxOk (packet, hdr);
+}
+
+void
 DmgAdhocWifiMac::BrpSetupCompleted (Mac48Address address)
 {
   NS_LOG_FUNCTION (this << address);
@@ -211,6 +229,15 @@ DmgAdhocWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
   NS_ASSERT (!hdr->IsCtl ());
   Mac48Address from = hdr->GetAddr2 ();
   Mac48Address to = hdr->GetAddr1 ();
+  if (m_stationManager->IsBrandNew (to))
+    {
+      //In ad hoc mode, we assume that every destination supports all
+      //the rates we support.
+      m_stationManager->AddAllSupportedMcs (to);
+      m_stationManager->AddStationDmgCapabilities (to, GetDmgCapabilities ());
+      m_stationManager->AddAllSupportedModes (to);
+      m_stationManager->RecordDisassociated (to);
+    }
   if (hdr->IsData ())
     {
       if (hdr->IsData ())

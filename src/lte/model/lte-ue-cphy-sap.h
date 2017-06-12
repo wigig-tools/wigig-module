@@ -66,7 +66,7 @@ public:
    * and periodically returning measurement reports to RRC via
    * LteUeCphySapUser::ReportUeMeasurements function.
    */
-  virtual void StartCellSearch (uint16_t dlEarfcn) = 0;
+  virtual void StartCellSearch (uint32_t dlEarfcn) = 0;
 
   /**
    * \brief Tell the PHY entity to synchronize with a given eNodeB over the
@@ -101,7 +101,7 @@ public:
    * LteUeCphySapProvider::SetDlBandwidth can be called afterwards to increase
    * the bandwidth.
    */
-  virtual void SynchronizeWithEnb (uint16_t cellId, uint16_t dlEarfcn) = 0;
+  virtual void SynchronizeWithEnb (uint16_t cellId, uint32_t dlEarfcn) = 0;
 
   /**
    * \param dlBandwidth the DL bandwidth in number of PRBs
@@ -114,7 +114,7 @@ public:
    * \param ulEarfcn the uplink carrier frequency (EARFCN)
    * \param ulBandwidth the UL bandwidth in number of PRBs
    */
-  virtual void ConfigureUplink (uint16_t ulEarfcn, uint8_t ulBandwidth) = 0;
+  virtual void ConfigureUplink (uint32_t ulEarfcn, uint8_t ulBandwidth) = 0;
 
   /**
    * \brief Configure referenceSignalPower
@@ -169,14 +169,16 @@ public:
    */
   struct UeMeasurementsElement
   {
-    uint16_t m_cellId;
-    double m_rsrp;  // [dBm]
-    double m_rsrq;  // [dB]
+    uint16_t m_cellId; ///< cell ID
+    double m_rsrp;  ///< [dBm]
+    double m_rsrq;  ///< [dB]
   };
 
+  /// UeMeasurementsParameters structure
   struct UeMeasurementsParameters
   {
-    std::vector <struct UeMeasurementsElement> m_ueMeasurementsList;
+    std::vector <struct UeMeasurementsElement> m_ueMeasurementsList; ///< UE measurement list
+    uint8_t m_componentCarrierId; ///< component carrier ID
   };
 
 
@@ -223,15 +225,20 @@ template <class C>
 class MemberLteUeCphySapProvider : public LteUeCphySapProvider
 {
 public:
+  /**
+   * Constructor
+   *
+   * \param owner the owner class
+   */
   MemberLteUeCphySapProvider (C* owner);
 
   // inherited from LteUeCphySapProvider
   virtual void Reset ();
-  virtual void StartCellSearch (uint16_t dlEarfcn);
+  virtual void StartCellSearch (uint32_t dlEarfcn);
   virtual void SynchronizeWithEnb (uint16_t cellId);
-  virtual void SynchronizeWithEnb (uint16_t cellId, uint16_t dlEarfcn);
+  virtual void SynchronizeWithEnb (uint16_t cellId, uint32_t dlEarfcn);
   virtual void SetDlBandwidth (uint8_t dlBandwidth);
-  virtual void ConfigureUplink (uint16_t ulEarfcn, uint8_t ulBandwidth);
+  virtual void ConfigureUplink (uint32_t ulEarfcn, uint8_t ulBandwidth);
   virtual void ConfigureReferenceSignalPower (int8_t referenceSignalPower);
   virtual void SetRnti (uint16_t rnti);
   virtual void SetTransmissionMode (uint8_t txMode);
@@ -240,7 +247,7 @@ public:
 
 private:
   MemberLteUeCphySapProvider ();
-  C* m_owner;
+  C* m_owner; ///< the owner class
 };
 
 template <class C>
@@ -263,7 +270,7 @@ MemberLteUeCphySapProvider<C>::Reset ()
 
 template <class C>
 void
-MemberLteUeCphySapProvider<C>::StartCellSearch (uint16_t dlEarfcn)
+MemberLteUeCphySapProvider<C>::StartCellSearch (uint32_t dlEarfcn)
 {
   m_owner->DoStartCellSearch (dlEarfcn);
 }
@@ -277,7 +284,7 @@ MemberLteUeCphySapProvider<C>::SynchronizeWithEnb (uint16_t cellId)
 
 template <class C>
 void
-MemberLteUeCphySapProvider<C>::SynchronizeWithEnb (uint16_t cellId, uint16_t dlEarfcn)
+MemberLteUeCphySapProvider<C>::SynchronizeWithEnb (uint16_t cellId, uint32_t dlEarfcn)
 {
   m_owner->DoSynchronizeWithEnb (cellId, dlEarfcn);
 }
@@ -291,7 +298,7 @@ MemberLteUeCphySapProvider<C>::SetDlBandwidth (uint8_t dlBandwidth)
 
 template <class C>
 void 
-MemberLteUeCphySapProvider<C>::ConfigureUplink (uint16_t ulEarfcn, uint8_t ulBandwidth)
+MemberLteUeCphySapProvider<C>::ConfigureUplink (uint32_t ulEarfcn, uint8_t ulBandwidth)
 {
   m_owner->DoConfigureUplink (ulEarfcn, ulBandwidth);
 }
@@ -341,6 +348,11 @@ template <class C>
 class MemberLteUeCphySapUser : public LteUeCphySapUser
 {
 public:
+  /**
+   * Constructor
+   *
+   * \param owner the owner class
+   */
   MemberLteUeCphySapUser (C* owner);
 
   // methods inherited from LteUeCphySapUser go here
@@ -352,7 +364,7 @@ public:
 
 private:
   MemberLteUeCphySapUser ();
-  C* m_owner;
+  C* m_owner; ///< the owner class
 };
 
 template <class C>

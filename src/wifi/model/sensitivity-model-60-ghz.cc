@@ -34,15 +34,14 @@ TypeId
 SensitivityModel60GHz::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::SensitivityModel60GHz")
-      .SetParent<ErrorRateModel> ()
-      .AddConstructor<SensitivityModel60GHz> ()
-      ;
+    .SetParent<ErrorRateModel> ()
+    .AddConstructor<SensitivityModel60GHz> ()
+  ;
   return tid;
 }
 
 SensitivityModel60GHz::SensitivityModel60GHz ()
 {
-
 }
 
 double
@@ -55,7 +54,9 @@ SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector
   std::string modename = mode.GetUniqueName ();
 
   /* This is kinda silly, but convert from SNR back to RSS (Hardcoding RxNoiseFigure)*/
-  double noise = 1.3803e-23 * 290.0 * txVector.GetChannelWidth () * 10;
+  //thermal noise at 290K in J/s = W
+  static const double BOLTZMANN = 1.3803e-23;
+  double noise = BOLTZMANN * 290.0 * txVector.GetChannelWidth () * 1000000 * 10;
 
   /* Compute RSS in dBm, so add 30 from SNR */
   double rss = 10 * log10 (snr * noise) + 30;
@@ -70,7 +71,7 @@ SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector
   else if (modename == "DMG_MCS1")
       rss_delta = rss - -68;
   else if (modename == "DMG_MCS2")
-      rss_delta = rss - -67;
+      rss_delta = rss - -66;
   else if (modename == "DMG_MCS3")
       rss_delta = rss - -65;
   else if (modename == "DMG_MCS4")
@@ -125,15 +126,16 @@ SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector
       rss_delta = rss - -60;
   else if (modename == "DMG_MCS27")
       rss_delta = rss - -57;
+  else if (modename == "DMG_MCS28")
+      rss_delta = rss - -57;
+  else if (modename == "DMG_MCS29")
+      rss_delta = rss - -57;
+  else if (modename == "DMG_MCS30")
+      rss_delta = rss - -57;
+  else if (modename == "DMG_MCS31")
+      rss_delta = rss - -57;
   else
       NS_FATAL_ERROR("Unrecognized 60 GHz modulation");
-
-//  std::cout << "snr = " << snr << std::endl;
-//  std::cout << "noise = " << noise << std::endl;
-//  std::cout << "rss = " << rss << std::endl;
-//  std::cout << "rss_delta = " << rss_delta << std::endl;
-//  std::cout << "no abs = " << (10 * (rss_delta + 12)) << std::endl;
-//  std::cout << "with abs = " << abs((10 * (rss_delta + 12))) << std::endl;
 
   /* Compute BER in lookup table */
   if ((rss_delta < -12.0) || (snr < 0))
@@ -143,7 +145,7 @@ SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector
   else
     ber = sensitivity_ber ((int) std::abs((10 * (rss_delta + 12))));
 
-  NS_LOG_DEBUG ("SENSITIVITY: ber=" << ber << ", rss_delta=" << rss_delta << ", snr=" << snr << ", rss=" << rss << ", bits=" << nbits);
+  NS_LOG_DEBUG ("SENSITIVITY: ber=" << ber << ", rss_delta=" << rss_delta << ", snr[linear]=" << snr << ", rss[dBm]=" << rss << ", bits=" << nbits);
 
   /* Compute PSR from BER */
   return pow (1 - ber, nbits);

@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2006, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
+ * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,8 +17,9 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
- * Author: Mirko Banchi <mk.banchi@gmail.com>
+ * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
+ *          Mirko Banchi <mk.banchi@gmail.com>
+ *          Hany Assasa <hany.assasa@gmail.com>
  */
 
 #ifndef WIFI_MAC_HEADER_H
@@ -26,7 +28,6 @@
 #include "ns3/header.h"
 #include "ns3/mac48-address.h"
 #include "ns3/nstime.h"
-#include <stdint.h>
 #include "wifi-phy-standard.h"
 
 namespace ns3 {
@@ -121,14 +122,18 @@ public:
   };
 
   WifiMacHeader ();
-  ~WifiMacHeader ();
+  virtual ~WifiMacHeader ();
 
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
   /**
    * Set Type/Subtype values for an association request header.
@@ -225,7 +230,7 @@ public:
    *
    * \param type the WifiMacType for the header
    */
-  void SetType (enum WifiMacType type);
+  void SetType (WifiMacType type);
   /**
    * Set the Duration/ID field with the given raw uint16_t value.
    *
@@ -300,7 +305,7 @@ public:
    *
    * \param policy
    */
-  void SetQosAckPolicy (enum QosAckPolicy policy);
+  void SetQosAckPolicy (QosAckPolicy policy);
   /**
    * Set the QoS ACK policy in the QoS control field to normal ACK.
    */
@@ -327,6 +332,14 @@ public:
    * \param txop
    */
   void SetQosTxopLimit (uint8_t txop);
+  /**
+   * Set the Mesh Control Present flag for the QoS header.
+   */
+  void SetQosMeshControlPresent ();
+  /**
+   * Clear the Mesh Control Present flag for the QoS header.
+   */
+  void SetQosNoMeshControlPresent ();
   /**
    * Set as DMG PPDU.
    */
@@ -386,7 +399,7 @@ public:
    *
    * \return the type (enum WifiMacType)
    */
-  enum WifiMacType GetType (void) const;
+  WifiMacType GetType (void) const;
   /**
    * \return true if From DS bit is set, false otherwise
    */
@@ -687,7 +700,7 @@ public:
    *
    * \return the QoS ACK Policy of a QoS header
    */
-  enum QosAckPolicy GetQosAckPolicy (void) const;
+  QosAckPolicy GetQosAckPolicy (void) const;
   /**
    * Return the TXOP limit.
    *
@@ -812,27 +825,27 @@ private:
    */
   void PrintFrameControl (std::ostream &os) const;
 
-  uint8_t m_ctrlType;
-  uint8_t m_ctrlSubtype;
-  uint8_t m_ctrlToDs;
-  uint8_t m_ctrlFromDs;
-  uint8_t m_ctrlMoreFrag;
-  uint8_t m_ctrlRetry;
-  uint8_t m_ctrlMoreData;
-  uint8_t m_ctrlWep;
-  uint8_t m_ctrlOrder;
-  uint16_t m_duration;
-  Mac48Address m_addr1;
-  Mac48Address m_addr2;
-  Mac48Address m_addr3;
-  uint8_t m_seqFrag;
-  uint16_t m_seqSeq;
-  Mac48Address m_addr4;
-  uint8_t m_qosTid;
-  uint8_t m_qosEosp;
-  uint8_t m_qosAckPolicy;
-  uint8_t m_amsduPresent;
-  uint16_t m_qosStuff;
+  uint8_t m_ctrlType; ///< control type
+  uint8_t m_ctrlSubtype; ///< control subtype
+  uint8_t m_ctrlToDs; ///< control to DS
+  uint8_t m_ctrlFromDs; ///< control from DS
+  uint8_t m_ctrlMoreFrag; ///< control more fragments
+  uint8_t m_ctrlRetry; ///< control retry
+  uint8_t m_ctrlMoreData; ///< control more data
+  uint8_t m_ctrlWep; ///< control WEP
+  uint8_t m_ctrlOrder; ///< control order
+  uint16_t m_duration; ///< duration
+  Mac48Address m_addr1; ///< address 1
+  Mac48Address m_addr2; ///< address 2
+  Mac48Address m_addr3; ///< address 3
+  uint8_t m_seqFrag; ///< sequence fragment
+  uint16_t m_seqSeq; ///< sequence sequence
+  Mac48Address m_addr4; ///< address 4
+  uint8_t m_qosTid; ///< QOS TID
+  uint8_t m_qosEosp; ///< QOS EOSP
+  uint8_t m_qosAckPolicy; ///< QOS ack policy
+  uint8_t m_amsduPresent; ///< AMSDU present
+  uint16_t m_qosStuff; ///< QOS stuff
   /* DMG QoS Control Field */
   bool m_dmgPpdu;
   uint8_t m_qosAmsduType;
