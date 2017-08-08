@@ -237,8 +237,6 @@ EdcaTxopN::NotifyAccessGranted (void)
 //        }
     }
 
-  NS_LOG_DEBUG ("Packets=" << m_queue->GetNPackets ());
-
   if (m_currentPacket == 0)
     {
       if (!m_queue->HasPackets () && !m_baManager->HasPackets ())
@@ -285,22 +283,13 @@ EdcaTxopN::NotifyAccessGranted (void)
           m_fragmentNumber = 0;
           NS_LOG_DEBUG ("dequeued size=" << m_currentPacket->GetSize () <<
                         ", to=" << m_currentHdr.GetAddr1 () <<
-                        ", seq=" << m_currentHdr.GetSequenceNumber ());
+                        ", seq=" << m_currentHdr.GetSequenceControl ());
           if (m_currentHdr.IsQosData () && !m_currentHdr.GetAddr1 ().IsBroadcast ())
             {
               VerifyBlockAck ();
             }
         }
-      else
-        {
-          NS_LOG_DEBUG ("Retry:" << m_currentHdr.IsQosData () << "," << m_currentHdr.GetQosAckPolicy ());
-        }
     }
-  else
-    {
-      NS_LOG_DEBUG ("Restransmit Packet");
-    }
-
   m_currentParams.DisableOverrideDurationId ();
   if (m_stationManager->HasDmgSupported () && GetTypeOfStation () != DMG_ADHOC)
     {

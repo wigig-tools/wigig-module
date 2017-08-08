@@ -862,9 +862,6 @@ MacLow::StartTransmission (Ptr<const Packet> packet,
   m_txParams = params;
   m_currentTxVector = GetDataTxVector (m_currentPacket, &m_currentHdr);
 
-  NS_LOG_DEBUG ("Transmit1:" << m_currentPacket->GetSize () << "," << m_txParams.MustWaitAck ()
-                << "," << m_txParams.MustWaitCompressedBlockAck ());
-
   if (NeedRts ())
     {
       m_txParams.EnableRts ();
@@ -883,7 +880,6 @@ MacLow::StartTransmission (Ptr<const Packet> packet,
       //sent between A-MPDU transmissions. It avoids to unexpectedly flush the aggregate
       //queue when previous RTS request has failed.
       m_ampdu = false;
-      NS_LOG_DEBUG ("Case1");
     }
   else if (m_currentHdr.IsQosData () && m_aggregateQueue[GetTid (packet, *hdr)]->GetNPackets () > 0)
     {
@@ -914,7 +910,6 @@ MacLow::StartTransmission (Ptr<const Packet> packet,
       m_currentPacket = aggregatedPacket;
       m_currentHdr = (m_txPackets[GetTid (packet, *hdr)].at (0).hdr);
       m_currentTxVector = GetDataTxVector (m_currentPacket, &m_currentHdr);
-      NS_LOG_DEBUG ("Case2");
     }
   else
     {
@@ -927,30 +922,20 @@ MacLow::StartTransmission (Ptr<const Packet> packet,
           if (ampdu.GetRemainingNbOfMpdus () > 0)
             {
               m_txParams.EnableCompressedBlockAck ();
-              NS_LOG_DEBUG ("Case3");
             }
           else if (m_currentHdr.IsQosData ())
             {
               //VHT/HE single MPDUs are followed by normal ACKs
               m_txParams.EnableAck ();
-              NS_LOG_DEBUG ("Case4");
             }
         }
       else if (m_currentHdr.IsQosData ())
         {
           //VHT/HE single MPDUs are followed by normal ACKs
           m_txParams.EnableAck ();
+          /* Temporary Solution */
 //          m_currentHdr.SetQosAckPolicy (WifiMacHeader::NORMAL_ACK);
-          NS_LOG_DEBUG ("Case5");
         }
-    }
-
-  if (m_currentHdr.IsQosData ())
-    {
-      NS_LOG_DEBUG ("Transmit2:" << m_currentPacket->GetSize () << ","
-                    << m_txParams.MustWaitAck ()
-                    << "," << m_txParams.MustWaitCompressedBlockAck ()
-                    << ", AckPolicy=" << m_currentHdr.GetQosAckPolicy ());
     }
 
   if (m_txParams.MustSendRts ())
@@ -2419,8 +2404,6 @@ MacLow::SendDataPacket (void)
       AddWifiMacTrailer (packet);
     }
 
-  NS_LOG_DEBUG (packet->GetSize () << "," << m_txParams.MustWaitAck () << "," << m_txParams.MustWaitCompressedBlockAck ());
-
   ForwardDown (packet, &m_currentHdr, m_currentTxVector);
 }
 
@@ -2765,15 +2748,9 @@ MacLow::ReceiveMpdu (Ptr<Packet> packet, WifiMacHeader hdr)
       if (it != m_bAckAgreements.end ())
         {
           //Implement HT immediate Block Ack support for HT Delayed Block Ack is not added yet
-          NS_LOG_DEBUG ("QosUtilsIsOldPacket=" << QosUtilsIsOldPacket ((*it).second.first.GetStartingSequence (), seqNumber)
-                        << ", StartingSequence = " << (*it).second.first.GetStartingSequence ()
-                        << ", seqNumber=" << seqNumber);
           if (!QosUtilsIsOldPacket ((*it).second.first.GetStartingSequence (), seqNumber))
             {
               StoreMpduIfNeeded (packet, hdr);
-              NS_LOG_DEBUG ("IsInWindow="
-                            << IsInWindow (hdr.GetSequenceNumber (), (*it).second.first.GetStartingSequence (),
-                                           (*it).second.first.GetBufferSize ()));
               if (!IsInWindow (hdr.GetSequenceNumber (), (*it).second.first.GetStartingSequence (), (*it).second.first.GetBufferSize ()))
                 {
                   uint16_t delta = (seqNumber - (*it).second.first.GetWinEnd () + 4096) % 4096;
@@ -3324,11 +3301,9 @@ MacLow::AggregateToAmpdu (Ptr<const Packet> packet, const WifiMacHeader hdr)
 
       if (!hdr.GetAddr1 ().IsBroadcast () && edcaIt->second->GetMpduAggregator () != 0)
         {
-          NS_LOG_DEBUG ("Aggregate_Case1");
           //Have to make sure that their exist a block Ack agreement before sending an AMPDU (BlockAck Manager)
           if (edcaIt->second->GetBaAgreementExists (hdr.GetAddr1 (), tid))
             {
-              NS_LOG_DEBUG ("Aggregate_Case2");
               /* here is performed mpdu aggregation */
               /* MSDU aggregation happened in edca if the user asked for it so m_currentPacket may contains a normal packet or a A-MSDU*/
               currentAggregatedPacket = Create<Packet> ();
@@ -3401,12 +3376,8 @@ MacLow::AggregateToAmpdu (Ptr<const Packet> packet, const WifiMacHeader hdr)
                   currentSequenceNumber = peekedHdr.GetSequenceNumber ();
                 }
 
-              NS_LOG_DEBUG ("Retry: retry=" << retry << ", currentSequenceNumber=" << currentSequenceNumber
-                            << ", startingSequenceNumber=" << startingSequenceNumber);
-
               while (IsInWindow (currentSequenceNumber, startingSequenceNumber, 64) && !StopMpduAggregation (peekedPacket, peekedHdr, currentAggregatedPacket, blockAckSize))
                 {
-                  NS_LOG_DEBUG ("Aggregate_Case3");
                   //for now always send AMPDU with normal ACK
                   if (retry == false)
                     {

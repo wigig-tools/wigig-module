@@ -147,6 +147,12 @@ DmgAdhocWifiMac::StartBeaconInterval (void)
 }
 
 void
+DmgAdhocWifiMac::EndBeaconInterval (void)
+{
+  NS_LOG_FUNCTION (this);
+}
+
+void
 DmgAdhocWifiMac::StartBeaconTransmissionInterval (void)
 {
   NS_LOG_FUNCTION (this);

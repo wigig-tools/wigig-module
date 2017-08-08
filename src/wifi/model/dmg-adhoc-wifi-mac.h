@@ -63,6 +63,7 @@ protected:
   virtual void DoInitialize (void);
 
   void StartBeaconInterval (void);
+  void EndBeaconInterval (void);
   void StartBeaconTransmissionInterval (void);
   void StartAssociationBeamformTraining (void);
   void StartAnnouncementTransmissionInterval (void);

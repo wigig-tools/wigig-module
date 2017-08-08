@@ -1527,7 +1527,8 @@ AllocationField::AllocationField ()
     m_allocationStart (0),
     m_allocationBlockDuration (0),
     m_numberOfBlocks (0),
-    m_allocationBlockPeriod (0)
+    m_allocationBlockPeriod (0),
+    m_allocationAnnounced (false)
 {
 }
 
@@ -1780,6 +1781,18 @@ uint16_t
 AllocationField::GetAllocationBlockPeriod (void) const
 {
   return m_allocationBlockPeriod;
+}
+
+void
+AllocationField::SetAllocationAnnounced (void)
+{
+  m_allocationAnnounced = true;
+}
+
+bool
+AllocationField::IsAllocationAnnounced (void) const
+{
+  return m_allocationAnnounced;
 }
 
 /***************************************************

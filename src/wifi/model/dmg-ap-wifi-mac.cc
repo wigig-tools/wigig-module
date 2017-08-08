@@ -476,7 +476,7 @@ DmgApWifiMac::CleanupAllocations (void)
   for(AllocationFieldList::iterator iter = m_allocationList.begin (); iter != m_allocationList.end ();)
     {
       allocation = (*iter);
-      if (!allocation.IsPseudoStatic ())
+      if (!allocation.IsPseudoStatic () && iter->IsAllocationAnnounced ())
         {
           iter = m_allocationList.erase (iter);
         }
@@ -575,6 +575,7 @@ DmgApWifiMac::AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destA
   field.SetSourceAid (sourceAid);
   field.SetDestinationAid (destAid);
   field.SetAllocationStart (allocationStart);
+  /* ToDo: Fix calculate the exact duration of the beamforming training */
   field.SetAllocationBlockDuration (2000);     // Microseconds
   field.SetNumberOfBlocks (1);
 
@@ -596,11 +597,12 @@ DmgApWifiMac::ModifyAllocation (AllocationID id, uint8_t srcAid, uint8_t dstAid,
   NS_LOG_FUNCTION (this << uint32_t (id) << uint32_t (srcAid) << uint32_t (dstAid) << newStartTime << newDuration);
   for (AllocationFieldList::iterator iter = m_allocationList.begin (); iter != m_allocationList.end (); iter++)
     {
-      if (((*iter).GetAllocationID () == id) &&
-          ((*iter).GetSourceAid () == srcAid) && ((*iter).GetDestinationAid () == dstAid))
+      AllocationField field = (*iter);
+      if ((field.GetAllocationID () == id) &&
+          (field.GetSourceAid () == srcAid) && (field.GetDestinationAid () == dstAid))
         {
-          (*iter).SetAllocationStart (newStartTime);
-          (*iter).SetAllocationBlockDuration (newDuration);
+          field.SetAllocationStart (newStartTime);
+          field.SetAllocationBlockDuration (newDuration);
           break;
         }
     }
@@ -832,7 +834,6 @@ void
 DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
 {
   NS_LOG_FUNCTION (this);
-
   if (hdr.IsDMGBeacon ())
     {
       m_btiRemaining = GetBTIRemainingTime ();
@@ -876,9 +877,6 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
                   m_phy->GetDirectionalAntenna ()->SetInDirectionalReceivingMode ();
                 }
             }
-
-          /* Cleanup non-static allocations */
-          CleanupAllocations ();
         }
       else
         {
@@ -944,6 +942,41 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
                                peerAid, m_aidMap[peerAid], isSource);
         }
     }
+  else if (hdr.IsSSW ())
+    {
+      if (m_totalSectors > 0)
+        {
+          if (m_sectorId < GetNumberOfSectors ())
+            {
+              m_sectorId++;
+            }
+          else if ((m_sectorId == GetNumberOfSectors ()) && (m_antennaId < GetNumberOfAntennas ()))
+            {
+              m_sectorId = 1;
+              m_antennaId++;
+            }
+          m_totalSectors--;
+          if (m_accessPeriod == CHANNEL_ACCESS_DTI)
+            {
+              /* We are performing BF during DTI period */
+              if (m_isBeamformingInitiator)
+                {
+                  Simulator::Schedule (m_sbifs, &DmgApWifiMac::SendInitiatorTransmitSectorSweepFrame, this, hdr.GetAddr1 (),
+                                       m_sectorId, m_antennaId, m_totalSectors);
+                }
+              else
+                {
+                  Simulator::Schedule (m_sbifs, &DmgApWifiMac::SendRespodnerTransmitSectorSweepFrame, this, hdr.GetAddr1 (),
+                                       m_sectorId, m_antennaId, m_totalSectors);
+                }
+            }
+        }
+      else
+        {
+          /* Last SSW Frame was sent, so we wait for the SSW-FBCK from the either the DMG AP or DMG STA */
+          m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+        }
+    }
   else if (hdr.IsSSW_FBCK ())
     {
       ANTENNA_CONFIGURATION antennaConfig;
@@ -960,6 +993,12 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
       /* Raise an event that we selected the best sector to the DMG STA */
       m_slsCompleted (address, CHANNEL_ACCESS_BHI, antennaConfig.first, antennaConfig.second);
     }
+  else if (hdr.IsSSW_ACK ())
+    {
+      /* We are SLS Respodner, raise callback for SLS Phase Completion */
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = m_bestAntennaConfig[hdr.GetAddr1 ()].first;
+      m_slsCompleted (hdr.GetAddr1 (), CHANNEL_ACCESS_DTI, antennaConfigTx.first, antennaConfigTx.second);
+    }
 }
 
 void
@@ -969,9 +1008,6 @@ DmgApWifiMac::StartBeaconInterval (void)
 
   /* Invoke callback */
   m_biStarted (GetAddress ());
-
-  /* Disable Channel Access by CBAP */
-  EndContentionPeriod ();
 
   /* Timing variables */
   m_biStartTime = Simulator::Now ();
@@ -999,13 +1035,25 @@ DmgApWifiMac::StartBeaconInterval (void)
 }
 
 void
+DmgApWifiMac::EndBeaconInterval (void)
+{
+  NS_LOG_FUNCTION (this << "DMG AP Ending BI at " << Simulator::Now ());
+  /* Cleanup non-static allocations */
+  CleanupAllocations ();
+  /* Disable Channel Access by CBAP */
+  EndContentionPeriod ();
+  /* Start New Beacon Interval */
+  StartBeaconInterval ();
+}
+
+void
 DmgApWifiMac::StartBeaconTransmissionInterval (void)
 {
   NS_LOG_FUNCTION (this << "DMG AP Starting BTI at " << Simulator::Now ());
   m_accessPeriod = CHANNEL_ACCESS_BTI;
 
   /* Re-initialize variables */
-  m_sectorFeedbackSent.clear ();
+  m_sectorFeedbackSchedulled = false;
 
   /* Start DMG Beaconing */
   m_totalSectors = m_antennaConfigurationTable.size () - 1;
@@ -1128,36 +1176,47 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
   m_accessPeriod = CHANNEL_ACCESS_DTI;
 
   /* Schedule the beginning of next BHI interval */
-  Time nextBeaconInterval = m_beaconInterval - (Simulator::Now () - m_biStartTime);
+  Time dtiDuration = m_beaconInterval - (Simulator::Now () - m_biStartTime);
   m_dtiStartTime = Simulator::Now ();
-  m_dtiStarted (GetAddress (), nextBeaconInterval);
-  Simulator::Schedule (nextBeaconInterval, &DmgApWifiMac::StartBeaconInterval, this);
-  NS_LOG_DEBUG ("Next Beacon Interval will start at " << Simulator::Now () + nextBeaconInterval);
+  m_dtiStarted (GetAddress (), dtiDuration);
+  Simulator::Schedule (dtiDuration, &DmgApWifiMac::EndBeaconInterval, this);
+  NS_LOG_DEBUG ("Next Beacon Interval will start at " << Simulator::Now () + dtiDuration);
 
   /* Start CBAPs and SPs */
   if (m_isCbapOnly)
     {
       NS_LOG_INFO ("CBAP allocation only in DTI");
       m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
-      Simulator::ScheduleNow (&DmgApWifiMac::StartContentionPeriod, this, BROADCAST_CBAP, nextBeaconInterval);
+      Simulator::ScheduleNow (&DmgApWifiMac::StartContentionPeriod, this, BROADCAST_CBAP, dtiDuration);
     }
   else
     {
       AllocationField field;
       for (AllocationFieldList::iterator iter = m_allocationList.begin (); iter != m_allocationList.end (); iter++)
         {
+          (*iter).SetAllocationAnnounced ();
           field = (*iter);
           if (field.GetAllocationType () == SERVICE_PERIOD_ALLOCATION)
             {
               Time spStart = MicroSeconds (field.GetAllocationStart ());
               Time spLength = MicroSeconds (field.GetAllocationBlockDuration ());
               Time spPeriod = MicroSeconds (field.GetAllocationBlockPeriod ());
-              if ((field.GetSourceAid () == AID_AP) && (!field.GetBfControl ().IsBeamformTraining ()))
+              if ((field.GetSourceAid () == AID_AP))
                 {
                   uint8_t destAid = field.GetDestinationAid ();
                   Mac48Address destAddress = m_aidMap[destAid];
-                  ScheduleServicePeriod (field.GetNumberOfBlocks (), spStart, spLength, spPeriod,
-                                         field.GetAllocationID (), destAid, destAddress, true);
+                  if (field.GetBfControl ().IsBeamformTraining ())
+                    {
+                      Simulator::Schedule (spStart, &DmgApWifiMac::StartBeamformingServicePeriod, this, destAid, destAddress,
+                                           true, field.GetBfControl ().IsInitiatorTxss (), spLength);
+                    }
+                  else
+                    {
+                      uint8_t destAid = field.GetDestinationAid ();
+                      Mac48Address destAddress = m_aidMap[destAid];
+                      ScheduleServicePeriod (field.GetNumberOfBlocks (), spStart, spLength, spPeriod,
+                                             field.GetAllocationID (), destAid, destAddress, true);
+                    }
                 }
               else if ((field.GetSourceAid () == AID_BROADCAST) && (field.GetDestinationAid () == AID_BROADCAST))
                 {
@@ -1179,8 +1238,16 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
                 {
                   uint8_t sourceAid = field.GetSourceAid ();
                   Mac48Address sourceAddress = m_aidMap[sourceAid];
-                  ScheduleServicePeriod (field.GetNumberOfBlocks (), spStart, spLength, spPeriod,
-                                         field.GetAllocationID (), sourceAid, sourceAddress, false);
+                  if (field.GetBfControl ().IsBeamformTraining ())
+                    {
+                      Simulator::Schedule (spStart, &DmgWifiMac::StartBeamformingServicePeriod, this, sourceAid, sourceAddress,
+                                           false, field.GetBfControl ().IsResponderTxss (), spLength);
+                    }
+                  else
+                    {
+                      ScheduleServicePeriod (field.GetNumberOfBlocks (), spStart, spLength, spPeriod,
+                                             field.GetAllocationID (), sourceAid, sourceAddress, false);
+                    }
                 }
             }
           else if ((field.GetAllocationType () == CBAP_ALLOCATION) &&
@@ -1691,50 +1758,89 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
     }
   else if (hdr->IsSSW ())
     {
-      NS_LOG_INFO ("Received SSW frame from=" << hdr->GetAddr2 ());
-
-      /* Check if we have received SSW frame during the current SSW-Slot */
-      if (!m_receivedOneSSW)
+      if (m_accessPeriod == CHANNEL_ACCESS_ABFT)
         {
-          m_receivedOneSSW = true;
-          m_peerAbftStation = hdr->GetAddr2 ();
-        }
+          NS_LOG_INFO ("Received SSW frame during A-BFT from=" << hdr->GetAddr2 ());
 
-      if (m_receivedOneSSW && (m_peerAbftStation == hdr->GetAddr2 ()) && m_isResponderTXSS)
-        {
-          CtrlDMG_SSW sswFrame;
-          packet->RemoveHeader (sswFrame);
-
-          DMG_SSW_Field ssw = sswFrame.GetSswField ();
-          /* Map the antenna Tx configuration for the frame received by SLS of the DMG-STA */
-          MapTxSnr (from, ssw.GetSectorID (), ssw.GetDMGAntennaID (), m_stationManager->GetRxSnr ());
-
-          /* If we receive one SSW Frame at least, then we schedule SSW-FBCK frame */
-          if (!m_sectorFeedbackSent[from])
+          /* Check if we have received SSW frame during the current SSW-Slot */
+          if (!m_receivedOneSSW)
             {
-              m_sectorFeedbackSent[from] = true;
+              m_receivedOneSSW = true;
+              m_peerAbftStation = hdr->GetAddr2 ();
+            }
 
-              /* Record the best TX antenna configuration reported by the SSW-FBCK Field */
-              DMG_SSW_FBCK_Field sswFeedback = sswFrame.GetSswFeedbackField ();
-              sswFeedback.IsPartOfISS (false);
+          if (m_receivedOneSSW && (m_peerAbftStation == hdr->GetAddr2 ()) && m_isResponderTXSS)
+            {
+              CtrlDMG_SSW sswFrame;
+              packet->RemoveHeader (sswFrame);
 
-              /* The Sector Sweep Frame contains feedback about the the best Tx Sector in the DMG-AP with the sending DMG-STA */
-              ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (sswFeedback.GetSector (), sswFeedback.GetDMGAntenna ());
-              ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (NO_ANTENNA_CONFIG, NO_ANTENNA_CONFIG);
-              m_bestAntennaConfig[hdr->GetAddr2 ()] = std::make_pair (antennaConfigTx, antennaConfigRx);
+              DMG_SSW_Field ssw = sswFrame.GetSswField ();
+              /* Map the antenna Tx configuration for the frame received by SLS of the DMG-STA */
+              MapTxSnr (from, ssw.GetSectorID (), ssw.GetDMGAntennaID (), m_stationManager->GetRxSnr ());
 
-              NS_LOG_INFO ("Best TX Antenna Sector Config by this DMG AP to DMG STA=" << from
-                           << ": SectorID=" << uint32_t (antennaConfigTx.first)
-                           << ", AntennaID=" << uint32_t (antennaConfigTx.second));
+              /* If we receive one SSW Frame at least, then we schedule SSW-FBCK frame */
+              if (!m_sectorFeedbackSchedulled)
+                {
+                  m_sectorFeedbackSchedulled = true;
 
-              /* Indicate this DMG-STA as waiting for Beam Refinement Phase */
-              m_stationBrpMap[from] = true;
+                  /* Record the best TX antenna configuration reported by the SSW-FBCK Field */
+                  DMG_SSW_FBCK_Field sswFeedback = sswFrame.GetSswFeedbackField ();
+                  sswFeedback.IsPartOfISS (false);
 
-              Time sswFbckTime = GetSectorSweepDuration (ssw.GetCountDown ()) + GetMbifs ();
-              NS_LOG_INFO ("Scheduled SSW-FBCK Frame to " << hdr->GetAddr2 () << " at " << Simulator::Now () + sswFbckTime);
-              Simulator::Schedule (sswFbckTime, &DmgApWifiMac::SendSswFbckAfterRss, this, from);
+                  /* The Sector Sweep Frame contains feedback about the the best Tx Sector in the DMG-AP with the sending DMG-STA */
+                  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (sswFeedback.GetSector (), sswFeedback.GetDMGAntenna ());
+                  ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (NO_ANTENNA_CONFIG, NO_ANTENNA_CONFIG);
+                  m_bestAntennaConfig[hdr->GetAddr2 ()] = std::make_pair (antennaConfigTx, antennaConfigRx);
+
+                  NS_LOG_INFO ("Best TX Antenna Sector Config by this DMG AP to DMG STA=" << from
+                               << ": SectorID=" << uint32_t (antennaConfigTx.first)
+                               << ", AntennaID=" << uint32_t (antennaConfigTx.second));
+
+                  /* Indicate this DMG-STA as waiting for Beam Refinement Phase */
+                  m_stationBrpMap[from] = true;
+
+                  Time sswFbckTime = GetSectorSweepDuration (ssw.GetCountDown ()) + GetMbifs ();
+                  NS_LOG_INFO ("Scheduled SSW-FBCK Frame to " << hdr->GetAddr2 () << " at " << Simulator::Now () + sswFbckTime);
+                  /* The Duration field is set to 0, when the SSW-Feedback frame is transmitted within an A-BFT */
+                  Simulator::Schedule (sswFbckTime, &DmgApWifiMac::SendSswFbckFrame, this, from, MicroSeconds (0));
+                }
             }
         }
+      else if (m_accessPeriod == CHANNEL_ACCESS_DTI)
+        {
+          NS_LOG_INFO ("Received SSW frame during DTI from=" << hdr->GetAddr2 ());
+          ReceiveSectorSweepFrame (packet, hdr);
+        }
+      return;
+    }
+  else if (hdr->IsSSW_FBCK ())
+    {
+      NS_LOG_LOGIC ("Received SSW-FBCK frame from=" << hdr->GetAddr2 ());
+
+      /* We are the SLS Respodner */
+      CtrlDMG_SSW_FBCK fbck;
+      packet->RemoveHeader (fbck);
+
+      /* Check Beamformed link maintenance */
+      RecordBeamformedLinkMaintenanceValue (fbck.GetBfLinkMaintenanceField ());
+
+      /* The SSW-FBCK contains the best TX antenna by this station */
+      DMG_SSW_FBCK_Field sswFeedback = fbck.GetSswFeedbackField ();
+      sswFeedback.IsPartOfISS (false);
+
+      /* Record best antenna configuration */
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (sswFeedback.GetSector (), sswFeedback.GetDMGAntenna ());
+      ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (NO_ANTENNA_CONFIG, NO_ANTENNA_CONFIG);
+      m_bestAntennaConfig[hdr->GetAddr2 ()] = std::make_pair (antennaConfigTx, antennaConfigRx);
+
+      /* We add the station to the list of the stations we can directly communicate with */
+      AddForwardingEntry (hdr->GetAddr2 ());
+
+      NS_LOG_LOGIC ("Best TX Antenna Config by this DMG STA to DMG STA=" << hdr->GetAddr2 ()
+                    << ": SectorID=" << uint32_t (antennaConfigTx.first)
+                    << ", AntennaID=" << uint32_t (antennaConfigTx.second));
+      NS_LOG_LOGIC ("Scheduled SSW-ACK Frame to " << hdr->GetAddr2 () << " at " << Simulator::Now () + m_mbifs);
+      Simulator::Schedule (GetMbifs (), &DmgApWifiMac::SendSswAckFrame, this, hdr->GetAddr2 (), hdr->GetDuration ());
 
       return;
     }

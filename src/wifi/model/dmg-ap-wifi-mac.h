@@ -266,6 +266,7 @@ private:
   virtual void DoInitialize (void);
 
   void StartBeaconInterval (void);
+  void EndBeaconInterval (void);
   void StartBeaconTransmissionInterval (void);
   void StartAssociationBeamformTraining (void);
   void StartAnnouncementTransmissionInterval (void);
@@ -498,7 +499,7 @@ private:
   bool m_isResponderTXSS;               //!< Flag to indicate if RSS in A-BFT is TxSS or RxSS.
   uint8_t m_abftPeriodicity;            //!< The periodicity of the A-BFT in DMG Beacon.
   /* Ensure only one DMG STA is communicating with us during single A-BFT slot */
-  bool m_receivedOneSSW;                //!< Flag to indicate if we received SSW Frame during SSW-Slot in A-BFT.
+  bool m_receivedOneSSW;                //!< Flag to indicate if we received SSW Frame during SSW-Slot in A-BFT period.
   Mac48Address m_peerAbftStation;       //!< The MAC address of the station we received SSW from.
   uint8_t m_remainingSlots;
   Time m_atiStartTime;                  //!< The start time of ATI Period.

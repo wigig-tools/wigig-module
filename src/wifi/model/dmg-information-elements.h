@@ -700,6 +700,10 @@ public:
   uint8_t GetNumberOfBlocks (void) const;
   uint16_t GetAllocationBlockPeriod (void) const;
 
+  /* Private Information */
+  void SetAllocationAnnounced (void);
+  bool IsAllocationAnnounced (void) const;
+
 private:
   /* Allocation Control Subfield*/
   AllocationID m_allocationID;            //!< Allocation ID.
@@ -717,6 +721,8 @@ private:
   uint16_t m_allocationBlockDuration;     //!< Allocation Block Duration.
   uint8_t m_numberOfBlocks;               //!< Number of Blocks.
   uint16_t m_allocationBlockPeriod;       //!< Allocation Block Period.
+
+  bool m_allocationAnnounced;             //!< Flag to indicate if allocation has been announced in BTI or ATI.
 
 };
 

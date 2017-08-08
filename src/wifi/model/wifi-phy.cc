@@ -2682,7 +2682,7 @@ WifiPhy::SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, Time frame
   WifiPhyTag tag (txVector, mpdutype);
   newPacket->AddPacketTag (tag);
 
-  StartTx (newPacket, txVector, txDuration);
+  StartTx (newPacket, txVector, frameDuration);
 
   /* Send TRN Fields if beam refinement or tracking is required */
   if (sendTrnFields)

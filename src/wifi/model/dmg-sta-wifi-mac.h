@@ -119,15 +119,6 @@ public:
    */
   void SetAssocRequestTimeout (Time timeout);
   /**
-   * Initiate Beamforming with a particular DMG STA.
-   * \param peerAid The AID of the peer DMG STA.
-   * \param peerAddress The address of the DMG STA to perform beamforming training with.
-   * \param isInitiator Indicate whether we are the Beamforming Initiator.
-   * \param isTxss Indicate whether the RSS is TxSS or RxSS.
-   * \param length The length of the Beamforming Service Period.
-   */
-  void StartBeamformingServicePeriod (uint8_t peerAid, Mac48Address peerAddress, bool isInitiator, bool isTxss, Time length);
-  /**
    * Start an active association sequence immediately.
    */
   void StartActiveAssociation (void);
@@ -203,6 +194,7 @@ protected:
   virtual void DoDispose (void);
   virtual void DoInitialize (void);
   void StartBeaconInterval (void);
+  void EndBeaconInterval (void);
   void StartBeaconTransmissionInterval (void);
   void StartAssociationBeamformTraining (void);
   void StartAnnouncementTransmissionInterval (void);
@@ -293,11 +285,6 @@ protected:
    * Do Association Beamforming Training in the A-BFT period.
    */
   void DoAssociationBeamformingTraining (void);
-  /**
-   * Add new data forwarding entry.
-   * \param nextHopAddress The MAC Address of the next hop.
-   */
-  void AddForwardingEntry (Mac48Address nextHopAddress);
   /**
    * Send Relay Search Request.
    * \param token The dialog token.
@@ -491,79 +478,13 @@ private:
    * \param bfField The beamforming training field.
    */
   void SendSprFrame (Mac48Address to, Time duration, DynamicAllocationInfoField &info, BF_Control_Field &bfField);
-  /**
-   * Start Initiator Sector Sweep (ISS) Phase.
-   * \param stationAddress The address of the station.
-   * \param isTxss Indicate whether the RSS is TxSS or RxSS.
-   */
-  void StartInitiatorSectorSweep (Mac48Address address, bool isTxss);
-  /**
-   * Start Generic Responder Sector Sweep (RSS) Phase.
-   * \param stationAddress The address of the station.
-   * \param isTxss Indicate whether the RSS is TxSS or RxSS.
-   */
-  void StartResponderSectorSweep (Mac48Address stationAddress, bool isTxss);
+
   /**
    * Start Responder Sector Sweep (RSS) Phase during A-BFT access period.
    * \param stationAddress The address of the station.
    * \param isTxss Indicate whether the RSS is TxSS or RxSS.
    */
   void StartAbftResponderSectorSweep (Mac48Address address, bool isTxss);
-  /**
-   * Start Transmit Sector Sweep (TxSS) with specific station.
-   * \param address The MAC address of the peer DMG STA.
-   * \param direction Indicate whether we are initiator or responder.
-   */
-  void StartTransmitSectorSweep (Mac48Address address, BeamformingDirection direction);
-  /**
-   * Start Receive Sector Sweep (RxSS) with specific station.
-   * \param address The MAC address of the peer DMG STA.
-   * \param direction Indicate whether we are initiator or responder.
-   */
-  void StartReceiveSectorSweep (Mac48Address address, BeamformingDirection direction);
-  /**
-   * Send ISS Sector Sweep Frame
-   * \param address
-   * \param direction
-   * \param sectorID
-   * \param antennaID
-   * \param count
-   */
-  void SendIssSectorSweepFrame (Mac48Address address, BeamformingDirection direction,
-                                uint8_t sectorID, uint8_t antennaID,  uint16_t count);
-  /**
-   * Send RSS Sector Sweep Frame
-   * \param address
-   * \param direction
-   * \param sectorID
-   * \param antennaID
-   * \param count
-   */
-  void SendRssSectorSweepFrame (Mac48Address address, BeamformingDirection direction,
-                                uint8_t sectorID, uint8_t antennaID,  uint16_t count);
-  /**
-   * Send SSW Frame.
-   * \param sectorID The ID of the current transmitting sector.
-   * \param antennaID the ID of the current transmitting antenna.
-   * \param count the remaining number of sectors.
-   */
-  void SendSectorSweepFrame (Mac48Address address, BeamformingDirection direction,
-                             uint8_t sectorID, uint8_t antennaID, uint16_t count);
-  /**
-   * Send SSW FBCK Frame for SLS phase in a scheduled service period.
-   * \param receiver The MAC address of the peer DMG STA.
-   */
-  void SendSswFbckFrame (Mac48Address receiver);
-  /**
-   * Send SSW ACK Frame for SLS phase in a scheduled service period.
-   * \param receiver The MAC address of the peer DMG STA.
-   */
-  void SendSswAckFrame (Mac48Address receiver);
-  /**
-   * Record Beamformed Link Maintenance Value
-   * \param field The BF Link Maintenance Field in SSW-FBCK/ACK.
-   */
-  void RecordBeamformedLinkMaintenanceValue (BF_Link_Maintenance_Field field);
 
 private:
   Time m_probeRequestTimeout;
@@ -589,15 +510,11 @@ private:
 
   /* BTI Beamforming */
   bool m_receivedDmgBeacon;
-  bool    m_isResponderTXSS;                    //!< Flag to indicate whether the A-BFT Period is TXSS or RXSS.
   uint8_t m_slotIndex;                          //!< The index of the selected slot in the A-BFT period.
   EventId m_sswFbckTimeout;                     //!< Timeout Event for receiving SSW FBCK Frame.
   Ptr<UniformRandomVariable> a_bftSlot;         //!< Random variable for A-BFT slot.
-  bool    m_isIssInitiator;                     //!< Flag to indicate that we are ISS.
-  EventId m_rssEvent;                           //!< Event related to scheduling RSS.
   uint8_t m_remainingSlotsPerABFT;              //!< Remaining Slots in the current A-BFT.
   uint8_t m_slotOffset;                         //!< Variable used to print the correct slot selected.
-  Time m_sswFbckDuration;                       //!< The duration in the SSW-FBCK Field.
 
   uint32_t m_failedRssAttemptsCounter;          //!< Counter for Failed RSS Attempts during A-BFT.
   uint32_t m_rssAttemptsLimit;                  //!< Maximum Failed RSS Attempts during A-BFT.
@@ -643,17 +560,6 @@ private:
   bool m_pollingPhase;                            //!< Flag to indicate if we participate in the polling phase.
   SERVICE_PERIOD_PAIR m_currentServicePeriod;
   ServicePeriodRequestCallback m_servicePeriodRequestCallback;
-
-  /* Data Forwarding Table */
-  typedef struct {
-    Mac48Address nextHopAddress;
-    bool isCbapPeriod;
-  } AccessPeriodInformation;
-
-  typedef std::map<Mac48Address, AccessPeriodInformation> DataForwardingTable;
-  typedef DataForwardingTable::iterator DataForwardingTableIterator;
-  typedef DataForwardingTable::const_iterator DataForwardingTableCI;
-  DataForwardingTable m_dataForwardingTable;
 
   /* Spatial Sharing and Interference Mitigation */
   bool m_supportSpsh;                           //!< Flag to indicate whether we support Spatial Sharing and Interference Mitigation.

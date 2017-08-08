@@ -29,11 +29,11 @@ namespace ns3 {
 #define aAirPropagationTime NanoSeconds (100)
 #define aTSFResolution MicroSeconds (1)
 #define GUARD_TIME MicroSeconds (10)
-// Size of different DMG Control Frames in Bytes
+// Size of different DMG Control Frames in Bytes 802.11ad
 #define POLL_FRAME_SIZE             22
 #define SPR_FRAME_SIZE              27
 #define GRANT_FRAME_SIZE            27
-// Association Identifier
+// Association Identifiers
 #define AID_AP                      0
 #define AID_BROADCAST               255
 // Antenna Configuration
@@ -55,7 +55,7 @@ typedef enum {
 /** Type definitions **/
 typedef uint8_t SECTOR_ID;                    /* Typedef for Sector ID */
 typedef uint8_t ANTENNA_ID;                   /* Typedef for Antenna ID */
-typedef std::pair<DynamicAllocationInfoField, BF_Control_Field> AllocationData; /* Typedef for dynamic allocation */
+typedef std::pair<DynamicAllocationInfoField, BF_Control_Field> AllocationData; /* Typedef for dynamic allocation of SPs*/
 typedef std::list<AllocationData> AllocationDataList;
 typedef AllocationDataList::const_iterator AllocationDataListCI;
 
@@ -103,34 +103,46 @@ public:
    */
   void SteerAntennaToward (Mac48Address address);
   /**
-   * CalculateBeamformingTrainingDuration
-   * \param peerSectors The number of sectors in the peer node.
+   * Print SNR Table for each station that we did beamforming training with.
+   */
+  void PrintSnrTable (void);
+  /**
+   * Calculate the duration of the Beamforming Training (SLS Only).
+   * \param peerSectors The number of sectors in the peer station.
    * \return The total duration required for completing beamforming training.
    */
   Time CalculateBeamformingTrainingDuration (uint8_t peerSectors);
   /**
-   * Get number of sectors in each antenna array.
-   * \return
+   * Get the total number of sectors
+   * \return The total number of sectors
    */
   uint8_t GetNumberOfSectors (void) const;
   /**
    * Get number of phased antenna arrays.
-   * \return The number of phased antenna arrays.
+   * \return The total number of phased antenna arrays.
    */
   uint8_t GetNumberOfAntennas (void) const;
+  /**
+   * Initiate Beamforming with a particular DMG STA.
+   * \param peerAid The AID of the peer DMG STA.
+   * \param peerAddress The address of the DMG STA to perform beamforming training with.
+   * \param isInitiator Indicate whether we are the Beamforming Initiator.
+   * \param isTxss Indicate whether the RSS is TxSS or RxSS.
+   * \param length The length of the Beamforming Service Period.
+   */
+  void StartBeamformingServicePeriod (uint8_t peerAid, Mac48Address peerAddress, bool isInitiator, bool isTxss, Time length);
   /**
    * Terminate service period.
    */
   void EndServicePeriod (void);
   /**
-   * Get SP Queue
+   * Get SP Queue.
    * \return Pointer to Queue of the service period access scheme.
    */
   Ptr<WifiMacQueue> GetSPQueue (void) const;
 
   /* Temporary Function to store AID mapping */
   void MapAidToMacAddress (uint16_t aid, Mac48Address address);
-
   Ptr<ServicePeriod> GetServicePeriod () const;
 
 protected:
@@ -142,6 +154,35 @@ protected:
   virtual void ConfigureAggregation (void);
   virtual void EnableAggregation (void);
   virtual void DisableAggregation (void);
+
+  /**
+   * Set whether PCP Handover is supported or not.
+   * \param value Set to true if PCP handover is enabled otherwise it is set to false.
+   */
+  void SetPcpHandoverSupport (bool value);
+  /**
+   * \return Whether the PCP handover is supported or not.
+   */
+  bool GetPcpHandoverSupport (void) const;
+
+  /**
+   * Send Information Request frame.
+   * \param to The MAC address of the receiving station.
+   * \param request Pointer to the Request Element.
+   */
+  void SendInformationRequest (Mac48Address to, ExtInformationRequest &requestHdr);
+  /**
+   * Send Information Response to the station that requested the information.
+   * \param to The MAC address of the station requested the information.
+   * \param responseHdr Pointer to the Response Element.
+   */
+  void SendInformationResponse (Mac48Address to, ExtInformationResponse &responseHdr);
+  /**
+   * Return the DMG capability of the current STA.
+   * \return the DMG capability that we support
+   */
+  virtual Ptr<DmgCapabilities> GetDmgCapabilities (void) const = 0;
+
   /**
    * \param sbifs the value of Short Beamforming Interframe Space (SBIFS).
    */
@@ -175,29 +216,20 @@ protected:
    */
   Time GetBrpifs (void) const;
   /**
-   * Get sector sweep duration either at the initiator or responder.
+   * Get sector sweep duration either at the initiator or at the responder.
    * \param sectors The number of sectors in the duration.
    * \return The total duration required to complete sector sweep.
    */
   Time GetSectorSweepDuration (uint8_t sectors);
   /**
    * Get sector sweep slot time in A-BFT access period.
-   * \param fss The number of sectors in the slot.
+   * \param fss The number of sectors in a slot.
    * \return The duration of a single slot in A-BFT access period.
    */
   Time GetSectorSweepSlotTime (uint8_t fss);
   /**
-   * Set whether PCP Handover is supported or not.
-   * \param value
-   */
-  void SetPcpHandoverSupport (bool value);
-  /**
-   * \return Whether the PCP handover is supported or not.
-   */
-  bool GetPcpHandoverSupport (void) const;
-  /**
    * Map received SNR value to a specific address and TX antenna configuration (The Tx of the peer station).
-   * \param address The address of the receiver.
+   * \param address The MAC address of the receiver.
    * \param sectorID The ID of the transmitting sector.
    * \param antennaID The ID of the transmitting antenna.
    * \param snr The received Signal to Noise Ration in dBm.
@@ -212,27 +244,10 @@ protected:
    */
   void MapRxSnr (Mac48Address address, SECTOR_ID sectorID, ANTENNA_ID antennaID, double snr);
   /**
-   * Send Information Request frame.
-   * \param to The MAC address of the receiving station.
-   * \param request Pointer to the Request Element.
-   */
-  void SendInformationRequest (Mac48Address to, ExtInformationRequest &requestHdr);
-  /**
-   * Send Information Response to the station that requested the information.
-   * \param to The MAC address of the station requested the information.
-   * \param responseHdr Pointer to the Response Element.
-   */
-  void SendInformationResponse (Mac48Address to, ExtInformationResponse &responseHdr);
-  /**
    * Get the remaining time for the current allocation period.
    * \return The remaining time for the current allocation period.
    */
   Time GetRemainingAllocationTime (void) const;
-  /**
-   * Return the DMG capability of the current STA.
-   * \return the DMG capability that we support
-   */
-  virtual Ptr<DmgCapabilities> GetDmgCapabilities (void) const = 0;
   /**
    * Transmit control frame immediately.
    * \param packet
@@ -240,10 +255,68 @@ protected:
    */
   void TransmitControlFrameImmediately (Ptr<const Packet> packet, WifiMacHeader &hdr);
   /**
-   * Send SSW FeedBack after RSS.
-   * \param receiver The address of the responding station.
+   * \brief Receive Sector Sweep Frame.
+   * \param packet Pointer to the sector sweep packet.
+   * \param hdr The MAC header of the packet.
    */
-  void SendSswFbckAfterRss (Mac48Address receiver);
+  void ReceiveSectorSweepFrame (Ptr<Packet> packet, const WifiMacHeader *hdr);
+  /**
+   * Record Beamformed Link Maintenance Value
+   * \param field The BF Link Maintenance Field in SSW-FBCK/ACK.
+   */
+  void RecordBeamformedLinkMaintenanceValue (BF_Link_Maintenance_Field field);
+  /**
+   * Start Initiator Sector Sweep (ISS) Phase.
+   * \param stationAddress The address of the station.
+   * \param isTxss Indicate whether the RSS is TxSS or RxSS.
+   */
+  void StartInitiatorSectorSweep (Mac48Address address, bool isTxss);
+  /**
+   * Start Generic Responder Sector Sweep (RSS) Phase.
+   * \param stationAddress The address of the station.
+   * \param isTxss Indicate whether the RSS is TxSS or RxSS.
+   */
+  void StartResponderSectorSweep (Mac48Address stationAddress, bool isTxss);
+  /**
+   * Start Transmit Sector Sweep (TxSS) with specific station.
+   * \param address The MAC address of the peer DMG STA.
+   * \param direction Indicate whether we are initiator or responder.
+   */
+  void StartTransmitSectorSweep (Mac48Address address, BeamformingDirection direction);
+  /**
+   * Start Receive Sector Sweep (RxSS) with specific station.
+   * \param address The MAC address of the peer DMG STA.
+   * \param direction Indicate whether we are initiator or responder.
+   */
+  void StartReceiveSectorSweep (Mac48Address address, BeamformingDirection direction);
+  /**
+   * Send Transmit Sector Sweep Frame as Initiator.
+   * \param address The MAC address of the respodner.
+   * \param sectorID The ID of the current transmitting sector.
+   * \param antennaID the ID of the current transmitting antenna.
+   * \param count the remaining number of sectors.
+   */
+  void SendInitiatorTransmitSectorSweepFrame (Mac48Address address, uint8_t sectorID, uint8_t antennaID, uint16_t count);
+  /**
+   * Send Tansmit Sector Sweep Frame as Responder.
+   * \param address The MAC address of the initiator.
+   * \param sectorID The ID of the current transmitting sector.
+   * \param antennaID the ID of the current transmitting antenna.
+   * \param count the remaining number of sectors.
+   */
+  void SendRespodnerTransmitSectorSweepFrame (Mac48Address address, uint8_t sectorID, uint8_t antennaID, uint16_t count);
+  /**
+   * Send SSW FBCK Frame for SLS phase in a scheduled service period or after SSW-Slot in A-BFT.
+   * \param receiver The MAC address of the responding station.
+   * \param duration The duration in the MAC header.
+   */
+  void SendSswFbckFrame (Mac48Address receiver, Time duration);
+  /**
+   * Send SSW ACK Frame for SLS phase in a scheduled service period.
+   * \param receiver The MAC address of the peer DMG STA.
+   * \param sswFbckDuration The duration in the SSW-FBCK Field.
+   */
+  void SendSswAckFrame (Mac48Address receiver, Time sswFbckDuration);
   /**
    * The BRP setup subphase is used to set up beam refinement transactions.
    * \param address The MAC address of the receiving station.
@@ -275,7 +348,7 @@ protected:
   virtual void NotifyBrpPhaseCompleted (void) = 0;
 
   /* Typedefs for Recording SNR Value per Antenna Configuration */
-  typedef double SNR;                                                   /* Typedef SNR */
+  typedef double SNR;                                                   /* Typedef for SNR */
   typedef std::pair<SECTOR_ID, ANTENNA_ID>      ANTENNA_CONFIGURATION;  /* Typedef for antenna Config (SectorID, AntennaID) */
   typedef std::map<ANTENNA_CONFIGURATION, SNR>  SNR_MAP;                /* Typedef for Map between Antenna Config and SNR */
   typedef SNR_MAP                               SNR_MAP_TX;             /* Typedef for SNR TX for each antenna configuration */
@@ -289,6 +362,11 @@ protected:
   typedef std::pair<ANTENNA_CONFIGURATION_TX, ANTENNA_CONFIGURATION_RX> BEST_ANTENNA_CONFIGURATION;
   typedef std::map<Mac48Address, BEST_ANTENNA_CONFIGURATION>            STATION_ANTENNA_CONFIG_MAP;
 
+  /**
+   * Print SNR for either Tx/Rx Antenna Configurations.
+   * \param snrMap The SNR Map
+   */
+  void PrintSnrConfiguration (SNR_MAP snrMap);
   /**
    * Obtain antenna configuration for the highest received SNR to feed it back
    * \param stationAddress The MAC address of the station.
@@ -331,6 +409,10 @@ protected:
    * Start Beacon Interval (BI)
    */
   virtual void StartBeaconInterval (void) = 0;
+  /**
+   * End Beacon Interval (BI)
+   */
+  virtual void EndBeaconInterval (void) = 0;
   /**
    * Start Beacon Transmission Interval (BTI)
    */
@@ -399,6 +481,11 @@ protected:
    * Suspend ongoing transmission for the current service period.
    */
   void SuspendServicePeriodTransmission (void);
+  /**
+   * Add new data forwarding entry.
+   * \param nextHopAddress The MAC Address of the next hop.
+   */
+  void AddForwardingEntry (Mac48Address nextHopAddress);
   /**
    * This function is excuted upon the transmission of frame.
    * \param hdr The header of the transmitted frame.
@@ -474,8 +561,8 @@ protected:
   uint8_t m_sectorId;                   //!< Current Sector ID.
   uint8_t m_antennaId;                  //!< Current Antenna ID.
   uint16_t m_totalSectors;              //!< Total number of sectors remaining to cover.
-  bool m_pcpHandoverSupport;            //!< Flat to indicate if we support PCP Handover.
-  std::map<Mac48Address, bool> m_sectorFeedbackSent;  //!< Map to indicate whether we sent SSW Feedback to a station or not.
+  bool m_pcpHandoverSupport;            //!< Flag to indicate if we support PCP Handover.
+  bool m_sectorFeedbackSchedulled;      //!< Flag to indicate if we schedulled SSW Feedback.
 
   /** ATI Period Variables **/
   Ptr<DmgAtiDca> m_dmgAtiDca;           //!< Dedicated DcaTxop for ATI.
@@ -515,15 +602,20 @@ protected:
   AllocationType m_currentAllocation;           //!< The current access period allocation.
   Time m_allocationStarted;                     //!< The time we initiated the allocation.
   Time m_currentAllocationLength;               //!< The length of the current allocation period in MicroSeconds.
-  AllocationFieldList m_allocationList;         //!< List of access periods allocation in DTI.
   uint8_t m_peerStationAid;                     //!< The AID of the peer DMG STA in the current SP.
   Mac48Address m_peerStationAddress;            //!< The MAC address of the peer DMG STA in the current SP.
   Time m_suspendedPeriodDuration;               //!< The remaining duration of the suspended SP.
   bool m_spSource;                              //!< Flag to indicate if we are the source of the SP.
   bool m_beamformingTxss;                       //!< Flag to inidicate if we perform TxSS during the beamforming service period.
+  AllocationFieldList m_allocationList;         //!< List of access period allocations in DTI.
 
   /* Service Period Channel Access */
   Ptr<ServicePeriod> m_sp;                      //!< Pointer to current service period channel access pbject.
+
+  /* Beamforming Variables */
+  bool m_isBeamformingInitiator;                //!< Flag to indicate whether we initaited BF.
+  bool m_isResponderTXSS;                       //!< Flag to indicate whether the responder is TxSS or RxSS.
+  EventId m_rssEvent;                           //!< Event related to scheduling RSS.
 
   /** Link Maintenance **/
   BeamLinkMaintenanceUnitIndex m_beamlinkMaintenanceUnit;   //!< Link maintenance Unit according to std 802.11ad-2012.
@@ -559,6 +651,17 @@ protected:
   typedef MAC_MAP::const_iterator MAC_MAP_CI;
   AID_MAP m_aidMap;                                     //!< Map AID to MAC Address.
   MAC_MAP m_macMap;                                     //!< Map MAC Address to AID.
+
+  /* Data Forwarding Table */
+  typedef struct {
+    Mac48Address nextHopAddress;
+    bool isCbapPeriod;
+  } AccessPeriodInformation;
+
+  typedef std::map<Mac48Address, AccessPeriodInformation> DataForwardingTable;
+  typedef DataForwardingTable::iterator DataForwardingTableIterator;
+  typedef DataForwardingTable::const_iterator DataForwardingTableCI;
+  DataForwardingTable m_dataForwardingTable;
 
   /**
    * TracedCallback signature for service period initiation/termination.
