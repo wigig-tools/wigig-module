@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+﻿/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2015, 2016 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
@@ -295,8 +295,7 @@ DmgApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Add
 }
 
 void
-DmgApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from,
-Mac48Address to, uint8_t tid)
+DmgApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Address to, uint8_t tid)
 {
   NS_LOG_FUNCTION (this << packet << from << to << static_cast<uint32_t> (tid));
   WifiMacHeader hdr;
@@ -317,7 +316,28 @@ Mac48Address to, uint8_t tid)
 
   // Sanity check that the TID is valid
   NS_ASSERT (tid < 8);
-  m_edca[QosUtilsMapTidToAc (tid)]->Queue (packet, hdr);
+
+  bool isCbap = true;
+  AccessPeriodInformation accessPeriodInfo;
+  for (DataForwardingTableIterator it = m_dataForwardingTable.begin (); it != m_dataForwardingTable.end (); it++)
+    {
+      accessPeriodInfo = it->second;
+      if (it->first == to)
+        {
+          isCbap = accessPeriodInfo.isCbapPeriod;
+          break;
+        }
+    }
+
+  /* Check whether we should transmit in CBAP or SP */
+  if (isCbap)
+    {
+      m_edca[QosUtilsMapTidToAc (tid)]->Queue (packet, hdr);
+    }
+  else
+    {
+      m_sp->Queue (packet, hdr);
+    }
 }
 
 void DmgApWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to, Mac48Address from)
@@ -990,6 +1010,8 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
           antennaConfig.first = NO_ANTENNA_CONFIG;
           antennaConfig.second = NO_ANTENNA_CONFIG;
         }
+      /* We add the station to the list of the stations we can directly communicate with */
+      AddForwardingEntry (hdr.GetAddr1 ());
       /* Raise an event that we selected the best sector to the DMG STA */
       m_slsCompleted (address, CHANNEL_ACCESS_BHI, antennaConfig.first, antennaConfig.second);
     }
@@ -1212,6 +1234,16 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
                     }
                   else
                     {
+                      DataForwardingTableIterator forwardingIterator = m_dataForwardingTable.find (destAddress);
+                      if (forwardingIterator == m_dataForwardingTable.end ())
+                        {
+                          NS_LOG_ERROR ("Did not perform Beamforming Training with " << destAddress);
+                          continue;
+                        }
+                      else
+                        {
+                          forwardingIterator->second.isCbapPeriod = false;
+                        }
                       uint8_t destAid = field.GetDestinationAid ();
                       Mac48Address destAddress = m_aidMap[destAid];
                       ScheduleServicePeriod (field.GetNumberOfBlocks (), spStart, spLength, spPeriod,

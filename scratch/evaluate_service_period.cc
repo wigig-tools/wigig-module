@@ -29,10 +29,11 @@
  * Simulation Description:
  * Once all the stations have assoicated successfully with the PCP/AP. The PCP/AP allocates three SPs
  * to perform TxSS between all the stations. Once West DMG STA has completed TxSS phase with East and
- * South DMG STAs. The PCP/AP allocates two static service periods for data communication as following:
+ * South DMG STAs. The PCP/AP allocates three static service periods for data communication as following:
  *
  * SP1: West DMG STA -----> East DMG STA (SP Length = 3.2ms)
  * SP2: West DMG STA -----> South DMG STA (SP Length = 3.2ms)
+ * SP3: DMG AP -----> West DMG STA (SP Length = 5ms)
  *
  * Running the Simulation:
  * To run the script with the default parameters:
@@ -54,14 +55,17 @@ NS_LOG_COMPONENT_DEFINE ("EvaluateServicePeriod");
 using namespace ns3;
 using namespace std;
 
-/** West-East Allocation Variables **/
+/** West -> East Allocation Variables **/
 uint64_t westEastLastTotalRx = 0;
 double westEastAverageThroughput = 0;
-/** West-South Node Allocation Variables **/
+/** West -> South Node Allocation Variables **/
 uint64_t westSouthTotalRx = 0;
 double westSouthAverageThroughput = 0;
+/** AP -> West Node Allocation Variables **/
+uint64_t apWestTotalRx = 0;
+double apWestAverageThroughput = 0;
 
-Ptr<PacketSink> sink1, sink2;
+Ptr<PacketSink> sink1, sink2, sink3;
 
 /* Network Nodes */
 Ptr<WifiNetDevice> apWifiNetDevice;
@@ -84,6 +88,7 @@ bool scheduledStaticPeriods = false;      /* Flag to indicate whether we schedul
 /*** Service Period Parameters ***/
 uint16_t sp1Duration = 3200;              /* The duration of the allocated service period (1) in MicroSeconds */
 uint16_t sp2Duration = 3200;              /* The duration of the allocated service period (2) in MicroSeconds */
+uint16_t sp3Duration = 5000;              /* The duration of the allocated service period (3) in MicroSeconds */
 
 double
 CalculateSingleStreamThroughput (Ptr<PacketSink> sink, uint64_t &lastTotalRx, double &averageThroughput)
@@ -97,11 +102,12 @@ CalculateSingleStreamThroughput (Ptr<PacketSink> sink, uint64_t &lastTotalRx, do
 void
 CalculateThroughput (void)
 {
-  double thr1, thr2;
+  double thr1, thr2, thr3;
   Time now = Simulator::Now ();
   thr1 = CalculateSingleStreamThroughput (sink1, westEastLastTotalRx, westEastAverageThroughput);
   thr2 = CalculateSingleStreamThroughput (sink2, westSouthTotalRx, westSouthAverageThroughput);
-  std::cout << now.GetSeconds () << '\t' << thr1 << '\t'<< thr2 << std::endl;
+  thr3 = CalculateSingleStreamThroughput (sink3, apWestTotalRx, apWestAverageThroughput);
+  std::cout << now.GetSeconds () << '\t' << thr1 << '\t'<< thr2 << '\t'<< thr3 << std::endl;
   Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
 }
 
@@ -161,10 +167,23 @@ SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
           std::cout << "Schedule Static Periods" << std::endl;
           scheduledStaticPeriods = true;
           /* Schedule Static Periods */
-          apWifiMac->AllocateSingleContiguousBlock (1, SERVICE_PERIOD_ALLOCATION, true, westWifiMac->GetAssociationID (),
-                                                    eastWifiMac->GetAssociationID (), 0, sp1Duration);
-          apWifiMac->AllocateSingleContiguousBlock (2, SERVICE_PERIOD_ALLOCATION, true, westWifiMac->GetAssociationID (),
-                                                    southWifiMac->GetAssociationID (), 36000, sp2Duration);
+          uint32_t startAllocation = 0;
+          Time guardTime = MicroSeconds (10);
+          /* SP1 */
+          startAllocation = apWifiMac->AllocateSingleContiguousBlock (1, SERVICE_PERIOD_ALLOCATION, true,
+                                                                      westWifiMac->GetAssociationID (),
+                                                                      eastWifiMac->GetAssociationID (),
+                                                                      startAllocation, sp1Duration);
+          /* SP2 */
+          startAllocation = apWifiMac->AllocateSingleContiguousBlock (2, SERVICE_PERIOD_ALLOCATION, true,
+                                                                      westWifiMac->GetAssociationID (),
+                                                                      southWifiMac->GetAssociationID (),
+                                                                      startAllocation + guardTime.GetMicroSeconds (), sp2Duration);
+          /* SP3 */
+          apWifiMac->AllocateSingleContiguousBlock (3, SERVICE_PERIOD_ALLOCATION, true,
+                                                    AID_AP,
+                                                    westWifiMac->GetAssociationID (),
+                                                    startAllocation + guardTime.GetMicroSeconds (), sp3Duration);
         }
     }
 }
@@ -175,6 +194,7 @@ main (int argc, char *argv[])
   uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
   string dataRate1 = "300Mbps";                 /* Application Layer Data Rate for WestNode->EastNode. */
   string dataRate2 = "300Mbps";                 /* Application Layer Data Rate for WestNode->SouthNode. */
+  string dataRate3 = "400Mbps";                 /* Application Layer Data Rate for ApNode->WestNode. */
   uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
   uint32_t queueSize = 100000;                  /* Wifi Mac Queue Size. */
   string phyMode = "DMG_MCS24";                 /* Type of the Physical Layer. */
@@ -187,10 +207,12 @@ main (int argc, char *argv[])
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
   cmd.AddValue ("dataRate1", "Data rate for OnOff Application WestNode->EastNode", dataRate1);
   cmd.AddValue ("dataRate2", "Data rate for OnOff Application WestNode->SouthNode", dataRate2);
+  cmd.AddValue ("dataRate3", "Data rate for OnOff Application ApNode->WestNode", dataRate3);
   cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
   cmd.AddValue ("sp1Duration", "The duration of service period (1) in MicroSeconds", sp1Duration);
   cmd.AddValue ("sp2Duration", "The duration of service period (2) in MicroSeconds", sp2Duration);
+  cmd.AddValue ("sp3Duration", "The duration of service period (3) in MicroSeconds", sp3Duration);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
   cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
@@ -312,9 +334,10 @@ main (int argc, char *argv[])
 
   /* Install Simple UDP Server on both south and east Node */
   PacketSinkHelper sinkHelper ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), 9999));
-  ApplicationContainer sinks = sinkHelper.Install (NodeContainer (eastNode, southNode));
+  ApplicationContainer sinks = sinkHelper.Install (NodeContainer (eastNode, southNode, westNode));
   sink1 = StaticCast<PacketSink> (sinks.Get (0));
   sink2 = StaticCast<PacketSink> (sinks.Get (1));
+  sink3 = StaticCast<PacketSink> (sinks.Get (2));
 
   /* Install Simple UDP Transmiter on the West Node (Transmit to the East Node) */
   ApplicationContainer srcApp;
@@ -332,6 +355,12 @@ main (int argc, char *argv[])
   src.SetAttribute ("Remote", AddressValue (InetSocketAddress (staInterfaces.GetAddress (1), 9999)));
   src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate2)));
   srcApp = src.Install (westNode);
+  srcApp.Start (Seconds (3.0));
+
+  /* Install Simple UDP Transmiter on the AP Node (Transmit to the West Node) */
+  src.SetAttribute ("Remote", AddressValue (InetSocketAddress (staInterfaces.GetAddress (0), 9999)));
+  src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate3)));
+  srcApp = src.Install (apNode);
   srcApp.Start (Seconds (3.0));
 
   /* Set Maximum number of packets in WifiMacQueue */
@@ -373,7 +402,7 @@ main (int argc, char *argv[])
   eastWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, eastWifiMac));
 
   /* Print Output */
-  std::cout << "Time(s)" << '\t' << "SP1" << '\t'<< "SP2" << std::endl;
+  std::cout << "Time(s)" << '\t' << "SP1" << '\t'<< "SP2" << '\t'<< "SP3" << std::endl;
 
   Simulator::Stop (Seconds (simulationTime));
   Simulator::Run ();
@@ -383,10 +412,12 @@ main (int argc, char *argv[])
   std::cout << "Total number of packets received during each service period:" << std::endl;
   std::cout << "A1 = " << sink1->GetTotalReceivedPackets () << std::endl;
   std::cout << "A2 = " << sink2->GetTotalReceivedPackets () << std::endl;
+  std::cout << "A2 = " << sink3->GetTotalReceivedPackets () << std::endl;
 
   std::cout << "Total throughput during each service period:" << std::endl;
   std::cout << "A1 = " << westEastAverageThroughput/((simulationTime - 3) * 10) << std::endl;
   std::cout << "A2 = " << westSouthAverageThroughput/((simulationTime - 3) * 10) << std::endl;
+  std::cout << "A3 = " << apWestAverageThroughput/((simulationTime - 3) * 10) << std::endl;
 
   return 0;
 }
