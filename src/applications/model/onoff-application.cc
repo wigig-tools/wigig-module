@@ -81,10 +81,19 @@ OnOffApplication::GetTypeId (void)
                    "that there is no limit.",
                    UintegerValue (0),
                    MakeUintegerAccessor (&OnOffApplication::m_maxBytes),
-                   MakeUintegerChecker<uint32_t> ())
-    .AddAttribute ("Protocol", "The type of protocol to use.",
+                   MakeUintegerChecker<uint64_t> ())
+    .AddAttribute ("MaxPackets",
+                   "The total number of packets to send. Once these packets are sent, "
+                   "no packet is sent again, even in on state. The value zero means "
+                   "that there is no limit.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&OnOffApplication::m_maxPackets),
+                   MakeUintegerChecker<uint64_t> ())
+    .AddAttribute ("Protocol", "The type of protocol to use. This should be "
+                   "a subclass of ns3::SocketFactory",
                    TypeIdValue (UdpSocketFactory::GetTypeId ()),
                    MakeTypeIdAccessor (&OnOffApplication::m_tid),
+                   // This should check for SocketFactory as a parent
                    MakeTypeIdChecker ())
     .AddTraceSource ("Tx", "A new packet is created and is sent",
                      MakeTraceSourceAccessor (&OnOffApplication::m_txTrace),
@@ -99,7 +108,8 @@ OnOffApplication::OnOffApplication ()
     m_connected (false),
     m_residualBits (0),
     m_lastStartTime (Seconds (0)),
-    m_totBytes (0)
+    m_totBytes (0),
+    m_txPackets (0)
 {
   NS_LOG_FUNCTION (this);
 }
@@ -110,7 +120,7 @@ OnOffApplication::~OnOffApplication()
 }
 
 void 
-OnOffApplication::SetMaxBytes (uint32_t maxBytes)
+OnOffApplication::SetMaxBytes (uint64_t maxBytes)
 {
   NS_LOG_FUNCTION (this << maxBytes);
   m_maxBytes = maxBytes;
@@ -121,6 +131,12 @@ OnOffApplication::GetSocket (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_socket;
+}
+
+uint64_t
+OnOffApplication::GetTotalTxPackets (void) const
+{
+  return m_txPackets;
 }
 
 int64_t 
@@ -153,12 +169,18 @@ void OnOffApplication::StartApplication () // Called at time specified by Start
       m_socket = Socket::CreateSocket (GetNode (), m_tid);
       if (Inet6SocketAddress::IsMatchingType (m_peer))
         {
-          m_socket->Bind6 ();
+          if (m_socket->Bind6 () == -1)
+            {
+              NS_FATAL_ERROR ("Failed to bind socket");
+            }
         }
       else if (InetSocketAddress::IsMatchingType (m_peer) ||
                PacketSocketAddress::IsMatchingType (m_peer))
         {
-          m_socket->Bind ();
+          if (m_socket->Bind () == -1)
+            {
+              NS_FATAL_ERROR ("Failed to bind socket");
+            }
         }
       m_socket->Connect (m_peer);
       m_socket->SetAllowBroadcast (true);
@@ -231,7 +253,7 @@ void OnOffApplication::ScheduleNextTx ()
 {
   NS_LOG_FUNCTION (this);
 
-  if (m_maxBytes == 0 || m_totBytes < m_maxBytes)
+  if ((m_maxBytes == 0 || m_totBytes < m_maxBytes) && (m_maxPackets == 0 || m_txPackets < m_maxPackets))
     {
       uint32_t bits = m_pktSize * 8 - m_residualBits;
       NS_LOG_LOGIC ("bits = " << bits);
@@ -275,6 +297,7 @@ void OnOffApplication::SendPacket ()
   m_txTrace (packet);
   m_socket->Send (packet);
   m_totBytes += m_pktSize;
+  m_txPackets++;
   if (InetSocketAddress::IsMatchingType (m_peer))
     {
       NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds ()

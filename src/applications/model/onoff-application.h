@@ -39,10 +39,10 @@ class RandomVariableStream;
 class Socket;
 
 /**
- * \ingroup applications
+ * \ingroup applications 
  * \defgroup onoff OnOffApplication
  *
- * This traffic generator follows an On/Off pattern: after
+ * This traffic generator follows an On/Off pattern: after 
  * Application::StartApplication
  * is called, "On" and "Off" states alternate. The duration of each of
  * these states is determined with the onTime and the offTime random
@@ -83,7 +83,7 @@ class Socket;
 * If the underlying socket type supports broadcast, this application
 * will automatically enable the SetAllowBroadcast(true) socket option.
 */
-class OnOffApplication : public Application
+class OnOffApplication : public Application 
 {
 public:
   /**
@@ -104,13 +104,18 @@ public:
    *
    * \param maxBytes the total number of bytes to send
    */
-  void SetMaxBytes (uint32_t maxBytes);
+  void SetMaxBytes (uint64_t maxBytes);
 
   /**
    * \brief Return a pointer to associated socket.
    * \return pointer to associated socket
    */
   Ptr<Socket> GetSocket (void) const;
+
+  /**
+   * \return the total packets transmitted
+   */
+  uint64_t GetTotalTxPackets (void) const;
 
  /**
   * \brief Assign a fixed random variable stream number to the random variables
@@ -158,8 +163,10 @@ private:
   uint32_t        m_pktSize;      //!< Size of packets
   uint32_t        m_residualBits; //!< Number of generated, but not sent, bits
   Time            m_lastStartTime; //!< Time last packet sent
-  uint32_t        m_maxBytes;     //!< Limit total number of bytes sent
-  uint32_t        m_totBytes;     //!< Total bytes sent so far
+  uint64_t        m_maxBytes;     //!< Limit total number of bytes sent
+  uint64_t        m_maxPackets;   //!< Limit total number of packets sent
+  uint64_t        m_totBytes;     //!< Total bytes sent so far
+  uint64_t        m_txPackets;     //!< Total packets sent so far
   EventId         m_startStopEvent;     //!< Event id for next start or stop event
   EventId         m_sendEvent;    //!< Event id of pending "send packet" event
   TypeId          m_tid;          //!< Type of the socket used
