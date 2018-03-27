@@ -502,6 +502,7 @@ private:
   /* Store packet and header for service period */
   typedef std::pair<Ptr<const Packet>, WifiMacHeader> PacketInformation;
   typedef std::map<AllocationID, PacketInformation> StoredPackets;
+  typedef StoredPackets::iterator StoredPacketsI;
   typedef StoredPackets::const_iterator StoredPacketsCI;
   StoredPackets m_storedPackets;
 

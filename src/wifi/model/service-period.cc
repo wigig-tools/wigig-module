@@ -157,7 +157,7 @@ ServicePeriod::NotifyAccessGranted (void)
   NS_LOG_FUNCTION (this);
   /* Update remaining SP duration */
   m_remainingDuration = GetRemainingDuration ();
-  if (m_remainingDuration <= Seconds (0))
+  if (m_remainingDuration.IsNegative ())
     {
       m_accessAllowed = false;
       return;
@@ -645,6 +645,14 @@ ServicePeriod::EndCurrentServicePeriod (void)
     {
       m_storedPackets[m_allocationID] = std::make_pair (m_currentPacket, m_currentHdr);
       m_currentPacket = 0;
+    }
+  else
+    {
+      StoredPacketsI it = m_storedPackets.find (m_allocationID);
+      if (it != m_storedPackets.end ())
+        {
+          m_storedPackets.erase (it);
+        }
     }
   /* Inform MAC Low to store parameters related to this service period (MPDU/A-MPDU) */
   if (!m_low->IsTransmissionSuspended ())
