@@ -256,7 +256,7 @@ InterferenceHelper::AppendEvent (Ptr<InterferenceHelper::Event> event)
 
 
 double
-InterferenceHelper::CalculateSnr (double signal, double noiseInterference, uint8_t channelWidth) const
+InterferenceHelper::CalculateSnr (double signal, double noiseInterference, uint16_t channelWidth) const
 {
   //thermal noise at 290K in J/s = W
   static const double BOLTZMANN = 1.3803e-23;
