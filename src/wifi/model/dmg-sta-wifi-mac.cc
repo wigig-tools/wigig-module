@@ -1608,6 +1608,7 @@ DmgStaWifiMac::ReportChannelQualityMeasurement (TimeBlockMeasurementList list)
   reportElem->SetChannelNumber (m_reqElem->GetChannelNumber ());
   reportElem->SetMeasurementDuration (m_reqElem->GetMeasurementDuration ());
   reportElem->SetMeasurementMethod (m_reqElem->GetMeasurementMethod ());
+  reportElem->SetNumberOfTimeBlocks(m_reqElem->GetNumberOfTimeBlocks());
   /* Add obtained measurement results to the report */
   for (TimeBlockMeasurementListCI it = list.begin (); it != list.end (); it++)
     {
