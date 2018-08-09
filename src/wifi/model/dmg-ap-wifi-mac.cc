@@ -617,12 +617,11 @@ DmgApWifiMac::ModifyAllocation (AllocationID id, uint8_t srcAid, uint8_t dstAid,
   NS_LOG_FUNCTION (this << uint32_t (id) << uint32_t (srcAid) << uint32_t (dstAid) << newStartTime << newDuration);
   for (AllocationFieldList::iterator iter = m_allocationList.begin (); iter != m_allocationList.end (); iter++)
     {
-      AllocationField field = (*iter);
-      if ((field.GetAllocationID () == id) &&
-          (field.GetSourceAid () == srcAid) && (field.GetDestinationAid () == dstAid))
+      if ((iter->GetAllocationID () == id) &&
+          (iter->GetSourceAid () == srcAid) && (iter->GetDestinationAid () == dstAid))
         {
-          field.SetAllocationStart (newStartTime);
-          field.SetAllocationBlockDuration (newDuration);
+          iter->SetAllocationStart (newStartTime);
+          iter->SetAllocationBlockDuration (newDuration);
           break;
         }
     }
