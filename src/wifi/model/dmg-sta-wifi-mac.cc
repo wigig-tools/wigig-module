@@ -168,6 +168,9 @@ DmgStaWifiMac::DmgStaWifiMac ()
 
   /* Let the lower layers know that we are acting as a non-AP DMG STA in an infrastructure BSS. */
   SetTypeOfStation (DMG_STA);
+
+  /* Spatial Sharing Variables */
+  m_recievedDirectionalChannelQualityRequest = false;
 }
 
 DmgStaWifiMac::~DmgStaWifiMac ()
@@ -849,6 +852,12 @@ DmgStaWifiMac::StartDataTransmissionInterval (void)
   Time nextBeaconInterval = m_beaconInterval - (Simulator::Now () - m_biStartTime);
   Simulator::Schedule (nextBeaconInterval, &DmgStaWifiMac::StartBeaconInterval, this);
   NS_LOG_DEBUG ("Next Beacon Interval will start at " << Simulator::Now () + nextBeaconInterval);
+
+  if (m_recievedDirectionalChannelQualityRequest){
+    Simulator::Schedule (MicroSeconds (m_reqElem->GetMeasurementStartTime ()),
+                                      &DmgStaWifiMac::StartChannelQualityMeasurement, this, m_reqElem);
+    m_recievedDirectionalChannelQualityRequest = false;
+  }
 
   /* Send Association Request if we are not assoicated */
   if (!IsAssociated ())
@@ -1595,7 +1604,6 @@ DmgStaWifiMac::StartChannelQualityMeasurement (Ptr<DirectionalChannelQualityRequ
       m_sp->DisableChannelAccess ();
       m_dcfManager->DisableChannelAccess ();
     }
-  m_reqElem = element;
   StaticCast<YansWifiPhy> (m_phy)->StartMeasurement (element->GetMeasurementDuration (), element->GetNumberOfTimeBlocks ());
 }
 
@@ -2194,11 +2202,10 @@ DmgStaWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
               {
                 RadioMeasurementRequest requestHdr;
                 packet->RemoveHeader (requestHdr);
-                Ptr<DirectionalChannelQualityRequestElement> elem =
-                    DynamicCast<DirectionalChannelQualityRequestElement> (requestHdr.GetListOfMeasurementRequestElement ().at (0));
-                /* Schedule the start of the requested measurement */
-                Simulator::Schedule (MicroSeconds (elem->GetMeasurementStartTime ()),
-                                     &DmgStaWifiMac::StartChannelQualityMeasurement, this, elem);
+                /* Set Flag so when DTI starts, it will know to schdule channel quality request at the appropiate time */
+                m_reqElem = DynamicCast<DirectionalChannelQualityRequestElement> (requestHdr.GetListOfMeasurementRequestElement ().at (0));
+                m_recievedDirectionalChannelQualityRequest = true;
+                
                 return;
               }
             default:
