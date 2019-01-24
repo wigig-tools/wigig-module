@@ -63,7 +63,7 @@ The Workshop on ns-3 (WNS3), 13-14 June 2017, Porto, Portugal
 
 ## Project Road-map:
 
-# Short-Term Road-map:
+### Short-Term Road-map:
 I am panning to release the following new features around June/July:
 1. Codebook design for supporting multiple-phased antenna array per device. 
 1. Codebook generator application.
@@ -72,7 +72,7 @@ I am panning to release the following new features around June/July:
 1. QD-Channel model using Ray-Tracer application.
 1. Bug fixes and code usability improvement.
 
-# Long Term Road-map:
+### Long Term Road-map:
 The following features are being developed but in slow progress:
 1. Add 802.11ay PHY frame structure, new MAC frame formats and new Information Elements.
 1. Add support for SU/MU-MIMO signaling and communication. I am planning to model it in more advanced way compared to the way currently done in 802.11n/ac model (Doubling the achieved throughout).
@@ -107,7 +107,7 @@ The previous command builds the required models only to run IEEE 802.11ad with i
     ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi' --enable-static -d optimized
     ./waf build
 
-## Tutorials Scripts:
+## Tutorial Scripts:
 The project includes different scripts located in scratch folder to test the previous listed features and mechanisms. At the beginning of each script, I include some description regarding the tested feature, network topology, expected output, and usage method.
 
 ## Reporting:
