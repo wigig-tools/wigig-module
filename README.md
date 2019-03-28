@@ -1,5 +1,19 @@
+## Latest News:
+We just got a new paper accepted in WNS3-2019 which brings a lot of new features and capabilities to the current model. The new features include:
+
+1. Beamforming Codebook design for beamforming training and beam steering.
+1. Quasi-deterministic channel model to simulate real propagation environments.
+1. Codebook Generator application in MATLAB to generate codebook samples similar to ones used in Qualcomm QCA9500 Chipset.
+1. Multi-antenna beamforming training.
+1. Accurate BER vs SNR lookup tables for all PHY layers.
+1. Beam refinement for transmit and receive beam patterns.
+1. Multi-AP support without the need for decentralized clustering.
+1. Many new examples and bug fixes.
+
+We are planning to release the new version of the code around July 2019. If you are interested in the code before the official release date, feel free to contact us.
+
 ## Introduction:
-This is a repository for the development of WLAN IEEE 802.11ad model in ns-3. The implemented model supports the following features:
+This is a repository for the development of WLAN IEEE 802.11ad/ay model in network simulator ns-3. The implemented model supports the following features:
 
 1. DMG Channel Access Periods (BTI/A-BFT/ATI/DTI with both CBAP and Service Periods).
 1. Beamforming Training (BT) in BHI and DTI.
@@ -10,7 +24,7 @@ This is a repository for the development of WLAN IEEE 802.11ad model in ns-3. Th
 1. DMG Relay Support (Full Duplex and Half Duplex Modes).
 1. Dynamic Channel Allocation (Polling).
 1. Service Period Allocation.
-1. Beamformed Link Maintenance.
+1. Beamformed Link Maintenance for Service Period Allocation.
 1. Decentralized Clustering.
 1. Spatial Sharing and Interference Assessment. 
 
