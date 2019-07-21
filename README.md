@@ -79,23 +79,23 @@ The Workshop on ns-3 (WNS3), 13-14 June 2017, Porto, Portugal
 Hany Assasa, Joerg Widmer, Tanguy  Ropitault, Nada Golmie (June 2019) 
 The Workshop on ns-3 (WNS3), 19-20 June 2019, Florence, Italy
 
-@inproceedings{Assasa:2019:ENI:3321349.3321354,
- author = {Assasa, Hany and Widmer, Joerg and Ropitault, Tanguy and Golmie, Nada},
- title = {Enhancing the Ns-3 IEEE 802.11Ad Model Fidelity: Beam Codebooks, Multi-antenna Beamforming Training, and Quasi-deterministic mmWave Channel},
- booktitle = {Proceedings of the 2019 Workshop on Ns-3},
- series = {WNS3 2019},
- year = {2019},
- isbn = {978-1-4503-7140-7},
- location = {Florence, Italy},
- pages = {33--40},
- numpages = {8},
- url = {http://doi.acm.org/10.1145/3321349.3321354},
- doi = {10.1145/3321349.3321354},
- acmid = {3321354},
- publisher = {ACM},
- address = {New York, NY, USA},
- keywords = {60 GHz, IEEE 802.11ad, IEEE 802.11ay, Millimeter Wave, Simulations, WiGig, ns-3},
-} 
+    @inproceedings{Assasa:2019:ENI:3321349.3321354,
+     author = {Assasa, Hany and Widmer, Joerg and Ropitault, Tanguy and Golmie, Nada},
+     title = {Enhancing the Ns-3 IEEE 802.11Ad Model Fidelity: Beam Codebooks, Multi-antenna Beamforming Training, and Quasi-deterministic mmWave Channel},
+     booktitle = {Proceedings of the 2019 Workshop on Ns-3},
+     series = {WNS3 2019},
+     year = {2019},
+     isbn = {978-1-4503-7140-7},
+     location = {Florence, Italy},
+     pages = {33--40},
+     numpages = {8},
+     url = {http://doi.acm.org/10.1145/3321349.3321354},
+     doi = {10.1145/3321349.3321354},
+     acmid = {3321354},
+     publisher = {ACM},
+     address = {New York, NY, USA},
+     keywords = {60 GHz, IEEE 802.11ad, IEEE 802.11ay, Millimeter Wave, Simulations, WiGig, ns-3},
+    } 
 
 ## Project Road-map:
 
