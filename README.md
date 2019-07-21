@@ -16,86 +16,17 @@ We are planning to release the new version of the code around August 2019.
 This is a repository for the development of WLAN IEEE 802.11ad/ay model in network simulator ns-3. The implemented model supports the following features:
 
 1. DMG Channel Access Periods (BTI/A-BFT/ATI/DTI with both CBAP and Service Periods).
-1. Beamforming Training (BT) in BHI and DTI.
+1. Beamforming Training (BT) in both BHI and DTI access periods.
 1. DMG PLCP Model for 802.11ad frame transmission and reception.
 1. Abstract DMG PHY layer for DMG CTRL/SC/OFDM.
 1. 60 GHz Directional Antenna Model.
 1. Fast Session Transfer (FST) Mechanism.
 1. DMG Relay Support (Full Duplex and Half Duplex Modes).
-1. Dynamic Channel Allocation (Polling).
+1. Dynamic Allocation of Service Period (Polling).
 1. Service Period Allocation.
 1. Beamformed Link Maintenance for Service Period Allocation.
 1. Decentralized Clustering.
 1. Spatial Sharing and Interference Assessment. 
-
-## Acknowledgment:
-The implementation is based on the existing model of the WLAN IEEE 802.11 in ns-3. The following papers include background on IEEE 802.11ad, implementation details, and evaluation section for this model. If you use our model in your research, please cite the following papers: 
-
-**[Implementation and Evaluation of a WLAN IEEE 802.11ad Model in ns-3.](https://dl.acm.org/citation.cfm?id=2915377)**
-Hany Assasa, Joerg Widmer (June 2016)
-The Workshop on ns-3 (WNS3 2016), 15-16 June 2016, Seattle, WA, USA
-
-    @inproceedings{Assasa:2016:IEW:2915371.2915377,
-     author = {Assasa, Hany and Widmer, Joerg},
-     title = {Implementation and Evaluation of a WLAN IEEE 802.11Ad Model in Ns-3},
-     booktitle = {Proceedings of the Workshop on Ns-3},
-     series = {WNS3 '16},
-     year = {2016},
-     isbn = {978-1-4503-4216-2},
-     location = {Seattle, WA, USA},
-     pages = {57--64},
-     numpages = {8},
-     url = {http://doi.acm.org/10.1145/2915371.2915377},
-     doi = {10.1145/2915371.2915377},
-     acmid = {2915377},
-     publisher = {ACM},
-     address = {New York, NY, USA},
-     keywords = {60 GHz, IEEE 802.11ad, Millimeter Wave, ns-3},
-    } 
-
-**[Extending the IEEE 802.11ad Model: Scheduled Access, Spatial Reuse, Clustering, and Relaying.](https://dl.acm.org/citation.cfm?id=3067667)**
-Hany Assasa, Joerg Widmer (June 2017) 
-The Workshop on ns-3 (WNS3), 13-14 June 2017, Porto, Portugal
-
-    @inproceedings{Assasa:2017:EIM:3067665.3067667,
-     author = {Assasa, Hany and Widmer, Joerg},
-     title = {Extending the IEEE 802.11ad Model: Scheduled Access, Spatial Reuse, Clustering, and Relaying},
-     booktitle = {Proceedings of the Workshop on Ns-3},
-     series = {WNS3 '17},
-     year = {2017},
-     isbn = {978-1-4503-5219-2},
-     location = {Porto, Portugal},
-     pages = {39--46},
-     numpages = {8},
-     url = {http://doi.acm.org/10.1145/3067665.3067667},
-     doi = {10.1145/3067665.3067667},
-     acmid = {3067667},
-     publisher = {ACM},
-     address = {New York, NY, USA},
-     keywords = {60 GHz, IEEE 802.11ad, Millimeter Wave, WiGig, ns-3},
-    } 
-
-**[Enhancing the ns-3 IEEE 802.11ad Model Fidelity: Beam Codebooks, Multi-antenna Beamforming Training, and Quasi-deterministic mmWave Channel.](https://dl.acm.org/citation.cfm?id=3321354)**
-Hany Assasa, Joerg Widmer, Tanguy  Ropitault, Nada Golmie (June 2019) 
-The Workshop on ns-3 (WNS3), 19-20 June 2019, Florence, Italy
-
-    @inproceedings{Assasa:2019:ENI:3321349.3321354,
-     author = {Assasa, Hany and Widmer, Joerg and Ropitault, Tanguy and Golmie, Nada},
-     title = {Enhancing the Ns-3 IEEE 802.11Ad Model Fidelity: Beam Codebooks, Multi-antenna Beamforming Training, and Quasi-deterministic mmWave Channel},
-     booktitle = {Proceedings of the 2019 Workshop on Ns-3},
-     series = {WNS3 2019},
-     year = {2019},
-     isbn = {978-1-4503-7140-7},
-     location = {Florence, Italy},
-     pages = {33--40},
-     numpages = {8},
-     url = {http://doi.acm.org/10.1145/3321349.3321354},
-     doi = {10.1145/3321349.3321354},
-     acmid = {3321354},
-     publisher = {ACM},
-     address = {New York, NY, USA},
-     keywords = {60 GHz, IEEE 802.11ad, IEEE 802.11ay, Millimeter Wave, Simulations, WiGig, ns-3},
-    } 
 
 ## Project Road-map:
 
@@ -145,6 +76,26 @@ The previous command builds the required models only to run IEEE 802.11ad with i
 
 ## Tutorial Scripts:
 The project includes different scripts located in the scratch folder to test the previously listed features and mechanisms. At the beginning of each script, I add some description regarding the tested functionality, network topology, expected output, and usage method.
+
+## Publications:
+The implementation is based on the existing model of the WLAN IEEE 802.11 in ns-3. The following papers include background on IEEE 802.11ad, implementation details, and evaluation section for this model. If you use our model in your research, please cite the following papers: 
+
+* Hany Assasa, and Joerg Widmer.
+**[Implementation and Evaluation of a WLAN IEEE 802.11ad Model in ns-3.](https://dl.acm.org/citation.cfm?id=2915377)**
+The Workshop on ns-3 (WNS3 2016), 15-16 June 2016, Seattle, WA, USA.
+* Hany Assasa, and Joerg Widmer.
+**[Extending the IEEE 802.11ad Model: Scheduled Access, Spatial Reuse, Clustering, and Relaying.](https://dl.acm.org/citation.cfm?id=3067667)**
+The Workshop on ns-3 (WNS3), 13-14 June 2017, Porto, Portugal.
+* Hany Assasa, Joerg Widmer, Tanguy  Ropitault, and Nada Golmie.
+**[Enhancing the ns-3 IEEE 802.11ad Model Fidelity: Beam Codebooks, Multi-antenna Beamforming Training, and Quasi-deterministic mmWave Channel.](https://dl.acm.org/citation.cfm?id=3321354)**
+The Workshop on ns-3 (WNS3), 19-20 June 2019, Florence, Italy.
+* Hany Assasa, Joerg Widmer, Tanguy Ropitault, Anuraag Bodi, and Nada Golmie.
+**[High Fidelity Simulation of IEEE 802.11ad in ns-3 Using a Quasi-deterministic Channel Model.](https://dl.acm.org/citation.cfm?id=3337946)**
+Proceedings of the 2019 Workshop on Next-Generation Wireless with ns-3 (WNGW 2019), 21 June 2019, Florence, Italy.
+* Hany Assasa, Joerg Widmer, Jian Wang, Tanguy Ropitault, and Nada Golmie.
+**[An Implementation Proposal for IEEE 802.11ay SU/MU-MIMO Communication in ns-3](https://dl.acm.org/citation.cfm?id=3337947)**
+Proceedings of the 2019 Workshop on Next-Generation Wireless with ns-3 (WNGW 2019), 21 June 2019, Florence, Italy.
+
 
 ## Reporting:
 In case you come across a bug during the usage of the original model, please report the problem to the following email address (hany.assasa@gmail.com). In the email, please include the following:
