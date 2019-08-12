@@ -564,6 +564,7 @@ private:
   /* Spatial Sharing and Interference Mitigation */
   bool m_supportSpsh;                           //!< Flag to indicate whether we support Spatial Sharing and Interference Mitigation.
   Ptr<DirectionalChannelQualityRequestElement> m_reqElem;
+  bool m_recievedDirectionalChannelQualityRequest;      // Flag to indicate whether a channel Quality Request has been requested.
 
 };
 

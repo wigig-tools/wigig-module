@@ -82,11 +82,11 @@ uint8_t stationsTrained = 0;              /* Number of BF trained stations */
 bool scheduledStaticPeriods = false;      /* Flag to indicate whether we scheduled Static Service Periods or not */
 
 /*** Service Period Parameters ***/
-uint16_t sp1Duration = 20000;             /* The duration of the allocated service period (1) in MicroSeconds */
-uint16_t sp2Duration = 12000;             /* The duration of the allocated service period (2) in MicroSeconds */
-uint32_t sp1StartTime;                    /* The start time of the allocated service period (1) in MicroSeconds */
-uint32_t sp2StartTime;                    /* The start time of the allocated service period (2) in MicroSeconds */
-uint16_t offsetDuration = 1000;           /* The offset between the start of the two service period allocations in MicroSeconds */
+uint16_t sp1Duration = 20000;                                           /* The duration of the allocated service period (1) in MicroSeconds */
+uint16_t sp2Duration = 12000;                                           /* The duration of the allocated service period (2) in MicroSeconds */
+uint16_t offsetDuration = 1000;                                         /* The offset between the start of the two service period allocations in MicroSeconds */
+uint32_t sp1StartTime = 10000;                                          /* The start time of the allocated service period (1) in MicroSeconds (CBAP finishes after 10000)*/
+uint32_t sp2StartTime = sp1StartTime + sp1Duration + offsetDuration;    /* The start time of the allocated service period (2) in MicroSeconds */
 typedef std::map<Mac48Address, bool> ReportMap;
 typedef ReportMap::const_iterator ReportMapCI;
 ReportMap m_reportsStatus;
@@ -169,15 +169,15 @@ SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
           scheduledStaticPeriods = true;
           /* Schedule Allocation Periods */
           uint32_t startTime = 0;
-          startTime = apWifiMac->AllocateCbapPeriod (true, startTime, 10000);
-          sp1StartTime = apWifiMac->AllocateSingleContiguousBlock (1, SERVICE_PERIOD_ALLOCATION, true,
+          startTime = apWifiMac->AllocateCbapPeriod (true, startTime, sp1StartTime);
+          startTime = apWifiMac->AllocateSingleContiguousBlock (1, SERVICE_PERIOD_ALLOCATION, true,
                                                                    wifiMac1->GetAssociationID (),
                                                                    wifiMac2->GetAssociationID (),
                                                                    startTime,
                                                                    sp1Duration);
-          startTime = sp1StartTime;
+
           /* Candidate SP */
-          sp2StartTime = apWifiMac->AllocateSingleContiguousBlock (2, SERVICE_PERIOD_ALLOCATION, true,
+          startTime = apWifiMac->AllocateSingleContiguousBlock (2, SERVICE_PERIOD_ALLOCATION, true,
                                                                    wifiMac3->GetAssociationID (),
                                                                    wifiMac4->GetAssociationID (),
                                                                    startTime + offsetDuration,
