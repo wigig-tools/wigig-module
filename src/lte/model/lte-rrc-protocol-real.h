@@ -52,8 +52,11 @@ class LteUeRrc;
  */
 class LteUeRrcProtocolReal : public Object
 {
+  /// allow MemberLteUeRrcSapUser<LteUeRrcProtocolReal> class friend access
   friend class MemberLteUeRrcSapUser<LteUeRrcProtocolReal>;
+  /// allow LteRlcSpecificLteRlcSapUser<LteUeRrcProtocolReal> class friend access
   friend class LteRlcSpecificLteRlcSapUser<LteUeRrcProtocolReal>;
+  /// allow LtePdcpSpecificLtePdcpSapUser<LteUeRrcProtocolReal> class friend access
   friend class LtePdcpSpecificLtePdcpSapUser<LteUeRrcProtocolReal>;
 
 public:
@@ -170,9 +173,13 @@ private:
  */
 class LteEnbRrcProtocolReal : public Object
 {
+  /// allow MemberLteEnbRrcSapUser<LteEnbRrcProtocolReal> class friend access
   friend class MemberLteEnbRrcSapUser<LteEnbRrcProtocolReal>;
+  /// allow LtePdcpSpecificLtePdcpSapUser<LteEnbRrcProtocolReal> class friend access
   friend class LtePdcpSpecificLtePdcpSapUser<LteEnbRrcProtocolReal>;
+  /// allow LteRlcSpecificLteRlcSapUser<LteEnbRrcProtocolReal> class friend access
   friend class LteRlcSpecificLteRlcSapUser<LteEnbRrcProtocolReal>;
+  /// allow RealProtocolRlcSapUser class friend access
   friend class RealProtocolRlcSapUser;
 
 public:
@@ -240,15 +247,17 @@ private:
   /**
    * Send system information function
    *
+   * \param cellId cell ID
    * \param msg LteRrcSap::SystemInformation
    */
-  void DoSendSystemInformation (LteRrcSap::SystemInformation msg);
+  void DoSendSystemInformation (uint16_t cellId, LteRrcSap::SystemInformation msg);
   /**
    * Send system information function
    *
+   * \param cellId cell ID
    * \param msg LteRrcSap::SystemInformation
    */
-  void SendSystemInformation (LteRrcSap::SystemInformation msg);
+  void SendSystemInformation (uint16_t cellId, LteRrcSap::SystemInformation msg);
   /**
    * Send RRC connection setup function
    *

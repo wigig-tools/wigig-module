@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include "wifi-mode.h"
 #include "error-rate-model.h"
-#include "dsss-error-rate-model.h"
 
 namespace ns3 {
 
@@ -31,7 +30,7 @@ public:
 
   SensitivityModel60GHz ();
 
-  virtual double GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, double snr, uint32_t nbits) const;
+  virtual double GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, double snr, uint64_t nbits) const;
 };
 
 } // namespace ns3

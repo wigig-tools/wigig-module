@@ -32,11 +32,24 @@
 
 using namespace ns3;
 
+/**
+ * \ingroup netanim
+ * \defgroup netanim-test animation module tests
+ */
+
+
+/**
+ * \ingroup netanim-test
+ * \ingroup tests
+ *
+ * \brief Abstract Animation Interface Test Case
+ */
 class AbstractAnimationInterfaceTestCase : public TestCase
 {
 public:
   /**
    * \brief Constructor.
+   * \param name testcase name
    */
   AbstractAnimationInterfaceTestCase (std::string name);
   /**
@@ -53,21 +66,21 @@ public:
 
 protected:
 
-  NodeContainer m_nodes;
-  AnimationInterface* m_anim;
+  NodeContainer m_nodes; ///< the nodes
+  AnimationInterface* m_anim; ///< animation
 
 private:
 
-  virtual void
-  PrepareNetwork () = 0;
+  /// Prepare network function
+  virtual void PrepareNetwork () = 0;
 
-  virtual void
-  CheckLogic () = 0;
+  /// Check logic function
+  virtual void CheckLogic () = 0;
 
-  virtual void
-  CheckFileExistence ();
+  /// Check file existence
+  virtual void CheckFileExistence ();
 
-  const char* m_traceFileName;
+  const char* m_traceFileName; ///< trace file name
 };
 
 AbstractAnimationInterfaceTestCase::AbstractAnimationInterfaceTestCase (std::string name) :
@@ -102,6 +115,12 @@ AbstractAnimationInterfaceTestCase::CheckFileExistence ()
   unlink (m_traceFileName);
 }
 
+/**
+ * \ingroup netanim-test
+ * \ingroup tests
+ *
+ * \brief Animation Interface Test Case
+ */
 class AnimationInterfaceTestCase : public AbstractAnimationInterfaceTestCase
 {
 public:
@@ -169,6 +188,12 @@ AnimationInterfaceTestCase::CheckLogic (void)
   NS_TEST_ASSERT_MSG_EQ (m_anim->GetTracePktCount (), 16, "Expected 16 packets traced");
 }
 
+/**
+ * \ingroup netanim-test
+ * \ingroup tests
+ *
+ * \brief Animation Remaining Energy Test Case
+ */
 class AnimationRemainingEnergyTestCase : public AbstractAnimationInterfaceTestCase
 {
 public:
@@ -185,9 +210,9 @@ private:
   virtual void
   CheckLogic ();
 
-  Ptr<BasicEnergySource> m_energySource;
-  Ptr<SimpleDeviceEnergyModel> m_energyModel;
-  const double m_initialEnergy;
+  Ptr<BasicEnergySource> m_energySource; ///< energy source
+  Ptr<SimpleDeviceEnergyModel> m_energyModel; ///< energy model
+  const double m_initialEnergy; ///< initial energy
 };
 
 AnimationRemainingEnergyTestCase::AnimationRemainingEnergyTestCase () :
@@ -228,6 +253,12 @@ AnimationRemainingEnergyTestCase::CheckLogic (void)
                             "Wrong remaining energy value was traced");
 }
 
+/**
+ * \ingroup netanim-test
+ * \ingroup tests
+ *
+ * \brief Animation Interface Test Suite
+ */
 static class AnimationInterfaceTestSuite : public TestSuite
 {
 public:
@@ -237,4 +268,4 @@ public:
     AddTestCase (new AnimationInterfaceTestCase (), TestCase::QUICK);
     AddTestCase (new AnimationRemainingEnergyTestCase (), TestCase::QUICK);
   }
-} g_animationInterfaceTestSuite;
+} g_animationInterfaceTestSuite; ///< the test suite

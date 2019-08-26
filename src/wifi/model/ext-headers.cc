@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/address-utils.h"
@@ -668,7 +668,7 @@ ExtDMGBeacon::Serialize (Buffer::Iterator start) const
   /* Other Information Elements */
   Buffer::Iterator i = start;
 
-  i.WriteHtolsbU64 (Simulator::Now ().GetMicroSeconds ());
+  i.WriteHtolsbU64 (m_timestamp);
   i = m_ssw.Serialize (i);
   i.WriteHtolsbU16 (m_beaconInterval / 1024);
   i = m_beaconIntervalCtrl.Serialize (i);

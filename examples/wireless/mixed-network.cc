@@ -147,7 +147,7 @@ Experiment::Run (Parameters params)
   channel.AddPropagationLoss ("ns3::RangePropagationLossModel");
 
   YansWifiPhyHelper phy = YansWifiPhyHelper::Default ();
-  phy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+  phy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
   phy.SetChannel (channel.Create ());
 
   WifiHelper wifi;
@@ -193,7 +193,7 @@ Experiment::Run (Parameters params)
   wifi.SetStandard (params.apType);
   mac.SetType ("ns3::ApWifiMac",
                "Ssid", SsidValue (ssid),
-               "BeaconGeneration", BooleanValue (true),
+               "EnableBeaconJitter", BooleanValue (false),
                "BE_MaxAmpduSize", UintegerValue (0),
                "BE_BlockAckThreshold", UintegerValue (2),
                "RifsSupported", BooleanValue (params.rifsSupported),

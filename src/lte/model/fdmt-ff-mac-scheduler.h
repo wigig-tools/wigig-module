@@ -98,7 +98,9 @@ public:
   virtual void SetLteFfrSapProvider (LteFfrSapProvider* s);
   virtual LteFfrSapUser* GetLteFfrSapUser ();
 
+  /// allow MemberCschedSapProvider<FdMtFfMacScheduler> class friend access
   friend class MemberCschedSapProvider<FdMtFfMacScheduler>;
+  /// allow MemberSchedSapProvider<FdMtFfMacScheduler> clss friend access
   friend class MemberSchedSapProvider<FdMtFfMacScheduler>;
 
   /**
@@ -194,13 +196,13 @@ private:
 
   /**
    * Sched UL noise interference request function
-   * \param params teh Sched UL noise interference request parameters
+   * \param params the Sched UL noise interference request parameters
    */ 
   void DoSchedUlNoiseInterferenceReq (const struct FfMacSchedSapProvider::SchedUlNoiseInterferenceReqParameters& params);
 
   /**
    * Sched UL SR infor request function
-   * \param params teh Sched UL SR info request parameters
+   * \param params the Sched UL SR info request parameters
    */
   void DoSchedUlSrInfoReq (const struct FfMacSchedSapProvider::SchedUlSrInfoReqParameters& params);
 
@@ -355,7 +357,7 @@ private:
 
   uint16_t m_nextRntiUl; ///< RNTI of the next user to be served next scheduling in UL
 
-  uint32_t m_cqiTimersThreshold; ///< # of TTIs for which a CQI canbe considered valid
+  uint32_t m_cqiTimersThreshold; ///< # of TTIs for which a CQI can be considered valid
 
   std::map <uint16_t,uint8_t> m_uesTxMode; ///< txMode of the UEs
 

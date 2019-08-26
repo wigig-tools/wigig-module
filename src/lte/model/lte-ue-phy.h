@@ -51,7 +51,9 @@ class LteHarqPhy;
 class LteUePhy : public LtePhy
 {
 
+  /// allow UeMemberLteUePhySapProvider class friend access
   friend class UeMemberLteUePhySapProvider;
+  /// allow MemberLteUeCphySapProvider<LteUePhy> class friend access
   friend class MemberLteUeCphySapProvider<LteUePhy>;
 
 public:
@@ -227,6 +229,7 @@ public:
 
   /**
    * \brief PhySpectrum received a new PHY-PDU
+   * \param p the packet received
    */
   void PhyPduReceived (Ptr<Packet> p);
 
@@ -247,11 +250,13 @@ public:
 
   /**
    * \brief PhySpectrum generated a new DL HARQ feedback
+   * \param mes the DlInfoListElement_s
    */
   virtual void ReceiveLteDlHarqFeedback (DlInfoListElement_s mes);
 
   /**
    * \brief Set the HARQ PHY module
+   * \param harq the HARQ PHY module
    */
   void SetHarqPhyModule (Ptr<LteHarqPhy> harq);
 
@@ -514,7 +519,7 @@ private:
   /// \todo Can be removed.
   uint8_t m_subframeNo;
 
-  bool m_rsReceivedPowerUpdated; ///< RS reveive power updated?
+  bool m_rsReceivedPowerUpdated; ///< RS receive power updated?
   SpectrumValue m_rsReceivedPower; ///< RS receive power
 
   bool m_rsInterferencePowerUpdated; ///< RS interference power updated?

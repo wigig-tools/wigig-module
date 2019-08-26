@@ -116,6 +116,10 @@ public:
    * \return the total packets transmitted
    */
   uint64_t GetTotalTxPackets (void) const;
+  /**
+   * \return the total bytes transmitted
+   */
+  uint64_t GetTotalTxBytes (void) const;
 
  /**
   * \brief Assign a fixed random variable stream number to the random variables
@@ -126,13 +130,14 @@ public:
   */
   int64_t AssignStreams (int64_t stream);
 
+  // inherited from Application base class.
+  virtual void StartApplication (void);    // Called at time specified by Start
+  // inherited from Application base class.
+  virtual void StopApplication (void);     // Called at time specified by Stop
+
 protected:
   virtual void DoDispose (void);
 private:
-  // inherited from Application base class.
-  virtual void StartApplication (void);    // Called at time specified by Start
-  virtual void StopApplication (void);     // Called at time specified by Stop
-
   //helpers
   /**
    * \brief Cancel all pending events.

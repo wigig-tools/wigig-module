@@ -123,8 +123,7 @@ int main (int argc, char *argv[])
   wifi.SetRemoteStationManager ("ns3::" + staRaa + "WifiManager");
 
   mac.SetType ("ns3::StaWifiMac",
-               "Ssid", SsidValue (ssid),
-               "ActiveProbing", BooleanValue (false));
+               "Ssid", SsidValue (ssid));
 
   NetDeviceContainer staDevice;
   staDevice = wifi.Install (phy, mac, wifiStaNode);
@@ -133,8 +132,7 @@ int main (int argc, char *argv[])
   wifi.SetRemoteStationManager ("ns3::" + apRaa + "WifiManager");
 
   mac.SetType ("ns3::ApWifiMac",
-               "Ssid", SsidValue (ssid),
-               "BeaconGeneration", BooleanValue (true));
+               "Ssid", SsidValue (ssid));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (phy, mac, wifiApNode);

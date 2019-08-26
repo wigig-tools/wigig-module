@@ -23,6 +23,20 @@
 namespace ns3 {
 
 Buffer::Iterator
+DeserializeExtensionElementID (Buffer::Iterator i, uint8_t &elementID, uint8_t &length, uint8_t &extElementID)
+{
+  Buffer::Iterator start = i;
+  elementID = i.ReadU8 ();
+  if (elementID != IE_EXTENSION)
+    {
+      return start;
+    }
+  length = i.ReadU8 ();
+  extElementID = i.ReadU8 ();
+  return i;
+}
+
+Buffer::Iterator
 DeserializeElementID (Buffer::Iterator i, uint8_t &elementID, uint8_t &length)
 {
   elementID = i.ReadU8 ();
@@ -42,7 +56,20 @@ WifiInformationElement::Print (std::ostream &os) const
 uint16_t
 WifiInformationElement::GetSerializedSize () const
 {
-  return (2 + GetInformationFieldSize ());
+  if (ElementId () == IE_EXTENSION)
+    {
+      return (3 + GetInformationFieldSize ());
+    }
+  else
+    {
+      return (2 + GetInformationFieldSize ());
+    }
+}
+
+WifiInformationElementId
+WifiInformationElement::ElementIdExtension () const
+{
+  return 0;
 }
 
 Buffer::Iterator
@@ -50,6 +77,10 @@ WifiInformationElement::Serialize (Buffer::Iterator i) const
 {
   i.WriteU8 (ElementId ());
   i.WriteU8 (GetInformationFieldSize ());
+  if (ElementId () == IE_EXTENSION)
+    {
+      i.WriteU8 (ElementIdExtension ());
+    }
   SerializeInformationField (i);
   i.Next (GetInformationFieldSize ());
   return i;
@@ -85,6 +116,14 @@ WifiInformationElement::DeserializeIfPresent (Buffer::Iterator i)
     }
 
   uint8_t length = i.ReadU8 ();
+  if (ElementId () == IE_EXTENSION)
+    {
+      uint8_t extElementId = i.ReadU8 ();
+      if (extElementId != ElementIdExtension ())
+        {
+          return start;
+        }
+    }
 
   DeserializeInformationField (i, length);
   i.Next (length);
@@ -101,12 +140,6 @@ WifiInformationElement::DeserializeElementBody (Buffer::Iterator i, uint8_t leng
 }
 
 bool
-WifiInformationElement::operator< (WifiInformationElement const & a) const
-{
-  return (ElementId () < a.ElementId ());
-}
-
-bool
 WifiInformationElement::operator== (WifiInformationElement const & a) const
 {
   if (ElementId () != a.ElementId ())
@@ -115,6 +148,11 @@ WifiInformationElement::operator== (WifiInformationElement const & a) const
     }
 
   if (GetInformationFieldSize () != a.GetInformationFieldSize ())
+    {
+      return false;
+    }
+
+  if (ElementIdExtension () != a.ElementIdExtension ())
     {
       return false;
     }

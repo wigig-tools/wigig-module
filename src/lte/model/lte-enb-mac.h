@@ -54,11 +54,17 @@ typedef std::vector <std::vector < Ptr<PacketBurst> > > DlHarqProcessesBuffer_t;
  */
 class LteEnbMac :   public Object
 {
+  /// allow EnbMacMemberLteEnbCmacSapProvider class friend access
   friend class EnbMacMemberLteEnbCmacSapProvider;
+  /// allow EnbMacMemberLteMacSapProvider<LteEnbMac> class friend access
   friend class EnbMacMemberLteMacSapProvider<LteEnbMac>;
+  /// allow EnbMacMemberFfMacSchedSapUser class friend access
   friend class EnbMacMemberFfMacSchedSapUser;
+  /// allow EnbMacMemberFfMacCschedSapUser class friend access
   friend class EnbMacMemberFfMacCschedSapUser;
+  /// allow EnbMacMemberLteEnbPhySapUser class friend access
   friend class EnbMacMemberLteEnbPhySapUser;
+  /// allow MemberLteCcmMacSapProvider<LteEnbMac> class friend access
   friend class MemberLteCcmMacSapProvider<LteEnbMac>;
 
 public:
@@ -135,8 +141,8 @@ public:
   void SetLteEnbPhySapProvider (LteEnbPhySapProvider* s);
 
   /**
-  * \brief Get the eNB-ComponetCarrierManager SAP User
-  * \return a pointer to the SAP User of the ComponetCarrierManager
+  * \brief Get the eNB-ComponentCarrierManager SAP User
+  * \return a pointer to the SAP User of the ComponentCarrierManager
   */
   LteCcmMacSapProvider* GetLteCcmMacSapProvider ();
 
@@ -436,7 +442,7 @@ private:
   };
 
   /**
-   * map storing as key the random acccess preamble IDs allocated for
+   * map storing as key the random access preamble IDs allocated for
    * non-contention based access, and as value the associated info
    * 
    */

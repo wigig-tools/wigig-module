@@ -172,7 +172,7 @@ protected:
 
   std::map <uint16_t, std::map<uint8_t, LteMacSapUser*> > m_ueAttached;//!< The map that contains the rnti, lcid, SAP of the RLC instance
   std::map <uint16_t, std::map<uint8_t, LteEnbCmacSapProvider::LcInfo> > m_rlcLcInstantiated; //!< This map contains logical channel configuration per flow Id (rnti, lcid).
-  std::map <uint16_t, uint8_t> m_enabledComponentCarrier; //!< This map tells for each rnti the number of enabled component carrier.s
+  std::map <uint16_t, uint8_t> m_enabledComponentCarrier; //!< This map tells for each RNTI the number of enabled component carriers.
   std::map <uint16_t, uint8_t> m_ueState; //!< Map of RRC states per UE (rnti, state), e.g. CONNECTED_NORMALLY
   uint16_t m_noOfComponentCarriers; //!< The number component of carriers that are supported by this eNb.
   // pointer to RRC object for direct function calls, e.g. when CCM needs to obtain
@@ -187,7 +187,7 @@ protected:
    * So, LteEnbComponentCarrierManager class will receive function calls that are meant for MAC, and
    * will forward them to the MAC of the component carriers based on the logic implemented
    * in LteComponentCarrierManager. This attribute will be initialized by using class that implements
-   * LteMacSapProvider interface and class that implements LteEnbComponetnCarrierManager base class
+   * LteMacSapProvider interface and class that implements LteEnbComponentCarrierManager base class
    * e.g.:EnbMacMemberLteMacSapProvider <LteEnbComponentCarrierManagerImpl>
    */
   LteMacSapProvider* m_macSapProvider;//!< A pointer to main SAP interface of the MAC instance, which is in this case handled by CCM.

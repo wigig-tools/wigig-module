@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -446,8 +446,9 @@ StartChannelMeasurements (Ptr<DmgStaWifiMac> srcRedsMac, Ptr<DmgStaWifiMac> dstR
 }
 
 void
-SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
@@ -628,7 +629,7 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::TcpSocket::RcvBufSize", UintegerValue (tcpBufferSize));
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -641,36 +642,28 @@ main (int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup physical layer ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes directional antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -691,8 +684,13 @@ main (int argc, char *argv[])
                    "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                    "ATIPresent", BooleanValue (false));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (8));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);
@@ -878,25 +876,25 @@ main (int argc, char *argv[])
   /* Print changes in number of bytes */
   if (asciiTraciing)
     {
-      Ptr<WifiMacQueue> westRedsMacQueue = westRedsMac->GetSPQueue ();
-      Ptr<WifiMacQueue> rdsMacQueue = rdsMac->GetSPQueue ();
-      Ptr<WifiMacQueue> eastRedsMacQueue = eastRedsMac->GetSPQueue ();
-      Ptr<OutputStreamWrapper> streamBytesInQueue1 = ascii.CreateFileStream ("Traces/WEST-STA-MAC-BytesInQueue.txt");
-      Ptr<OutputStreamWrapper> streamBytesInQueue2 = ascii.CreateFileStream ("Traces/RDS-MAC-BytesInQueue.txt");
-      Ptr<OutputStreamWrapper> streamBytesInQueue3 = ascii.CreateFileStream ("Traces/EAST-STA-MAC-BytesInQueue.txt");
-      westRedsMacQueue->TraceConnectWithoutContext ("BytesInQueue", MakeBoundCallback (&BytesInQueueTrace, streamBytesInQueue1));
-      rdsMacQueue->TraceConnectWithoutContext ("BytesInQueue", MakeBoundCallback (&BytesInQueueTrace, streamBytesInQueue2));
-      eastRedsMacQueue->TraceConnectWithoutContext ("BytesInQueue", MakeBoundCallback (&BytesInQueueTrace, streamBytesInQueue3));
+//      Ptr<WifiMacQueue> westRedsMacQueue = westRedsMac->GetSPQueue ();
+//      Ptr<WifiMacQueue> rdsMacQueue = rdsMac->GetSPQueue ();
+//      Ptr<WifiMacQueue> eastRedsMacQueue = eastRedsMac->GetSPQueue ();
+//      Ptr<OutputStreamWrapper> streamBytesInQueue1 = ascii.CreateFileStream ("Traces/WEST-STA-MAC-BytesInQueue.txt");
+//      Ptr<OutputStreamWrapper> streamBytesInQueue2 = ascii.CreateFileStream ("Traces/RDS-MAC-BytesInQueue.txt");
+//      Ptr<OutputStreamWrapper> streamBytesInQueue3 = ascii.CreateFileStream ("Traces/EAST-STA-MAC-BytesInQueue.txt");
+//      westRedsMacQueue->TraceConnectWithoutContext ("BytesInQueue", MakeBoundCallback (&BytesInQueueTrace, streamBytesInQueue1));
+//      rdsMacQueue->TraceConnectWithoutContext ("BytesInQueue", MakeBoundCallback (&BytesInQueueTrace, streamBytesInQueue2));
+//      eastRedsMacQueue->TraceConnectWithoutContext ("BytesInQueue", MakeBoundCallback (&BytesInQueueTrace, streamBytesInQueue3));
     }
 
   /** Schedule Events **/
   /* Request the DMG Capabilities of other DMG STAs */
-  Simulator::Schedule (Seconds (1.05), &DmgStaWifiMac::RequestInformation, westRedsMac, eastRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.06), &DmgStaWifiMac::RequestInformation, westRedsMac, rdsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.07), &DmgStaWifiMac::RequestInformation, rdsMac, westRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.08), &DmgStaWifiMac::RequestInformation, rdsMac, eastRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.09), &DmgStaWifiMac::RequestInformation, eastRedsMac, westRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.10), &DmgStaWifiMac::RequestInformation, eastRedsMac, rdsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.05), &DmgStaWifiMac::RequestRelayInformation, westRedsMac, eastRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.06), &DmgStaWifiMac::RequestRelayInformation, westRedsMac, rdsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.07), &DmgStaWifiMac::RequestRelayInformation, rdsMac, westRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.08), &DmgStaWifiMac::RequestRelayInformation, rdsMac, eastRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.09), &DmgStaWifiMac::RequestRelayInformation, eastRedsMac, westRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.10), &DmgStaWifiMac::RequestRelayInformation, eastRedsMac, rdsMac->GetAddress ());
 
   /* Initiate Relay Discovery Procedure */
   Simulator::Schedule (Seconds (1.3), &DmgStaWifiMac::StartRelayDiscovery, westRedsMac, eastRedsMac->GetAddress ());

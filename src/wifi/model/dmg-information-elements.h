@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -38,6 +38,11 @@ public:
    */
   void AddRequestElementID (WifiInformationElementId id);
   /**
+   * Add list of request elements.
+   * \param list A list of the IDs of the requested elements.
+   */
+  void AddListOfRequestedElemetID (WifiInformationElementIdList &list);
+  /**
    * \return The list of elements that are requested to be included in the frame.
    * The Requested Element IDs are listed in order of increasing element ID
    */
@@ -55,9 +60,9 @@ private:
 std::ostream &operator << (std::ostream &os, const RequestElement &element);
 std::istream &operator >> (std::istream &is, RequestElement &element);
 
-ATTRIBUTE_HELPER_HEADER (RequestElement)
+ATTRIBUTE_HELPER_HEADER (RequestElement);
 
-typedef enum {
+enum MeasurementType {
   BASIC_REQUEST = 0,
   CCA_REQEUST,
   RPI_REQUEST,
@@ -75,7 +80,7 @@ typedef enum {
   DIRECTIONAL_MEASUREMENT_REQUEST,
   DIRECTIONAL_STATISTICS_REQUEST,
   MEASUREMENT_PAUSE_REQUEST = 255,
-} MeasurementType;
+};
 
 /**
  * \ingroup wifi
@@ -111,10 +116,10 @@ protected:
 
 };
 
-typedef enum {
+enum MeasurementMethod {
   ANIPI = 0,
   RSNI = 1,
-} MeasurementMethod;
+} ;
 
 /**
  * \ingroup wifi
@@ -163,7 +168,7 @@ private:
 std::ostream &operator << (std::ostream &os, const DirectionalChannelQualityRequestElement &element);
 std::istream &operator >> (std::istream &is, DirectionalChannelQualityRequestElement &element);
 
-ATTRIBUTE_HELPER_HEADER (DirectionalChannelQualityRequestElement)
+ATTRIBUTE_HELPER_HEADER (DirectionalChannelQualityRequestElement);
 
 /**
  * \ingroup wifi
@@ -249,7 +254,229 @@ private:
 std::ostream &operator << (std::ostream &os, const DirectionalChannelQualityReportElement &element);
 std::istream &operator >> (std::istream &is, DirectionalChannelQualityReportElement &element);
 
-ATTRIBUTE_HELPER_HEADER (DirectionalChannelQualityReportElement)
+ATTRIBUTE_HELPER_HEADER (DirectionalChannelQualityReportElement);
+
+enum TrafficType {
+  TRAFFIC_TYPE_PERIODIC_TRAFFIC_PATTERN = 0,
+  TRAFFIC_TYPE_APERIODIC_TRAFFIC_PATTERN = 1
+};
+
+enum DataDirection {
+  DATA_DIRECTION_UPLINK = 0,
+  DATA_DIRECTION_DOWNLINK = 1,
+  DATA_DIRECTION_DIRECT_LINK = 2,
+  DATA_DIRECTION_BIDIRECTIONAL_LINK = 3
+};
+
+enum AccessPolicy {
+  ACCESS_POLICY_RESERVED = 0,
+  ACCESS_POLICY_CONTENTION_BASED_CHANNEL_ACCESS = 1,
+  ACCESS_POLICY_CONTROLLED_CHANNEL_ACCESS = 2,
+  ACCESS_POLICY_MIXED_MODE = 3
+};
+
+enum TSInfoAckPolicy {
+  ACK_POLICY_NORMAL_ACK = 0,
+  ACK_POLICY_NO_ACK = 1,
+  ACK_POLICY_RESERVED = 2,
+  ACK_POLICY_BLOCK_ACK = 3
+};
+
+enum AllocationDirection {
+  ALLOCATION_DIRECTION_SOURCE = 0,
+  ALLOCATION_DIRECTION_DESTINATION = 1
+};
+
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11 Traffic Specifications Element (TSPEC) 8.4.2.32
+ */
+class TspecElement : public WifiInformationElement
+{
+public:
+  TspecElement ();
+
+  WifiInformationElementId ElementId () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * The Traffic Type subfield is a single bit and is set to 1 for a periodic traffic pattern (e.g., isochronous
+   * TS of MSDUs or A-MSDUs, with constant or variable sizes, that are originated at fixed rate) or set
+   * to 0 for an aperiodic, or unspecified, traffic pattern (e.g., asynchronous TS of low-duty cycles).
+   * \param type The type of the traffic.
+   */
+  void SetTrafficType (TrafficType type);
+  /**
+   * The TSID subfield is 4 bits in length and contains a value that is a TSID. The MSB (bit 4 in TS Info
+   * field) of the TSID subfield is always set to 1 when the TSPEC element is included within an ADDTS Response frame.
+   * \param id
+   */
+  void SetTSID (uint8_t id);
+  /**
+   * Set the direction of data carried by the TS.
+   * \param direction The direction of data carried by the TS.
+   */
+  void SetDataDirection (DataDirection direction);
+  /**
+   * Set the access method to be used for the TS.
+   * \param policy The access policy to be used for the TS.
+   */
+  void SetAccessPolicy (AccessPolicy policy);
+  /**
+   * Set the Aggregation subfield is valid only when the access method is HCCA or SPCA or when the access
+   * method is EDCA and the Schedule subfield is equal to 1. It is set to 1 by a non-AP STA to indicate
+   * that an aggregate schedule is required. It is set to 1 by the AP if an aggregate schedule is being
+   * provided to the STA. It is set to 0 otherwise. In all other cases, the Aggregation subfield is reserved.
+   * \param enable
+   */
+  void SetAggregation (bool enable);
+  /**
+   * Set the APSD subfield to indicate that automatic PS delivery is to be used for the traffic associated
+   * with the TSPEC and set to 0 otherwise.
+   * \param enable
+   */
+  void SetAPSD (bool enable);
+  /**
+   * The UP indicates the actual value of the UP to be used for the transport of MSDUs or A-MSDUs belonging
+   * to this TS when relative prioritization is required. When the TCLAS element is present in the request,
+   * the UP subfield in TS Info field of the TSPEC element is reserved.
+   * \param priority
+   */
+  void SetUserPriority (uint8_t priority);
+  /**
+   * Set TS Info Ack Policy to indicate whether MAC acknowledgments are required for MPDUs or A-MSDUs belonging
+   * to this TSID and the form of those acknowledgments.
+   * \param policy
+   */
+  void SetTSInfoAckPolicy (TSInfoAckPolicy policy);
+  /**
+   * The Schedule subfield is 1 bit in length and specifies the requested type of schedule. The setting of
+   * the subfield when the access policy is EDCA is shown in Table 9-142. When the Access Policy
+   * subfield is equal to any value other than EDCA, the Schedule subfield is reserved. When the
+   * Schedule and APSD subfields are equal to 1, the AP sets the aggregation bit to 1, indicating that an
+   * aggregate schedule is being provided to the STA.
+   * \param schedule
+   */
+  void SetSchedule (bool schedule);
+
+  void SetDmgAttributesField (uint16_t infieldfo);
+  uint16_t GetDmgAttributesField (void) const;
+
+  /**
+   * The Nominal MSDU Size field is 2 octets long and contains an unsigned integer that specifies the nominal
+   * size, in octets, of MSDUs or (where A-MSDU aggregation is employed) A-MSDUs belonging to the TS
+   * under this TSPEC. If the Fixed subfield is equal to 1, then the size of the MSDU or A-MSDU is fixed and
+   * is indicated by the Size subfield. If the Fixed subfield is equal to 0, then the size of the MSDU or
+   * A-MSDU might not be fixed and the Size subfield indicates the nominal MSDU size. If both the Fixed and
+   * Size subfields are equal to 0, then the nominal MSDU or A-MSDU size is unspecified.
+   * \param size
+   */
+  void SetNominalMsduSize (uint16_t size, bool fixed);
+  /**
+   * Set the maximum size, in octets, of MSDUs or A-MSDUs belonging to the TS under this TSPEC.
+   * \param size
+   */
+  void SetMaximumMsduSize (uint16_t size);
+  /**
+   * Set minimum interval, in microseconds, between the start of two successive SPs.
+   * \param interval
+   */
+  void SetMinimumServiceInterval (uint32_t interval);
+  /**
+   * SetMaximumServiceInterval
+   * \param interval
+   */
+  void SetMaximumServiceInterval (uint32_t interval);
+  void SetInactivityInterval (uint32_t interval);
+  void SetSuspensionInterval (uint32_t interval);
+  void SetServiceStartTime (uint32_t time);
+  void SetMinimumDataRate (uint32_t rate);
+  void SetMeanDataRate (uint32_t rate);
+  void SetPeakDataRate (uint32_t rate);
+  void SetBurstSize (uint32_t size);
+  void SetDelayBound (uint32_t bound);
+  void SetMinimumPhyRate (uint32_t rate);
+  void SetSurplusBandwidthAllowance (uint16_t allowance);
+  void SetMediumTime (uint16_t time);
+
+  void SetAllocationID (uint8_t id);
+  void SetAllocationDirection (AllocationDirection dircetion);
+  void SetAmsduSubframe (uint8_t amsdu);
+  void SetReliabilityIndex (uint8_t index);
+
+  TrafficType GetTrafficType (void) const;
+  uint8_t GetTSID (void) const;
+  DataDirection GetDataDirection (void) const;
+  AccessPolicy GetAccessPolicy (void) const;
+  bool GetAggregation (void) const;
+  bool GetAPSD (void) const;
+  uint8_t GetUserPriority (void) const;
+  TSInfoAckPolicy GetTSInfoAckPolicy (void) const;
+  bool GetSchedule (void) const;
+
+  uint16_t GetNominalMsduSize (void) const;
+  bool IsMsduSizeFixed (void) const;
+  uint16_t GetMaximumMsduSize (void) const;
+  uint32_t GetMinimumServiceInterval (void) const;
+  uint32_t GetMaximumServiceInterval (void) const;
+  uint32_t GetInactivityInterval (void) const;
+  uint32_t GetSuspensionInterval (void) const;
+  uint32_t GetServiceStartTime (void) const;
+  uint32_t GetMinimumDataRate (void) const;
+  uint32_t GetMeanDataRate (void) const;
+  uint32_t GetPeakDataRate (void) const;
+  uint32_t GetBurstSize (void) const;
+  uint32_t GetDelayBound (void) const;
+  uint32_t GetMinimumPhyRate (void) const;
+  uint16_t GetSurplusBandwidthAllowance (void) const;
+  uint16_t GetMediumTime (void) const;
+
+  uint8_t GetAllocationID (void) const;
+  AllocationDirection GetAllocationDirection (void) const;
+  uint8_t GetAmsduSubframe (void) const;
+  uint8_t GetReliabilityIndex (void) const;
+
+private:
+  uint8_t m_trafficType;
+  uint8_t m_tsid;
+  uint8_t m_dataDirection;
+  uint8_t m_accessPolicy;
+  uint8_t m_aggregation;
+  uint8_t m_apsd;
+  uint8_t m_userPriority;
+  uint8_t m_tsInfoAckPolicy;
+  uint8_t m_schedule;
+
+  uint16_t m_nominalMsduSize;
+  uint16_t m_maximumMsduSize;
+  uint32_t m_minimumServiceInterval;
+  uint32_t m_maximumServiceInterval;
+  uint32_t m_inactivityInterval;
+  uint32_t m_suspensionInterval;
+  uint32_t m_serviceStartTime;
+  uint32_t m_minimumDateRate;
+  uint32_t m_meanDateRate;
+  uint32_t m_peakDateRate;
+  uint32_t m_burstSize;
+  uint32_t m_delayBound;
+  uint32_t m_minimumPhyRate;
+  uint16_t m_surplusBandwidthAllowance;
+  uint16_t m_mediumTime;
+
+  uint8_t m_allocationID;
+  uint8_t m_allocationDirection;
+  uint8_t m_amsduSubframe;
+  uint8_t m_reliabilityIndex;
+
+};
+
+std::ostream &operator << (std::ostream &os, const TspecElement &element);
+std::istream &operator >> (std::istream &is, TspecElement &element);
+
+ATTRIBUTE_HELPER_HEADER (TspecElement);
 
 /**
  * \ingroup wifi
@@ -283,14 +510,13 @@ private:
 std::ostream &operator << (std::ostream &os, const TsDelayElement &element);
 std::istream &operator >> (std::istream &is, TsDelayElement &element);
 
-ATTRIBUTE_HELPER_HEADER (TsDelayElement)
+ATTRIBUTE_HELPER_HEADER (TsDelayElement);
 
-enum TimeoutIntervalType
-{
+typedef enum {
   ReassociationDeadlineInterval = 1,
   KeyLifetimeInterval = 2,
   AssociationComebackTime = 3,
-};
+} TimeoutIntervalType;
 
 /**
  * \ingroup wifi
@@ -311,14 +537,14 @@ public:
    * Set the Timeout Interval type field.
    * \param type
    */
-  void SetTimeoutIntervalType (enum TimeoutIntervalType type);
+  void SetTimeoutIntervalType (TimeoutIntervalType type);
   /**
    * The Timeout Interval Value field contains an unsigned 32-bit integer.
    * \param value
    */
   void SetTimeoutIntervalValue (uint32_t value);
 
-  enum TimeoutIntervalType GetTimeoutIntervalType (void) const;
+  TimeoutIntervalType GetTimeoutIntervalType (void) const;
   uint32_t GetTimeoutIntervalValue (void) const;
 
 private:
@@ -330,7 +556,7 @@ private:
 std::ostream &operator << (std::ostream &os, const TimeoutIntervalElement &element);
 std::istream &operator >> (std::istream &is, TimeoutIntervalElement &element);
 
-ATTRIBUTE_HELPER_HEADER (TimeoutIntervalElement)
+ATTRIBUTE_HELPER_HEADER (TimeoutIntervalElement);
 
 /**
  * \ingroup wifi
@@ -419,7 +645,14 @@ private:
 std::ostream &operator << (std::ostream &os, const DmgOperationElement &element);
 std::istream &operator >> (std::istream &is, DmgOperationElement &element);
 
-ATTRIBUTE_HELPER_HEADER (DmgOperationElement)
+ATTRIBUTE_HELPER_HEADER (DmgOperationElement);
+
+enum NUMBER_OF_TAPS {
+  TAPS_1 = 0,
+  TAPS_5 = 1,
+  TAPS_15 = 2,
+  TAPS_63 = 3,
+};
 
 /**
  * \ingroup wifi
@@ -463,12 +696,12 @@ public:
    */
   void SetTxssFbckReq (bool feedback);
   /**
-   * \param The BS-FBCK field specifies the sector that resulted in the best receive
-   * quality in the last received BRP-TX packet. If the last received packet was not
-   * a BRP-TX packet, this field is set to 0. The determination of the best sector
-   * is implementation dependent.
+   * \param index The BS-FBCK field indicates the index of the TRN-T field that was received
+   * with the best quality in the last received BRP-TX PPDU, where the first TRN-T field in
+   * the PPDU is defined as having an index equal to 1. If the last received PPDU was not a
+   * BRP-TX PPDU, this field is set to 0. The determination of best quality is implementation dependent.
    */
-  void SetBsFbck (uint8_t feedback);
+  void SetBsFbck (uint8_t index);
   /**
    * \param The BS-FBCK Antenna ID field specifies the antenna ID corresponding to the
    *  sector indicated by the BF-FBCK field.
@@ -476,18 +709,70 @@ public:
   void SetBsFbckAntennaID (uint8_t id);
 
   /* FBCK-REQ field */
+
+  /**
+   * \param requested If set to 1, the SNR subfield is requested as part of the channel measurement
+   * feedback. Otherwise, set to 0.
+   */
   void SetSnrRequested (bool requested);
+  /**
+   * \param requested If set to 1, the Channel Measurement subfield is requested as part of the channel
+   * measurement feedback. Otherwise, set to 0.
+   */
   void SetChannelMeasurementRequested (bool requested);
-  void SetNumberOfTapsRequested (uint8_t number);
+  /**
+   * \param number The number of taps in each channel measurement.
+   */
+  void SetNumberOfTapsRequested (NUMBER_OF_TAPS number);
+  /**
+   * \param present If set to 1, the Sector ID Order subfield is requested as part of the channel
+   * measurement feedback. Otherwise, set to 0.
+   */
   void SetSectorIdOrderRequested (bool present);
 
   /* FBCK-TYPE field */
+
+  /**
+   * \param present Set to 1 to indicate that the SNR subfield is present as part of the channel measurement
+   * feedback. Set to 0 otherwise.
+   */
   void SetSnrPresent (bool present);
+  /**
+   * \param present Set to 1 to indicate that the Channel Measurement subfield is present as part of the
+   * channel measurement feedback. Set to 0 otherwise.
+   */
   void SetChannelMeasurementPresent (bool present);
+  /**
+   * \param present Set to 1 to indicate that the Tap Delay subfield is present as part of the channel
+   * measurement feedback. Set to 0 otherwise.
+   */
   void SetTapDelayPresent (bool present);
-  void SetNumberOfTapsPresent (uint8_t number);
+  /**
+   * \param number Number of taps in each channel measurement.
+   */
+  void SetNumberOfTapsPresent (NUMBER_OF_TAPS number);
+  /**
+   * \param number Number of measurements in the SNR subfield and the Channel Measurement subfield.
+   * It is equal to the number of TRN-T subfields in the BRP-TX packet on which the measurement is based,
+   * or the number of received sectors if TXSS result is reported by setting the TXSS-FBCK-REQ subfield to 1.
+   */
   void SetNumberOfMeasurements (uint8_t number);
+  /**
+   * \param present Set to 1 to indicate that the Sector ID Order subfield is present as part of the channel
+   * measurement feedback. Set to 0 otherwise.
+   */
   void SetSectorIdOrderPresent (bool present);
+  /**
+   * \param linkType SetLinkType Set to 0 for the initiator link and to 1 for the responder link.
+   */
+  void SetLinkType (bool linkType);
+  /**
+   * \param type Set to 0 for the transmitter antenna and to 1 for the receiver antenna.
+   */
+  void SetAntennaType (bool type);
+  /**
+   * \param number Indicates the number of beams in the Sector ID Order subfield for the MIDC subphase.
+   */
   void SetNumberOfBeams (uint8_t number);
 
   /**
@@ -513,16 +798,18 @@ public:
   /* FBCK-REQ field */
   bool IsSnrRequested (void) const;
   bool IsChannelMeasurementRequested (void) const;
-  uint8_t GetNumberOfTapsRequested (void) const;
+  NUMBER_OF_TAPS GetNumberOfTapsRequested (void) const;
   bool IsSectorIdOrderRequested (void) const;
 
   /* FBCK-TYPE field */
   bool IsSnrPresent (void) const;
   bool IsChannelMeasurementPresent (void) const;
   bool IsTapDelayPresent (void) const;
-  uint8_t GetNumberOfTapsPresent (void) const;
+  NUMBER_OF_TAPS GetNumberOfTapsPresent (void) const;
   uint8_t GetNumberOfMeasurements (void) const;
   bool IsSectorIdOrderPresent (void) const;
+  bool GetLinkType (void) const;
+  bool GetAntennaType (void) const;
   uint8_t GetNumberOfBeams (void) const;
 
   bool IsMidExtension (void) const;
@@ -539,15 +826,17 @@ private:
   /* FBCK-REQ field format */
   bool m_snrRequested;
   bool m_channelMeasurementRequested;
-  uint8_t m_numberOfTapsRequested;
+  NUMBER_OF_TAPS m_numberOfTapsRequested;
   bool m_sectorIdOrderRequested;
   /* FBCK-TYPE field */
   bool m_snrPresent;
   bool m_channelMeasurementPresent;
   bool m_tapDelayPresent;
-  uint8_t m_numberOfTapsPresent;
+  NUMBER_OF_TAPS m_numberOfTapsPresent;
   uint8_t m_numberOfMeasurements;
   bool m_sectorIdOrderPresent;
+  bool m_linkType;
+  bool m_antennaType;
   uint8_t m_numberOfBeams;
 
   bool m_midExtension;
@@ -558,7 +847,7 @@ private:
 std::ostream &operator << (std::ostream &os, const BeamRefinementElement &element);
 std::istream &operator >> (std::istream &is, BeamRefinementElement &element);
 
-ATTRIBUTE_HELPER_HEADER (BeamRefinementElement)
+ATTRIBUTE_HELPER_HEADER (BeamRefinementElement);
 
 /**
  * \ingroup wifi
@@ -610,7 +899,7 @@ private:
 std::ostream &operator << (std::ostream &os, const WakeupScheduleElement &element);
 std::istream &operator >> (std::istream &is, WakeupScheduleElement &element);
 
-ATTRIBUTE_HELPER_HEADER (WakeupScheduleElement)
+ATTRIBUTE_HELPER_HEADER (WakeupScheduleElement);
 
 /******************************************
 *    Allocation Field Format (8-401aa)
@@ -618,7 +907,7 @@ ATTRIBUTE_HELPER_HEADER (WakeupScheduleElement)
 
 /**
  * \ingroup wifi
- * Implement the header for Relay Capable STA Info Field.
+ * Implement the Allocation Field Format for the Extended Schedule Element.
  */
 class AllocationField
 {
@@ -630,12 +919,48 @@ public:
   Buffer::Iterator Serialize (Buffer::Iterator start) const;
   Buffer::Iterator Deserialize (Buffer::Iterator start);
 
+  /**
+   * The Allocation ID field, when set to a nonzero value, identifies an airtime allocation from Source AID to
+   * Destination AID. Except for CBAP allocations with broadcast Source AID and broadcast Destination AID,
+   * the tuple (Source AID, Destination AID, Allocation ID) uniquely identifies the allocation. For CBAP
+   * allocations with broadcast Source AID and broadcast Destination AID, the Allocation ID is zero.
+   * \param id The ID of the current allocation.
+   */
   void SetAllocationID (AllocationID id);
+  /**
+   * The AllocationType field defines the channel access mechanism during the allocation.
+   * \param type either SP allocation or CBAP allocation.
+   */
   void SetAllocationType (AllocationType type);
+  /**
+   * The Pseudo-static field is set to 1 to indicate that this allocation is pseudo-static and set to 0 otherwise.
+   * \param value
+   */
   void SetAsPseudoStatic (bool value);
+  /**
+   * For an SP allocation, the Truncatable field is set to 1 to indicate that the source DMG STA and destination
+   * DMG STA can request SP truncation and set to 0 otherwise. For a CBAP allocation, the Truncatable field is reserved.
+   * \param value
+   */
   void SetAsTruncatable (bool value);
+  /**
+   * For an SP allocation, the Extendable field is set to 1 to indicate that the source DMG STA and destination
+   * DMG STA can request SP extension and set to 0 otherwise. For a CBAP allocation, the Extendable field is reserved.
+   * \param value
+   */
   void SetAsExtendable (bool value);
+  /**
+   * The PCP Active field is set to 1 if the PCP is available to receive transmissions during the CBAP or SP
+   * allocation and set to 0 otherwise. The PCP Active field is set to 1 if at least one of the Truncatable or
+   * Extendable fields are set to 1, or when transmitted by an AP.
+   * \param value
+   */
   void SetPcpActive (bool value);
+  /**
+   * The LP SC Used subfield is set to 1 to indicate that the low-power SC PHY is used in this SP.
+   * Otherwise, it is set to 0.
+   * \param value True if LP SC is used in this SP otherwise is false.
+   */
   void SetLpScUsed (bool value);
 
   AllocationID GetAllocationID (void) const;
@@ -764,7 +1089,7 @@ private:
 std::ostream &operator << (std::ostream &os, const ExtendedScheduleElement &element);
 std::istream &operator >> (std::istream &is, ExtendedScheduleElement &element);
 
-ATTRIBUTE_HELPER_HEADER (ExtendedScheduleElement)
+ATTRIBUTE_HELPER_HEADER (ExtendedScheduleElement);
 
 /**
  * \ingroup wifi
@@ -861,7 +1186,7 @@ private:
 std::ostream &operator << (std::ostream &os, const StaAvailabilityElement &element);
 std::istream &operator >> (std::istream &is, StaAvailabilityElement &element);
 
-ATTRIBUTE_HELPER_HEADER (StaAvailabilityElement)
+ATTRIBUTE_HELPER_HEADER (StaAvailabilityElement);
 
 /*********************************************
 *  DMG Allocation Info Field Format (8-401af)
@@ -886,13 +1211,39 @@ public:
   Buffer::Iterator Serialize (Buffer::Iterator start) const;
   Buffer::Iterator Deserialize (Buffer::Iterator start);
 
+  /**
+   * The Allocation ID field identifies an allocation if set to a nonzero value, and is used as follows:
+   * — The STA that transmits an ADDTS Request containing the DMG TSPEC element sets the Allocation ID to
+   * a nonzero value to create a new allocation or modify an existing allocation.
+   * — The STA that transmits an ADDTS Response containing the DMG TSPEC element sets theAllocation ID to
+   * a nonzero value to identify a created or modified allocation or sets it to zero if creating or
+   * modifying the allocation failed.
+   * \param id The unique ID of the allocation.
+   */
   void SetAllocationID (AllocationID id);
+  /**
+   * The AllocationType field defines the channel access mechanism used during the allocation.
+   * \param type
+   */
   void SetAllocationType (AllocationType type);
+  /**
+   * Set the allocation format.
+   * \param format Either Isochronous allocation or Asynchronous allocation.
+   */
   void SetAllocationFormat (AllocationFormat format);
+  /**
+   * The Pseudo-static field is set to 1 for a pseudo-static allocation and set to 0 otherwise.
+   * \param value
+   */
   void SetAsPseudoStatic (bool value);
   void SetAsTruncatable (bool value);
   void SetAsExtendable (bool value);
   void SetLpScUsed (bool value);
+  /**
+   * The UP field indicates the lowest priority UP to be used for possible transport of MSDUs belonging to TCs
+   * with the same source and destination of the allocation.
+   * \param value
+   */
   void SetUp (uint8_t value);
   void SetDestinationAid (uint8_t aid);
 
@@ -1025,7 +1376,7 @@ private:
 std::ostream &operator << (std::ostream &os, const DmgTspecElement &element);
 std::istream &operator >> (std::istream &is, DmgTspecElement &element);
 
-ATTRIBUTE_HELPER_HEADER (DmgTspecElement)
+ATTRIBUTE_HELPER_HEADER (DmgTspecElement);
 
 /**
  * \ingroup wifi
@@ -1060,30 +1411,30 @@ private:
 std::ostream &operator << (std::ostream &os, const NextDmgAti &element);
 std::istream &operator >> (std::istream &is, NextDmgAti &element);
 
-ATTRIBUTE_HELPER_HEADER (NextDmgAti)
+ATTRIBUTE_HELPER_HEADER (NextDmgAti);
 
-typedef enum {
+enum SessionType {
   SessionType_InfrastructureBSS = 0,
   SessionType_IBSS = 1,
   SessionType_DLS = 2,
   SessionType_TDLS = 3,
   SessionType_PBSS = 4
-} SessionType;
+};
 
-typedef enum {
+enum BandID {
   Band_TV_white_Spaces = 0, /* TV White Spaces */
   Band_Sub_1_GHz,           /* Sub-1 GHz (excluding TV white spaces) */
   Band_2_4GHz,              /* 2.4 GHz */
   Band_3_6GHz,              /* 3.6 GHz */
   Band_4_9GHz,              /* 4.9 and 5 GHz */
   Band_60GHz                /* 60 GHz */
-} BandID;
+};
 
-typedef struct {
+struct Band {
   uint8_t Band_ID;
   uint8_t Setup;
   uint8_t Operation;
-} Band;
+};
 
 /* SNR */
 typedef uint8_t SNR;
@@ -1151,10 +1502,12 @@ private:
 std::ostream &operator << (std::ostream &os, const ChannelMeasurementFeedbackElement &element);
 std::istream &operator >> (std::istream &is, ChannelMeasurementFeedbackElement &element);
 
-ATTRIBUTE_HELPER_HEADER (ChannelMeasurementFeedbackElement)
+ATTRIBUTE_HELPER_HEADER (ChannelMeasurementFeedbackElement);
 
 /* Typedef for Channel Measurement Feedback Element List */
-typedef std::vector<ChannelMeasurementFeedbackElement *> ChannelMeasurementFeedbackElementList;
+typedef std::vector<Ptr<ChannelMeasurementFeedbackElement> > ChannelMeasurementFeedbackElementList;
+typedef ChannelMeasurementFeedbackElementList::const_iterator ChannelMeasurementFeedbackElementListCI;
+typedef ChannelMeasurementFeedbackElementList::iterator ChannelMeasurementFeedbackElementListI;
 
 /**
  * \ingroup wifi
@@ -1190,19 +1543,17 @@ private:
 std::ostream &operator << (std::ostream &os, const AwakeWindowElement &element);
 std::istream &operator >> (std::istream &is, AwakeWindowElement &element);
 
-ATTRIBUTE_HELPER_HEADER (AwakeWindowElement)
+ATTRIBUTE_HELPER_HEADER (AwakeWindowElement);
 
-enum StaRole
-{
+enum StaRole {
   ROLE_AP = 0,
   ROLE_TDLS_STA = 1,
   ROLE_IBSS_STA = 2,
   ROLE_PCP = 3,
   ROLE_NON_PCP_NON_AP = 4
-};
+} ;
 
-enum ConnectionCapability
-{
+enum ConnectionCapability {
   CAPABILITY_AP = 1,
   CAPABILITY_PCP = 2,
   CAPABILITY_DLS = 4,
@@ -1226,11 +1577,11 @@ public:
   uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
 
   /* Multi-band Control field */
-  void SetStaRole (enum StaRole role);
+  void SetStaRole (StaRole role);
   void SetStaMacAddressPresent (bool present);
   void SetPairwiseCipherSuitePresent (bool present);
 
-  enum StaRole GetStaRole (void) const;
+  StaRole GetStaRole (void) const;
   bool IsStaMacAddressPresent (void) const;
   bool IsPairwiseCipherSuitePresent (void) const;
 
@@ -1247,7 +1598,7 @@ public:
   /**
    * Set the Multi-band Connection Capability. The Multi-band Connection Capability field indicates the
    * connection capabilities supported by the STA on the channel and band indicated in this element.
-   * @param capability
+   * \param capability
    */
   void SetConnectionCapability (uint8_t capability);
   void SetFstSessionTimeout (uint8_t timeout);
@@ -1286,7 +1637,7 @@ private:
 std::ostream &operator << (std::ostream &os, const MultiBandElement &element);
 std::istream &operator >> (std::istream &is, MultiBandElement &element);
 
-ATTRIBUTE_HELPER_HEADER (MultiBandElement)
+ATTRIBUTE_HELPER_HEADER (MultiBandElement);
 
 typedef std::vector<uint8_t> NextPcpAidList;
 
@@ -1329,7 +1680,7 @@ private:
 std::ostream &operator << (std::ostream &os, const NextPcpListElement &element);
 std::istream &operator >> (std::istream &is, NextPcpListElement &element);
 
-ATTRIBUTE_HELPER_HEADER (NextPcpListElement)
+ATTRIBUTE_HELPER_HEADER (NextPcpListElement);
 
 /**
  * \ingroup wifi
@@ -1379,13 +1730,7 @@ std::istream &operator >> (std::istream &is, PcpHandoverElement &element);
 
 ATTRIBUTE_HELPER_HEADER (PcpHandoverElement);
 
-/**
- * \ingroup wifi
- *
- * The IEEE 802.11ad DMG Link Margin element 8.4.2.144
- */
-
-typedef enum {
+enum Activity {
   NO_CHANGE_PREFFERED = 0,
   CHANGED_MCS,
   DECREASED_TRANSMIT_POWER,
@@ -1393,8 +1738,13 @@ typedef enum {
   FAST_SESSION_TRANSFER,
   POWER_CONSERVE,
   PERFORM_SLS
-} Activity;
+};
 
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11ad DMG Link Margin element 8.4.2.144
+ */
 class LinkMarginElement : public WifiInformationElement
 {
 public:
@@ -1588,7 +1938,7 @@ private:
 std::ostream &operator << (std::ostream &os, const SwitchingStreamElement &element);
 std::istream &operator >> (std::istream &is, SwitchingStreamElement &element);
 
-ATTRIBUTE_HELPER_HEADER (SwitchingStreamElement)
+ATTRIBUTE_HELPER_HEADER (SwitchingStreamElement);
 
 /**
  * \ingroup wifi
@@ -1630,13 +1980,13 @@ private:
 std::ostream &operator << (std::ostream &os, const SessionTransitionElement &element);
 std::istream &operator >> (std::istream &is, SessionTransitionElement &element);
 
-ATTRIBUTE_HELPER_HEADER (SessionTransitionElement)
+ATTRIBUTE_HELPER_HEADER (SessionTransitionElement);
 
-typedef enum {
+enum RelayDuplexMode {
   RELAY_FD_AF = 1,  /* Full Duplex, Amplify and Forward */
   RELAY_HD_DF = 2,  /* Half Duplex, Decode and Forward */
   RELAY_BOTH = 3
-} RelayDuplexMode;
+};
 
 /**
  * \ingroup wifi
@@ -1742,7 +2092,7 @@ private:
 std::ostream &operator << (std::ostream &os, const ClusterReportElement &element);
 std::istream &operator >> (std::istream &is, ClusterReportElement &element);
 
-ATTRIBUTE_HELPER_HEADER (ClusterReportElement)
+ATTRIBUTE_HELPER_HEADER (ClusterReportElement);
 
 /**
  * \ingroup wifi
@@ -1861,7 +2211,7 @@ private:
 std::ostream &operator << (std::ostream &os, const RelayCapabilitiesElement &element);
 std::istream &operator >> (std::istream &is, RelayCapabilitiesElement &element);
 
-ATTRIBUTE_HELPER_HEADER (RelayCapabilitiesElement)
+ATTRIBUTE_HELPER_HEADER (RelayCapabilitiesElement);
 
 /**
  * \ingroup wifi
@@ -1961,7 +2311,7 @@ private:
 std::ostream &operator << (std::ostream &os, const RelayTransferParameterSetElement &element);
 std::istream &operator >> (std::istream &is, RelayTransferParameterSetElement &element);
 
-ATTRIBUTE_HELPER_HEADER (RelayTransferParameterSetElement)
+ATTRIBUTE_HELPER_HEADER (RelayTransferParameterSetElement);
 
 /**
  * \ingroup wifi
@@ -2035,7 +2385,7 @@ private:
 std::ostream &operator << (std::ostream &os, const QuietPeriodRequestElement &element);
 std::istream &operator >> (std::istream &is, QuietPeriodRequestElement &element);
 
-ATTRIBUTE_HELPER_HEADER (QuietPeriodRequestElement)
+ATTRIBUTE_HELPER_HEADER (QuietPeriodRequestElement);
 
 /**
  * \ingroup wifi
@@ -2084,7 +2434,7 @@ private:
 std::ostream &operator << (std::ostream &os, const QuietPeriodResponseElement &element);
 std::istream &operator >> (std::istream &is, QuietPeriodResponseElement &element);
 
-ATTRIBUTE_HELPER_HEADER (QuietPeriodResponseElement)
+ATTRIBUTE_HELPER_HEADER (QuietPeriodResponseElement);
 
 /**
  * \ingroup wifi
@@ -2140,7 +2490,707 @@ private:
 std::ostream &operator << (std::ostream &os, const EcpacPolicyElement &element);
 std::istream &operator >> (std::istream &is, EcpacPolicyElement &element);
 
-ATTRIBUTE_HELPER_HEADER (EcpacPolicyElement)
+ATTRIBUTE_HELPER_HEADER (EcpacPolicyElement);
+
+struct EDMGSectorIDOrder {
+  SECTOR_ID SectorID;       /* Sector ID/CDOWN/AWV Feedback ID*/
+  ANTENNA_ID TXAntennaID;
+  ANTENNA_ID RXAntennaID;
+};
+
+typedef std::vector<EDMGSectorIDOrder> EDMGSectorIDOrder_List;
+typedef EDMGSectorIDOrder_List::iterator EDMGSectorIDOrder_ListI;
+typedef EDMGSectorIDOrder_List::const_iterator EDMGSectorIDOrder_ListCI;
+
+typedef uint8_t BRP_CDOWN;
+typedef std::vector<BRP_CDOWN> BRP_CDOWN_LIST;
+typedef BRP_CDOWN_LIST::iterator BRP_CDOWN_LIST_I;
+typedef BRP_CDOWN_LIST::const_iterator BRP_CDOWN_LIST_CI;
+
+typedef uint16_t Tap_Delay;
+typedef std::vector<Tap_Delay> Tap_Delay_List;
+typedef Tap_Delay_List::iterator Tap_Delay_List_I;
+typedef Tap_Delay_List::const_iterator Tap_Delay_List_CI;
+
+/**
+ * \ingroup wifi
+ *
+ * The EDMG Channel Measurement Feedback element is used to carry channel measurement feedback data
+ * that an EDMG STA has measured on DMG Beacon frames, SSW frames, Short SSW packets or TRN
+ * fields of EDMG BRP packets. This channel measurement feedback data is provided in addition to what is
+ * provided in the Channel Measurement Feedback element. The EDMG Channel Measurement Feedback
+ * element provides a list of sectors per transmit DMG antenna identified during sector sweep or during beam
+ * combination, or a list of TX sector combinations identified during SU-MIMO or MU-MIMO beamforming
+ * training and that can be used to establish a beamformed SISO, SU-MIMO or MU-MIMO link, as well as
+ * AWV information obtained during beam tracking.
+ */
+class EDMGChannelMeasurementFeedbackElement : public WifiInformationElement
+{
+public:
+  EDMGChannelMeasurementFeedbackElement ();
+
+  WifiInformationElementId ElementId () const;
+  WifiInformationElementId ElementIdExtension () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  void Add_EDMG_SectorIDOrder (EDMGSectorIDOrder &order);
+  void Add_BRP_CDOWN (BRP_CDOWN brpCdown);
+  void Add_Tap_Delay (Tap_Delay tapDelay);
+
+  EDMGSectorIDOrder_List Get_EDMG_SectorIDOrder_List (void) const;
+  BRP_CDOWN_LIST Get_BRP_CDOWN_List (void) const;
+  Tap_Delay_List Get_Tap_Delay_List (void) const;
+
+private:
+  EDMGSectorIDOrder_List m_edmgSectorIDOrder_List;
+  BRP_CDOWN_LIST m_brp_CDOWN_List;
+  Tap_Delay_List m_tap_Delay_List;
+
+};
+
+std::ostream &operator << (std::ostream &os, const EDMGChannelMeasurementFeedbackElement &element);
+std::istream &operator >> (std::istream &is, EDMGChannelMeasurementFeedbackElement &element);
+
+ATTRIBUTE_HELPER_HEADER (EDMGChannelMeasurementFeedbackElement);
+
+typedef std::vector<Ptr<EDMGChannelMeasurementFeedbackElement> > EDMGChannelMeasurementFeedbackElementList;
+typedef EDMGChannelMeasurementFeedbackElementList::iterator EDMGChannelMeasurementFeedbackElementListI;
+typedef EDMGChannelMeasurementFeedbackElementList::const_iterator EDMGChannelMeasurementFeedbackElementListCI;
+
+typedef std::vector<uint8_t> AID_LIST;
+typedef AID_LIST::const_iterator AID_LIST_CI;
+typedef AID_LIST::iterator AID_LIST_I;
+
+struct EDMGGroupTuple {
+  uint8_t groupID;    /* The EDMG Group ID subfield is a unique, nonzero value that identifies the group. */
+  AID_LIST aidList;   /* Each AID subfield contains the AID of an EDMG STA that belongs to the group. */
+};
+
+typedef std::vector<EDMGGroupTuple> EDMGGroupTuples;
+typedef EDMGGroupTuples::const_iterator EDMGGroupTuplesCI;
+typedef EDMGGroupTuples::iterator EDMGGroupTuplesI;
+
+/**
+ * \ingroup wifi
+ *
+ * The EDMG Group ID Set element allows an AP or PCP to define groups of MU capable EDMG STAs to
+ * perform DL MU-MIMO beamforming training and transmissions. The EDMG Group ID Set element is
+ * transmitted in DMG Beacon or Announce frames.
+ */
+class EDMGGroupIDSetElement : public WifiInformationElement
+{
+public:
+  EDMGGroupIDSetElement ();
+
+  WifiInformationElementId ElementId () const;
+  WifiInformationElementId ElementIdExtension () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * The Number of EDMG Groups field indicates the number of EDMG Group fields.
+   * \param number
+   */
+  void SetNumberofEDMGGroups (uint8_t number);
+  void AddEDMGGroupTuple (EDMGGroupTuple &tuple);
+
+  uint8_t GetNumberofEDMGGroups (void) const;
+  EDMGGroupTuples GetEDMGGroupTuples (void) const;
+
+private:
+  uint8_t m_numEDMGGroups;
+  EDMGGroupTuples m_edmgGroupTuples;
+
+};
+
+std::ostream &operator << (std::ostream &os, const EDMGGroupIDSetElement &element);
+std::istream &operator >> (std::istream &is, EDMGGroupIDSetElement &element);
+
+ATTRIBUTE_HELPER_HEADER (EDMGGroupIDSetElement);
+
+enum MimoBeamformingType {
+  SU_MIMO_BEAMFORMING = 0,
+  MU_MIMO_BEAMFORMING = 1,
+};
+
+enum MimoPhaseType {
+  MIMO_PHASE_NON_RECPIROCAL = 0,
+  MIMO_PHASE_RECPIROCAL = 1,
+};
+
+/**
+ * \ingroup wifi
+ *
+ * The IEEE 802.11ay MIMO Setup Control element is used to carry configuration information
+ * required for the SU-MIMO BF training and feedback subphases or the MU-MIMO BF training
+ * and feedback subphases.
+ */
+class MimoSetupControlElement : public WifiInformationElement
+{
+public:
+  MimoSetupControlElement ();
+
+  WifiInformationElementId ElementId () const;
+  WifiInformationElementId ElementIdExtension () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * This field is set to 0 to indicate SU-MIMO beamforming and is set to 1 to indicate
+   * MU-MIMO beamforming.
+   * \param type
+   */
+  void SetMimoBeamformingType (MimoBeamformingType type);
+  /**
+   * This field is set to 0 to indicate the non-reciprocal MIMO phase and is set to 1
+   * to indicate the reciprocal MIMO phase.
+   * \param type
+   */
+  void SetMimoPhaseType (MimoPhaseType type);
+  /**
+   * Indicates the EDMG Group ID of target MU group. This field is reserved when the
+   * SU/MU field is set to 0.
+   * \param groupID
+   */
+  void SetEDMGGroupID (uint8_t groupID);
+  /**
+   * SetGroupUserMask
+   * \param mask
+   */
+  void SetGroupUserMask (uint32_t mask);
+  /**
+   * Indicates the requested number of consecutive TRN-Units in which the same
+   * AWV is used in the transmission of the last M TRN subfields of each TRN-Unit.
+   * This field is reserved when the SU/MU field is set to 0.
+   * \param number
+   */
+  void SetLTxRx (uint8_t number);
+  /**
+   * The value of this field plus one indicates the requested number of TRN
+   * subfields in a TRN-Unit that can be used for transmit training.
+   * This field is reserved when the SU/MU field is set to 1.
+   * \param unit
+   */
+  void SetRequestedEDMGTRNUnitM (uint8_t unit);
+  /**
+   * This field is set to 1 to indicate the sender is the initiator and is set to 0
+   * otherwise. This field is set to 1 when the SU/MU field is set to 1.
+   * \param isInitiator
+   */
+  void SetAsInitiator (bool isInitiator);
+  /**
+   * If the Channel Measurement Requested subfield is set to 1, the Channel Measurement
+   * subfield is requested as part of MIMO BF feedback. Otherwise, set to 0
+   * \param value
+   */
+  void SetChannelMeasurementRequested (bool value);
+  /**
+   * The Number of Taps Requested subfield indicates the number of taps requested in each
+   * channel measurement. The encoding for this subfield is specified in Table 9-234.
+   * \param taps
+   */
+  void SetNumberOfTapsRequested (uint8_t taps);
+  /**
+   * The value of the Number of TX Sector Combinations Requested subfield plus one indicates
+   * the number of TX sector combinations requested as part of MIMO BF feedback.
+   * \param requested
+   */
+  void SetNumberOfTXSectorCombinationsRequested (uint8_t requested);
+  /**
+   * The Channel Aggregation Requested subfield is set to 1 to indicate that the TRN field is transmitted over a
+   * 2.16+2.16 GHz or 4.32+4.32 GHz channel and to request the channel measurement feedback per channel,
+   * in case channel aggregation is used as part of MIMO BF feedback. Otherwise, this subfield is set to 0.
+   * \param requested
+   */
+  void SetChannelAggregationRequested (bool requested);
+
+  MimoBeamformingType GetMimoBeamformingType (void) const;
+  MimoPhaseType GetMimoPhaseType (void) const;
+  uint8_t GetEDMGGroupID (void) const;
+  uint32_t GetGroupUserMask (void) const;
+  uint8_t GetLTxRx (void) const;
+  uint8_t GetRequestedEDMGTRNUnitM (void) const;
+  bool IsInitiator (void) const;
+  bool IsChannelMeasurementRequested (void) const;
+  uint8_t GetNumberOfTapsRequested (void) const;
+  uint8_t GetNumberOfTXSectorCombinationsRequested (void) const;
+  bool IsChannelAggregationRequested (void) const;
+
+private:
+  MimoBeamformingType m_mimoBeamformingType;
+  MimoPhaseType m_mimoPhaseType;
+  uint8_t m_edmgGroupID;
+  uint32_t m_groupUserMask;
+  uint8_t m_LTxRx;
+  uint8_t m_requestedEDMGTRNUnitM;
+  bool m_isInitiator;
+  bool m_channelMeasurementRequested;
+  uint8_t m_numberOfTapsRequested;
+  uint8_t m_numberOfTXSectorCombinationsRequested;
+  bool m_channelAggregationRequested;
+
+};
+
+std::ostream &operator << (std::ostream &os, const MimoSetupControlElement &element);
+std::istream &operator >> (std::istream &is, MimoSetupControlElement &element);
+
+ATTRIBUTE_HELPER_HEADER (MimoSetupControlElement);
+
+enum PollType {
+  POLL_TRAINING_PACKET = 0,
+  POLL_MIMO_BF_FEEDBACK = 1,
+};
+
+/**
+ * \ingroup wifi
+ */
+class MimoPollControlElement : public WifiInformationElement
+{
+public:
+  MimoPollControlElement ();
+
+  WifiInformationElementId ElementId () const;
+  WifiInformationElementId ElementIdExtension () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * This field is set to 0 to indicate SU-MIMO beamforming and is set to 1 to indicate
+   * MU-MIMO beamforming.
+   * \param type
+   */
+  void SetMimoBeamformingType (MimoBeamformingType type);
+  /**
+   * This field is set to 1 to indicate training packet poll used in the reciprocal MU-MIMO
+   * beamforming and is set to 0 to indicate MIMO BF feedback poll used in the SU-MIMO
+   * beamforming or the non-reciprocal MU-MIMO beamforming.
+   * \param type
+   */
+  void SetPollType (PollType type);
+  /**
+   * Indicates the requested number of consecutive TRN-Units in which the same
+   * AWV is used in the transmission of the last M TRN subfields of each TRN-Unit.
+   * This field is reserved when the Poll Type field is set to 0.
+   * \param number
+   */
+  void SetLTxRx (uint8_t number);
+  /**
+   * The value of this field plus one indicates the requested number of TRN
+   * subfields in a TRN-Unit that can be used for transmit training.
+   * This field is reserved when the Poll Type field is set to 0.
+   * \param unit
+   */
+  void SetRequestedEDMGTRNUnitM (uint8_t unit);
+  /**
+   * Indicates the requested number of TRN subfields at the start of a TRN-Unit that use the
+   * same AWV. A value of zero indicates zero requested TRN subfields, a value of one
+   * indicates one requested TRN subfield, a value of two indicates two requested TRN
+   * subfields and a value of three indicates four requested TRN subfields. This field is reserved
+   * when the Poll Type field is set to 0.
+   * \param unit
+   */
+  void SetRequestedEDMGTRNUnitP (uint8_t unit);
+  /**
+   * Indicates the maximum duration, in microseconds, during which EDMG BRP-RX/TX
+   * packets can be transmitted by the polled responder following the transmission of the MIMO
+   * BF Poll frame containing this element. Possible values range from 1 to 16383. This field is
+   * reserved when the Poll Type field is set to 0.
+   * \param duration
+   */
+  void SetTrainingDuration (uint16_t duration);
+
+  MimoBeamformingType GetMimoBeamformingType (void) const;
+  PollType GetPollType (void) const;
+  uint8_t GetLTxRx (void) const;
+  uint8_t GetRequestedEDMGTRNUnitM (void) const;
+  uint8_t GetRequestedEDMGTRNUnitP (void) const;
+  uint16_t GetTrainingDuration (void) const;
+
+private:
+  MimoBeamformingType m_mimoBeamformingType;
+  PollType m_pollType;
+  uint8_t m_LTxRx;
+  uint8_t m_requestedEDMGTRNUnitM;
+  uint8_t m_requestedEDMGTRNUnitP;
+  uint16_t m_duration;
+
+};
+
+std::ostream &operator << (std::ostream &os, const MimoPollControlElement &element);
+std::istream &operator >> (std::istream &is, MimoPollControlElement &element);
+
+ATTRIBUTE_HELPER_HEADER (MimoPollControlElement);
+
+/**
+ * \ingroup wifi
+ *
+ * The MIMO Feedback Control element is used to carry configuration information for
+ * accompanying Channel Measurement Feedback element, EDMG Channel Measurement Feedback
+ * element and/or Digital BF Feedback element.
+ *
+ */
+class MIMOFeedbackControl : public WifiInformationElement
+{
+public:
+  MIMOFeedbackControl ();
+
+  WifiInformationElementId ElementId () const;
+  WifiInformationElementId ElementIdExtension () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * This field is set to 0 to indicate SU-MIMO beamforming and is set to 1 to indicate
+   * MU-MIMO beamforming.
+   * \param type
+   */
+  void SetMimoBeamformingType (MimoBeamformingType type);
+  /**
+   * This field is set to 0 to indicate initiator link and is set to 1 otherwise.
+   * This field is set to 0 when the SU/MU field is set to 1.
+   * \param isInitiator
+   */
+  void SetLinkTypeAsInitiator (bool isInitiator);
+  /**
+   * This field indicates whether MIMO BF feedback is included in the MIMO BF Feedback
+   * frame containing the MIMO Feedback Control element or when the EDMG STA
+   * transmitting the MIMO Feedback Control element will be ready with MIMO BF feedback.
+   * \param delay
+   */
+  void SetComebackDelay (uint8_t delay);
+
+  /** The following fields are reserved when the Comeback Delay field is set to a nonzero value. **/
+
+  /**
+   * If the Channel Measurement Present subfield is set to 1, the Channel Measurement
+   * subfield is present as part of the MIMO BF feedback. Otherwise, set to 0.
+   * \param present
+   */
+  void SetChannelMeasurementPresent (bool present);
+  /**
+   * If the Tap Delay Present subfield is set to 1, the Tap Delay subfield is present as part of
+   * the MIMO BF feedback. Otherwise, set to 0.
+   * \param present
+   */
+  void SetTapDelayPresent (bool present);
+  /**
+   * The Number of Taps Present subfield indicates the number of taps present in each channel measurement.
+   * This subfield has the same encoding as the Number of Taps Requested subfield.
+   * \param taps
+   */
+  void SetNumberOfTapsPresent (uint8_t taps);
+  /**
+   * The value of the Number of TX Sector Combinations Present subfield plus one indicates the number of TX
+   * sector combinations, N tsc , for the MIMO BF feedback. The number of measurements, Nmeas, is NTX × NRX
+   * multiples of the number of TX sector combinations, Ntsc.
+   * \param present
+   */
+  void SetNumberOfTXSectorCombinationsPresent (uint8_t present);
+  /**
+   * The Precoder Information Present subfield is set to 1 to indicate that precoding information is present as
+   * part of the MIMO BF feedback. Otherwise, it is set to 0.
+   * \param present
+   */
+  void SetPrecodingInformationPresent (bool present);
+  /**
+   * The Channel Aggregation Present subfield is set to 1 to indicate that, in case of channel aggregation,
+   * channel measurement feedback per channel is present. Otherwise, it is set to 0.
+   * \param present
+   */
+  void SetChannelAggregationPresent (bool present);
+
+  /** The following subfields are part of the Digital Fbck Control Field that fefines the requirements for
+   *  the digital feedback type. **/
+
+  /**
+   * Indicates the number of columns, Nc, in the beamforming feedback matrix minus one
+   * \param nc The number of columns.
+   */
+  void SetNumberOfColumns (uint8_t nc);
+  /**
+   * Indicates the number of rows, Nr, in a beamforming feedback matrix minus one:
+   * \param nr The number of rows.
+   */
+  void SetNumberOfRows (uint8_t nr);
+  /**
+   * Indicates the Tx Antennas reported in the accompanying Digital BF Feedback element. If the
+   * CSI for the i th Tx Antenna is included in the accompanying Digital BF feedback element, the
+   * i th bit in Tx Antenna Mask is set to 1. Otherwise, the i th bit in Tx Antenna Mask is set to 0.
+   * \param mask
+   */
+  void SetTxAntennaMask (uint8_t mask);
+  /**
+   * Indicates the number of contiguous 2.16 GHz channels the measurement was made for minus one:
+   * Set to 0 for 2.16 GHz
+   * Set to 1 for 4.32 GHz
+   * Set to 2 for 6.48 GHz
+   * Set to 3 for 8.64 GHz
+   * \param ncb The number of contiguous 2.16 GHz channels the measurement was made for.
+   */
+  void SetNumberOfContiguousChannels (uint8_t ncb);
+  /**
+   * Indicates the subcarrier grouping, Ng, used for beamforming feedback matrix
+   * Set to 0 for N g = 2
+   * Set to 1 for N g = 4
+   * Set to 2 for N g = 8
+   * Set to 3 for dynamic grouping; reserved if dynamic grouping is not supported
+   * If the Feedback Type subfield is 0, the Grouping subfield is reserved.
+   * \param ng
+   */
+  void SetGrouping (uint8_t ng);
+  /**
+   * Indicates the size of codebook entries.
+   * If the SU/MU field in the MIMO Feedback Control element is 1:
+   *  - Set to 0 for 6 bits for Ψ, 4 bits for φ.
+   *  - Value 1 is reserved.
+   * If the SU/MU field in the MIMO Feedback Control element is 0:
+   *  - Set to 0 for 9 bits for Ψ , 7 bits for φ.
+   *  - Value 1 is reserved.
+   * \param type
+   */
+  void SetCodebookInformationType (bool type);
+  /**
+   * Indicates which type of feedback is provided. Set to 0 for uncompressed beamforming
+   * feedback in time domain (EDMG SC mode) and set to 1 for compressed using Givens-
+   * Rotation in frequency domain (EDMG OFDM mode).
+   * \param type
+   */
+  void SetFeedbackType (bool type);
+  /**
+   * This field is represented by the variable Nsc.
+   * If the Feedback Type subfield is 0, Nsc is the number of feedback taps per element of the SC
+   * feedback matrix.
+   * If the Feedback Type subfield is 1 and the Grouping subfield is less than 3, Nsc is determined
+   * by Table 29.
+   * If the Feedback Type subfield is 1 and the Grouping subfield is 3, Nsc specifies the number of
+   * subcarriers present in the Digital Beamforming Feedback Information field of the Digital BF
+   * Feedback element minus one.
+   * \param number
+   */
+  void SetNumberOfFeedbackMatricesOrTaps (uint16_t number);
+
+  MimoBeamformingType SetMimoBeamformingType (void) const;
+  bool IsLinkTypeAsInitiator (void) const;
+  uint8_t SetComebackDelay (void) const;
+
+  /** The following fields are reserved when the Comeback Delay field is set to a nonzero value. **/
+
+  bool IsChannelMeasurementPresent (void) const;
+  bool IsTapDelayPresent (void) const;
+  uint8_t GetNumberOfTapsPresent (void) const;
+  uint8_t GetNumberOfTXSectorCombinationsPresent (void) const;
+  bool IsPrecodingInformationPresent(void) const;
+  bool IsChannelAggregationPresent (void) const;
+
+  /** The following subfields are part of the Digital Fbck Control Field that fefines the requirements for
+   *  the digital feedback type. **/
+
+  uint8_t GetNumberOfColumns (void) const;
+  uint8_t GetNumberOfRows (void) const;
+  uint8_t GetTxAntennaMask (void) const;
+  uint8_t GetNumberOfContiguousChannels (void) const;
+  uint8_t GetGrouping (void) const;
+  bool GetCodebookInformationType (void) const;
+  bool GetFeedbackType (void) const;
+  uint16_t GetNumberOfFeedbackMatricesOrTaps (void) const;
+
+private:
+  MimoBeamformingType m_mimoBeamformingType;
+  bool m_linkType;
+  uint8_t m_comebackDelay;
+
+  bool m_isChannelMeasurementPresent;
+  bool m_isTapDelayPresent;
+  uint8_t m_numberOfTapsPresent;
+  uint8_t m_nummberOfTXSectorCombinationsPresent;
+  bool m_isPrecodingInformationPresent;
+  bool m_ssChannelAggregationPresent;
+
+  uint8_t m_numberOfColumns;
+  uint8_t m_numberOfRows;
+  uint8_t m_txAntennaMask;
+  uint8_t m_numberOfContiguousChannels;
+  uint8_t m_grouping;
+  bool m_codebookInformationType;
+  bool m_feedbackType;
+  uint16_t m_numberOfFeedbackMatricesOrTaps;
+
+};
+
+std::ostream &operator << (std::ostream &os, const MIMOFeedbackControl &element);
+std::istream &operator >> (std::istream &is, MIMOFeedbackControl &element);
+
+ATTRIBUTE_HELPER_HEADER (MIMOFeedbackControl);
+
+struct ReciprocalConfigData {
+  uint16_t ConfigurationAWVFeedbackID;  /* 11 Bits */
+  uint8_t ConfigurationBRPCDOWN;        /*  6 Bits */
+  uint8_t ConfigurationRXAntennaID;     /*  3 Bits */
+};
+
+typedef std::vector<ReciprocalConfigData> ReciprocalConfigDataList;
+typedef ReciprocalConfigDataList::const_iterator ReciprocalConfigDataListCI;
+typedef ReciprocalConfigDataList::iterator ReciprocalConfigDataListI;
+
+struct ReciprocalTransmissionConfig {
+  ANTENNA_ID antennaID;
+  uint32_t reciprocalConfigGroupUserMask;
+  ReciprocalConfigDataList configList;
+};
+
+typedef std::vector<ReciprocalTransmissionConfig> ReciprocalTransmissionConfigList;
+typedef ReciprocalTransmissionConfigList::const_iterator ReciprocalTransmissionConfigListCI;
+typedef ReciprocalTransmissionConfigList::iterator ReciprocalTransmissionConfigListI;
+
+enum MultiUserTransmissionConfigType {
+  MU_NonReciprocal = 0,
+  MU_Reciprocal = 1
+};
+
+/**
+ * \ingroup wifi
+ *
+ * The MIMO Feedback Control element is used to carry configuration information for
+ * accompanying Channel Measurement Feedback element, EDMG Channel Measurement Feedback
+ * element and/or Digital BF Feedback element.
+ *
+ */
+class MIMOSelectionControlElement : public WifiInformationElement
+{
+public:
+  MIMOSelectionControlElement ();
+
+  WifiInformationElementId ElementId () const;
+  WifiInformationElementId ElementIdExtension () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * Indicates the EDMG group ID of target MU group.
+   * \param id
+   */
+  void SetEDMGGroupID (uint8_t id);
+  /**
+   * Indicates the number of MU-MIMO transmission configurations, N conf .
+   * \param number
+   */
+  void SetNumberOfMultiUserConfigurations (uint8_t number);
+  /**
+   * This field is set to 0 to indicate the MU-MIMO transmission configurations obtained from the non-
+   * reciprocal MU-MIMO BF training. This field is set to 1 to indicate the MU-MIMO transmission
+   * configurations obtained from the reciprocal MU-MIMO BF training.
+   * \param type
+   */
+  void SetMultiUserTransmissionConfigurationType (MultiUserTransmissionConfigType type);
+  void AddReciprocalMUBFTrainingBasedTransmissionConfig (ReciprocalTransmissionConfig &config);
+
+  uint8_t GetEDMGGroupID (void) const;
+  uint8_t GetNumberOfMultiUserConfigurations (void) const;
+  MultiUserTransmissionConfigType GetMultiUserTransmissionConfigurationType (void) const;
+  ReciprocalTransmissionConfigList GetReciprocalTransmissionConfigList (void) const;
+
+private:
+  uint8_t m_edmgGroupID;
+  uint8_t m_numMUConfigurations;
+  MultiUserTransmissionConfigType m_muType;
+  ReciprocalTransmissionConfigList m_reciprocalConfigList;
+
+};
+
+std::ostream &operator << (std::ostream &os, const MIMOSelectionControlElement &element);
+std::istream &operator >> (std::istream &is, MIMOSelectionControlElement &element);
+
+ATTRIBUTE_HELPER_HEADER (MIMOSelectionControlElement);
+
+struct DigitalFeedbackComponent {
+  uint8_t realPart;
+  uint8_t imagPart;
+};
+
+typedef std::vector<DigitalFeedbackComponent> DigitalBeamformingFeedbackMatrix;
+typedef DigitalBeamformingFeedbackMatrix::iterator DigitalBeamformingFeedbackMatrixI;
+typedef DigitalBeamformingFeedbackMatrix::const_iterator DigitalBeamformingFeedbackMatrixCI;
+
+typedef std::vector<DigitalBeamformingFeedbackMatrix> DigitalBeamformingFeedbackInformation;
+typedef DigitalBeamformingFeedbackInformation::iterator DigitalBeamformingFeedbackInformationI;
+typedef DigitalBeamformingFeedbackInformation::const_iterator DigitalBeamformingFeedbackInformationCI;
+
+typedef uint8_t DifferentialSubcarrierIndex;
+typedef std::vector<DifferentialSubcarrierIndex> DifferentialSubcarrierIndexList;
+typedef DifferentialSubcarrierIndexList::iterator DifferentialSubcarrierIndexListI;
+typedef DifferentialSubcarrierIndexList::const_iterator DifferentialSubcarrierIndexListCI;
+
+/**
+ * \ingroup wifi
+ *
+ * The Digital BF Feedback element is transmitted in the MIMO BF Feedback frame and carries feedback
+ * information in the form of beamforming feedback matrices and differential SNRs. The feedback
+ * information can be used by a transmit beamformer to determine digital beamforming steering matrices, Q.
+ * This process is described in 10.43.9.2.4. When the Digital BF Feedback element is transmitted in the
+ * MIMO BF Feedback frame, the SNR fields within the Channel Measurement Feedback element are
+ * interpreted as average SNR per stream, as defined in Table 9-240 (see 9.4.2.136).
+ */
+class DigitalBFFeedbackElement : public WifiInformationElement
+{
+public:
+  DigitalBFFeedbackElement ();
+
+  WifiInformationElementId ElementId () const;
+  WifiInformationElementId ElementIdExtension () const;
+  uint8_t GetInformationFieldSize () const;
+  void SerializeInformationField (Buffer::Iterator start) const;
+  uint8_t DeserializeInformationField (Buffer::Iterator start, uint8_t length);
+
+  /**
+   * If Feedback Type subfield is 0, represents the beamforming matrix in time domain for the 1 st tap as
+   * described above. If Feedback Type subfield is 1, represents the beamforming matrix for the 1st
+   * subcarrier, indexed by matrix angles in the order shown in Table 27
+   */
+  void AddDigitalBeamformingFeedbackMatrix (DigitalBeamformingFeedbackMatrix &matrix);
+  /**
+   * Add differential subcarrier Index
+   * \param index
+   */
+  void AddDifferentialSubcarrierIndex (DifferentialSubcarrierIndex index);
+  /**
+   * Add relative tap delay
+   * \param tapDelay
+   */
+  void AddRelativeTapDelay (Tap_Delay tapDelay);
+  /**
+   * Add differential SNR for Space-time stream.
+   * \param differentialSNR
+   */
+  void AddDifferentialSNRforSpaceTimeStream (SNR differentialSNR);
+
+  DigitalBeamformingFeedbackInformation GetDigitalBeamformingFeedbackInformation (void) const;
+  DifferentialSubcarrierIndexList GetDifferentialSubcarrierIndex (void) const;
+  Tap_Delay_List GetTapDelay (void) const;
+  SNR_LIST GetMUExclusiveBeamformingReport (void) const;
+
+private:
+  DigitalBeamformingFeedbackInformation m_digitalFBInfo;
+  DifferentialSubcarrierIndexList m_differentialSubcarrierIndexList;
+  Tap_Delay_List m_tapDelay;
+  SNR_LIST m_muExclusiveBeamformingReport;
+
+};
+
+std::ostream &operator << (std::ostream &os, const DigitalBFFeedbackElement &element);
+std::istream &operator >> (std::istream &is, DigitalBFFeedbackElement &element);
+
+ATTRIBUTE_HELPER_HEADER (DigitalBFFeedbackElement);
+
+typedef std::vector<Ptr<DigitalBFFeedbackElement> > DigitalBFFeedbackElementList;
+typedef DigitalBFFeedbackElementList::iterator DigitalBFFeedbackElementListI;
+typedef DigitalBFFeedbackElementList::const_iterator DigitalBFFeedbackElementListCI;
 
 } //namespace ns3
 

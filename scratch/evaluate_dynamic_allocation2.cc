@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -31,15 +31,15 @@
  * and can develop his/her own resource scheduller. In the first Polling Period, the user request Beamforming training (TxSS)
  * in each of the allocated SPs with a peer station as following:
  *
- * West DMG STA <-----> East DMG STA (2ms)
- * South DMG STA <-----> West DMG STA (2ms)
- * South DMG STA <-----> East DMG STA (2ms)
+ * West DMG STA <-----> East DMG STA (2 ms)
+ * South DMG STA <-----> West DMG STA (2 ms)
+ * South DMG STA <-----> East DMG STA (2 ms)
  *
  * After that phase, the 3 STAs request the following SP allocations for data communication:
  *
- * West DMG STA -----> East DMG STA (32ms)
- * South DMG STA -----> East DMG STA (5ms)
- * East DMG STA -----> DMG PCP/AP (16ms)
+ * West DMG STA -----> East DMG STA (32 ms)
+ * South DMG STA -----> East DMG STA (5 ms)
+ * East DMG STA -----> DMG PCP/AP (16 ms)
  *
  * The sequence of the allocations in the DTI depends on the association sequence i.e. the order of the associated station.
  *
@@ -85,6 +85,7 @@ uint8_t assoicatedStations = 0;           /* Total number of assoicated stations
 /*** Stations Variables ***/
 uint8_t bfTrainedStations = 0;            /* Total number of beamformed trained stations */
 bool bfTrained = false;                   /* Flag to indicate if stations did the BFT stage */
+uint8_t receivedInformation = 0;          /* Number of information response received */
 
 double
 CalculateSingleStreamThroughput (Ptr<PacketSink> sink, uint64_t &lastTotalRx, double &averageThroughput)
@@ -108,50 +109,54 @@ CalculateThroughput (void)
 }
 
 void
-StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
+StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t staAssociationID)
 {
   std::cout << "DMG STA " << staWifiMac->GetAddress () << " associated with DMG AP " << address << std::endl;
-  std::cout << "Association ID (AID) = " << staWifiMac->GetAssociationID () << std::endl;
+  std::cout << "Association ID (AID) = " << staAssociationID << std::endl;
   assoicatedStations++;
-  /* Check if all stations have assoicated with the AP */
+  /* Check if all stations have assoicated successfully with the AP */
   if (assoicatedStations == 3)
     {
-      /* Map AID to MAC Addresses in each node instead of requesting information */
-      Ptr<DmgStaWifiMac> srcMac, dstMac;
-      for (NetDeviceContainer::Iterator i = staDevices.Begin (); i != staDevices.End (); ++i)
-        {
-          srcMac = StaticCast<DmgStaWifiMac> (StaticCast<WifiNetDevice> (*i)->GetMac ());
-          for (NetDeviceContainer::Iterator j = staDevices.Begin (); j != staDevices.End (); ++j)
-            {
-              dstMac = StaticCast<DmgStaWifiMac> (StaticCast<WifiNetDevice> (*j)->GetMac ());
-              if (srcMac != dstMac)
-                {
-                  srcMac->MapAidToMacAddress (dstMac->GetAssociationID (), dstMac->GetAddress ());
-                }
-            }
-        }
+        std::cout << "All stations got associated with " << address << std::endl;
+        /* Create list of Information Element ID to request */
+        WifiInformationElementIdList list;
+        /* East DMG STA Request information about all the STAs */
+        eastWifiMac->RequestInformation (Mac48Address::GetBroadcast (), list);
+        /* South DMG STA Request information about all the STAs */
+        southWifiMac->RequestInformation (Mac48Address::GetBroadcast (), list);
+        /* West DMG STA Request information about all the STAs */
+        westWifiMac->RequestInformation (Mac48Address::GetBroadcast (), list);
+    }
+}
 
-      std::cout << "All stations got associated with " << address << std::endl;
-
-      /* Temporary Solution */
-      eastWifiMac->CommunicateInServicePeriod (apWifiMac->GetAddress ());
-
+void
+InformationResponseReceived (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
+{
+  std::cout << "DMG STA=" << staWifiMac->GetAddress () <<" received Information Response frame" << std::endl;
+  receivedInformation++;
+  if (receivedInformation == 3)
+    {
       /* Initiate Dynamic Allocation after all stations have associated successfully with the PCP/AP */
       Simulator::ScheduleNow (&DmgApWifiMac::InitiateDynamicAllocation, apWifiMac);
     }
 }
 
 void
-SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
       std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
       std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
                 << ", AntennaID=" << uint32_t (antennaId) << std::endl;
-      /* Temporary Solution */
-      staWifiMac->CommunicateInServicePeriod (address);
+      bfTrainedStations++;
+      if (bfTrainedStations == 6)
+        {
+          std::cout << "All the stations have beamformed with each other" << std::endl;
+          bfTrained = true;
+        }
     }
 }
 
@@ -185,7 +190,7 @@ DynamicAllocationInfoField RequestAllocation (Mac48Address address, BF_Control_F
     }
   else
     {
-      /* Set beamforming control field to perform SLS */
+      /* Set beamforming control field to perform TxSS SLS */
       bf.SetBeamformTraining (true);
       bf.SetAsInitiatorTxss (true);
       bf.SetAsResponderTxss (true);
@@ -206,11 +211,6 @@ DynamicAllocationInfoField RequestAllocation (Mac48Address address, BF_Control_F
           info.SetDestinationAID (eastWifiMac->GetAssociationID ());
         }
       info.SetAllocationDuration (2000); // 2ms
-      bfTrainedStations++;
-      if (bfTrainedStations == 3)
-        {
-          bfTrained = true;
-        }
     }
   return info;
 }
@@ -252,9 +252,10 @@ int
 main (int argc, char *argv[])
 {
   uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
+  uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
   string dataRate = "200Mbps";                  /* Application Layer Data Rate. */
   uint32_t queueSize = 1000;                    /* Wifi Mac Queue Size. */
-  string phyMode = "DMG_MCS24";                 /* Type of the Physical Layer. */
+  string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
   bool verbose = false;                         /* Print Logging Information. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
   bool pcapTracing = false;                     /* PCAP Tracing is enabled or not. */
@@ -263,6 +264,7 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
   cmd.AddValue ("dataRate", "Payload size in bytes", dataRate);
+  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
   cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
@@ -273,10 +275,10 @@ main (int argc, char *argv[])
   /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
   Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-//  Config::SetDefault ("ns3::WifiMacQueue::MaxPacketNumber", UintegerValue (queueSize));
+  Config::SetDefault ("ns3::QueueBase::MaxPackets", UintegerValue (queueSize));
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -289,36 +291,28 @@ main (int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** SETUP ALL NODES ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes steerable antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
   /* Make two nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -336,11 +330,16 @@ main (int argc, char *argv[])
   wifiMac.SetType("ns3::DmgApWifiMac",
                   "Ssid", SsidValue(ssid),
                   "BE_MaxAmpduSize", UintegerValue (0),
-                  "BE_MaxAmsduSize", UintegerValue (0),
+                  "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                   "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                   "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                  "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                   "ATIPresent", BooleanValue (false));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (8));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);
@@ -349,7 +348,7 @@ main (int argc, char *argv[])
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
                    "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (0),
+                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                    "StaAvailabilityElement", BooleanValue (true),
                    "PollingPhase", BooleanValue (true));
 
@@ -440,6 +439,11 @@ main (int argc, char *argv[])
   southWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, southWifiMac));
   eastWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, eastWifiMac));
 
+  /* Beamforming Training Traces */
+  westWifiMac->TraceConnectWithoutContext ("InformationResponseReceived", MakeBoundCallback (&InformationResponseReceived, westWifiMac));
+  southWifiMac->TraceConnectWithoutContext ("InformationResponseReceived", MakeBoundCallback (&InformationResponseReceived, southWifiMac));
+  eastWifiMac->TraceConnectWithoutContext ("InformationResponseReceived", MakeBoundCallback (&InformationResponseReceived, eastWifiMac));
+
   /* Connect traces related to dynamic allocation */
   apWifiMac->TraceConnectWithoutContext ("PPCompleted", MakeCallback (&PollingPeriodCompleted));
   apWifiMac->TraceConnectWithoutContext ("GPCompleted", MakeCallback (&PollingPeriodCompleted));
@@ -471,10 +475,9 @@ main (int argc, char *argv[])
   std::cout << "A3 = " << sink3->GetTotalReceivedPackets () << std::endl;
 
   std::cout << "Total throughput during each channel time allocation:" << std::endl;
-  std::cout << "A1 = " << westEastAverageThroughput/((simulationTime - 1) * 10) << std::endl;
-  std::cout << "A2 = " << southEastAverageThroughput/((simulationTime - 1) * 10) << std::endl;
-  std::cout << "A3 = " << eastApAverageThroughput/((simulationTime - 1) * 10) << std::endl;
+  std::cout << "A1 = " << westEastAverageThroughput/((simulationTime - 1) * 10) << " Mbps" << std::endl;
+  std::cout << "A2 = " << southEastAverageThroughput/((simulationTime - 1) * 10) << " Mbps" << std::endl;
+  std::cout << "A3 = " << eastApAverageThroughput/((simulationTime - 1) * 10) << " Mbps" << std::endl;
 
   return 0;
 }
-

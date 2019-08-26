@@ -55,7 +55,7 @@ class AggregationCapableTransmissionListener;
 class EdcaTxopN : public DcaTxop
 {
 public:
-  // Allow test cases to access private members
+  /// Allow test cases to access private members
   friend class ::AmpduAggregationTest;
 
   std::map<Mac48Address, bool> m_aMpduEnabled; //!< list containing flags whether A-MPDU is enabled for a given destination address
@@ -81,7 +81,7 @@ public:
    *
    * \param remoteManager WifiRemoteStationManager.
    */
-  void SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> remoteManager);
+  void SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> remoteManager);
   /**
    * Set type of station with the given type.
    *
@@ -118,24 +118,6 @@ public:
    * <i>recipient</i> for tid <i>tid</i>.
    */
   bool GetBaAgreementExists (Mac48Address address, uint8_t tid) const;
-  /**
-   * \param address recipient address of peer station involved in block ack mechanism.
-   * \param tid traffic ID.
-   *
-   * \return the number of packets buffered for a specified agreement.
-   *
-   * Returns number of packets buffered for a specified agreement.
-   */
-  uint32_t GetNOutstandingPacketsInBa (Mac48Address address, uint8_t tid) const;
-  /**
-   * \param recipient address of peer station involved in block ack mechanism.
-   * \param tid traffic ID.
-   *
-   * \return the number of packets for a specific agreement that need retransmission.
-   *
-   * Returns number of packets for a specific agreement that need retransmission.
-   */
-  uint32_t GetNRetryNeededPackets (Mac48Address recipient, uint8_t tid) const;
   /**
    * \param recipient address of peer station involved in block ack mechanism.
    * \param tid Ttraffic ID of transmitted packet.
@@ -197,6 +179,7 @@ public:
   void GotBlockAck (const CtrlBAckResponseHeader *blockAck, Mac48Address recipient, double rxSnr, WifiMode txMode, double dataSnr);
   /**
    * Event handler when a Block ACK timeout has occurred.
+   * \param nMpdus number of MPDUs sent in the A-MPDU transmission that results in a Block ACK timeout.
    */
   void MissedBlockAck (uint8_t nMpdus);
   /**
@@ -234,16 +217,37 @@ public:
    * Request access from DCF manager if needed.
    */
   void StartAccessIfNeeded (void);
+
   /**
-   * End Current Contention Period.
+   * Start a new allocation period in the DTI period.
+   * \param allocationType
+   * \param allocationID
+   * \param peerStation
+   * \param allocationDuration
    */
-  void EndCurrentContentionPeriod (void);
+  virtual void StartAllocationPeriod (AllocationType allocationType, AllocationID allocationID,
+                                      Mac48Address peerStation, Time allocationDuration);
   /**
-   * Initiate Transmission in this CBAP period.
-   * \param allocationID The unique ID of this allocation.
-   * \param cbapDuration The duration of this service period in microseconds.
+   * Initiate Transmission in the current service period.
    */
-  void InitiateTransmission (AllocationID allocationID, Time cbapDuration);
+  void InitiateTransmission (void);
+  /**
+   * Resume transmission in the current allocation period
+   */
+  void ResumeTransmission (Time periodDuration);
+  /**
+   * Get the remaining duration in the current allocation.
+   * \return The remaining time in the current allocation.
+   */
+  Time GetRemainingDuration (void) const;
+  /**
+   * \param callback the callback to invoke when an ACK/BlockAck
+   * is missed from the peer side
+   */
+  void SetMissedAckCallback (TxFailed callback);
+  void AllowChannelAccess (void);
+  void DisableChannelAccess (void);
+
   /**
    * Check if Block ACK Request should be re-transmitted.
    *
@@ -282,13 +286,13 @@ public:
    *
    * \param aggr pointer to the MSDU aggregator.
    */
-  void SetMsduAggregator (Ptr<MsduAggregator> aggr);
+  void SetMsduAggregator (const Ptr<MsduAggregator> aggr);
   /**
    * Set the aggregator used to construct A-MPDU subframes.
    *
    * \param aggr pointer to the MPDU aggregator.
    */
-  void SetMpduAggregator (Ptr<MpduAggregator> aggr);
+  void SetMpduAggregator (const Ptr<MpduAggregator> aggr);
 
   /**
    * \param packet packet to send.
@@ -430,6 +434,7 @@ public:
 
 
 private:
+  /// allow AggregationCapableTransmissionListener class access
   friend class AggregationCapableTransmissionListener;
 
   /**
@@ -553,8 +558,8 @@ private:
   Ptr<MsduAggregator> m_msduAggregator;             //!< A-MSDU aggregator
   Ptr<MpduAggregator> m_mpduAggregator;             //!< A-MPDU aggregator
   TypeOfStation m_typeOfStation;                    //!< the type of station
-  QosBlockedDestinations *m_qosBlockedDestinations; //!< QOS blocked destinations
-  BlockAckManager *m_baManager;                     //!< the Block ACK manager
+  Ptr<QosBlockedDestinations> m_qosBlockedDestinations; //!< QOS blocked destinations
+  Ptr<BlockAckManager> m_baManager;                     //!< the Block ACK manager
   uint8_t m_blockAckThreshold;                      //!< the Block ACK threshold
   BlockAckType m_blockAckType;                      //!< the Block ACK type
   Time m_currentPacketTimestamp;                    //!< the current packet timestamp
@@ -568,19 +573,8 @@ private:
   TracedValue<uint32_t> m_cwTrace;        //!< CW trace value
   TracedCallback<Time, Time> m_txopTrace; //!< TXOP trace callback
 
-  /* Store packet and header for service period */
-  typedef std::pair<Ptr<const Packet>, WifiMacHeader> PacketInformation;
-  typedef std::map<AllocationID, PacketInformation> StoredPackets;
-  typedef StoredPackets::const_iterator StoredPacketsCI;
-  StoredPackets m_storedPackets;
-
-  AllocationID m_allocationID;      /* Allocation ID for the current contention period */
-  Time m_transmissionStarted;       /* The time of the initiation of transmission */
-  Time m_remainingDuration;         /* The remaining duration till the end of this CBAP allocation*/
-  Time m_cbapDuration;              /* The duration of the current CBAP allocation*/
-  bool m_accessAllowed;             /* Flag to indicate whether the access is allowed for the curent EDCA Queue*/
-  bool m_missedACK;
-  bool m_firstTransmission;
+  /** DMG Allocation Variables **/
+  TxFailed m_missedAckCallback;             /* Missed Ack/BlockAck from the peer station */
 
 };
 

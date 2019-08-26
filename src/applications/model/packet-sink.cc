@@ -32,6 +32,7 @@
 #include "ns3/udp-socket-factory.h"
 #include "packet-sink.h"
 #include "timestamp-tag.h"
+#include "ns3/seq-ts-header.h"
 
 namespace ns3 {
 
@@ -69,6 +70,7 @@ PacketSink::PacketSink ()
   NS_LOG_FUNCTION (this);
   m_socket = 0;
   m_totalRx = 0;
+  m_totalPackets = 0;
 }
 
 PacketSink::~PacketSink()
@@ -122,7 +124,10 @@ void PacketSink::StartApplication ()    // Called at time specified by Start
   if (!m_socket)
     {
       m_socket = Socket::CreateSocket (GetNode (), m_tid);
-      m_socket->Bind (m_local);
+      if (m_socket->Bind (m_local) == -1)
+        {
+          NS_FATAL_ERROR ("Failed to bind socket");
+        }
       m_socket->Listen ();
       m_socket->ShutdownSend ();
       if (addressUtils::IsMulticast (m_local))
@@ -177,6 +182,7 @@ void PacketSink::HandleRead (Ptr<Socket> socket)
           break;
         }
       m_totalRx += packet->GetSize ();
+//      NS_ABORT_IF(packet->GetSize () != 1448);
       if (InetSocketAddress::IsMatchingType (from))
         {
           NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds ()
@@ -195,6 +201,11 @@ void PacketSink::HandleRead (Ptr<Socket> socket)
                        << " port " << Inet6SocketAddress::ConvertFrom (from).GetPort ()
                        << " total Rx " << m_totalRx << " bytes");
         }
+
+//      SeqTsHeader header;
+//      packet->RemoveHeader (header);
+//      NS_LOG_UNCOND ("RCV: " << header.GetSeq () << " " << header.GetTs ().GetSeconds ());
+
       m_rxTrace (packet, from);
 
       TimestampTag timestamp;

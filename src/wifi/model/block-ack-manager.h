@@ -33,9 +33,7 @@ namespace ns3 {
 class MgtAddBaResponseHeader;
 class MgtAddBaRequestHeader;
 class MacTxMiddle;
-class WifiMacQueueItem;
-template <typename Item> class WifiQueue;
-typedef WifiQueue<WifiMacQueueItem> WifiMacQueue;
+class WifiMacQueue;
 
 /**
  * \ingroup wifi
@@ -69,16 +67,26 @@ struct Bar
  * \brief Manages all block ack agreements for an originator station.
  * \ingroup wifi
  */
-class BlockAckManager
+class BlockAckManager : public Object
 {
 private:
   /// type conversion operator
   BlockAckManager (const BlockAckManager&);
-  /// assignment operator
-  BlockAckManager& operator= (const BlockAckManager&);
+  /**
+   * assignment operator
+   * \param block BlockAckManager to assign
+   * \returns the assigned BlockAckManager
+   */
+  BlockAckManager& operator= (const BlockAckManager& block);
 
 
 public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
+  static TypeId GetTypeId (void);
+
   BlockAckManager ();
   ~BlockAckManager ();
 
@@ -87,14 +95,14 @@ public:
    *
    * \param manager WifiRemoteStationManager associated with this BlockAckManager
    */
-  void SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> manager);
+  void SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> manager);
   /**
    * \param recipient Address of peer station involved in block ack mechanism.
    *
    * Copy all block ack agreement exists with station addressed by
    * <i>recipient</i> for tid <i>tid</i>.
    */
-  void CopyAgreements (Mac48Address recipient, BlockAckManager *manager);
+  void CopyAgreements (Mac48Address recipient, Ptr<BlockAckManager> manager);
   /**
    * \param recipient Address of peer station involved in block ack mechanism.
    * \param tid Traffic ID.
@@ -151,22 +159,14 @@ public:
   void StorePacket (Ptr<const Packet> packet, const WifiMacHeader &hdr, Time tStamp);
   /**
    * \param hdr 802.11 header of returned packet (if exists).
+   * \param removePacket flag to indicate whether the packet should be removed from the queue.
    *
    * \return the packet
    *
    * This methods returns a packet (if exists) indicated as not received in
    * corresponding block ack bitmap.
    */
-  Ptr<const Packet> GetNextPacket (WifiMacHeader &hdr);
-  /**
-   * \param hdr 802.11 header of returned packet (if exists).
-   *
-   * \return the packet
-   *
-   * This methods returns a packet (if exists) indicated as not received in
-   * corresponding block ack bitmap. This method doesn't remove the packet from this queue.
-   */
-  Ptr<const Packet> PeekNextPacket (WifiMacHeader &hdr);
+  Ptr<const Packet> GetNextPacket (WifiMacHeader &hdr, bool removePacket);
   /**
    * Returns true if the BAR is scheduled. Returns false otherwise.
    *
@@ -263,12 +263,12 @@ public:
   /**
    * \param queue The WifiMacQueue object.
    */
-  void SetQueue (Ptr<WifiMacQueue> queue);
+  void SetQueue (const Ptr<WifiMacQueue> queue);
   /**
    * Set the MacTxMiddle
    * \param txMiddle the MacTxMiddle
    */
-  void SetTxMiddle (MacTxMiddle* txMiddle);
+  void SetTxMiddle (const Ptr<MacTxMiddle> txMiddle);
 
   /**
    * \param bAckType Type of block ack
@@ -276,30 +276,6 @@ public:
    * See ctrl-headers.h for more details.
    */
   void SetBlockAckType (BlockAckType bAckType);
-  /**
-   * \param recipient Address of station involved in block ack mechanism.
-   * \param tid Traffic ID.
-   *
-   * This method is invoked by EdcaTxopN object upon receipt of a DELBA frame
-   * from recipient. The relative block ack agreement is destroyed.
-   */
-  void TearDownBlockAck (Mac48Address recipient, uint8_t tid);
-  /**
-   * \param sequenceNumber Sequence number of the packet which fragment is
-   * part of.
-   * \return true if another fragment with the given sequence number is scheduled
-   * for retransmission.
-   *
-   * Returns true if another fragment with sequence number <i>sequenceNumber</i> is scheduled
-   * for retransmission.
-   */
-  bool HasOtherFragments (uint16_t sequenceNumber) const;
-  /**
-   * \return the size of the next packet that needs retransmission
-   *
-   * Returns size of the next packet that needs retransmission.
-   */
-  uint32_t GetNextPacketSize (void) const;
   /**
    * \param maxDelay Max delay for a buffered packet.
    *
@@ -325,8 +301,8 @@ public:
   void SetUnblockDestinationCallback (Callback<void, Mac48Address, uint8_t> callback);
 
   /**
-   * \param recipient
-   * \param tid
+   * \param recipient the destination address
+   * \param tid the Traffic ID
    * \param startingSeq
    *
    * \return true if there are packets in the queue that could be sent under block ACK,
@@ -339,8 +315,8 @@ public:
    */
   bool SwitchToBlockAckIfNeeded (Mac48Address recipient, uint8_t tid, uint16_t startingSeq);
   /**
-   * \param recipient
-   * \param tid
+   * \param recipient the destination address
+   * \param tid the Traffic ID
    *
    * \return the sequence number of the next retry packet for a specific agreement
    *
@@ -351,10 +327,19 @@ public:
   uint16_t GetSeqNumOfNextRetryPacket (Mac48Address recipient, uint8_t tid) const;
   /**
    * Checks if the packet already exists in the retransmit queue or not if it does then it doesn't add it again
+   *
+   * \param currentSeq the current sequence
+   * \param recipient the destination address
+   * \param tid the Traffic ID
+   * \returns true if the packet already exists
    */
   bool AlreadyExists (uint16_t currentSeq, Mac48Address recipient, uint8_t tid) const;
   /**
    * Remove a packet after you peek in the queue and get it
+   * \param tid the Traffic ID
+   * \param recipient the destination address
+   * \param seqnumber sequence number
+   * \returns true if a packet was removed
    */
   bool RemovePacket (uint8_t tid, Mac48Address recipient, uint16_t seqnumber);
   /**
@@ -376,7 +361,7 @@ public:
    *
    * \param tid Traffic ID
    * \param seqNumber sequence number
-   * \param recipient mac address
+   * \param recipient MAC address
    *
    * \returns true if BAR retransmission needed
    */
@@ -464,7 +449,6 @@ private:
    */
   struct Item
   {
-    Item ();
     /**
      * Constructor
      *
@@ -516,7 +500,7 @@ private:
   uint8_t m_blockAckThreshold; ///< bock ack threshold
   BlockAckType m_blockAckType; ///< bock ack type
   Time m_maxDelay; ///< maximum delay
-  MacTxMiddle* m_txMiddle; ///< the MacTxMiddle
+  Ptr<MacTxMiddle> m_txMiddle; ///< the MacTxMiddle
   Mac48Address m_address; ///< address
   Ptr<WifiMacQueue> m_queue; ///< queue
   Callback<void, Mac48Address, uint8_t, bool> m_blockAckInactivityTimeout; ///< block ack inactivity timeout callback

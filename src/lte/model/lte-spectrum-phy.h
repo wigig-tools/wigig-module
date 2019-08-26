@@ -90,15 +90,6 @@ struct LteSpectrumSignalParametersDataFrame;
 struct LteSpectrumSignalParametersDlCtrlFrame;
 struct LteSpectrumSignalParametersUlSrsFrame;
 
-
-/**
-* this method is invoked by the LteSpectrumPhy to notify the PHY that the
-* transmission of a given packet has been completed.
-*
-* @param packet the Packet whose TX has been completed.
-*/
-typedef Callback< void, Ptr<const Packet> > LtePhyTxEndCallback;
-
 /**
 * This method is used by the LteSpectrumPhy to notify the PHY that a
 * previously started RX attempt has terminated without success
@@ -273,15 +264,6 @@ public:
   */
   bool StartTxUlSrsFrame ();
 
-
-  /**
-   * set the callback for the end of a TX, as part of the
-   * interconnections between the PHY and the MAC
-   *
-   * @param c the callback
-   */
-  void SetLtePhyTxEndCallback (LtePhyTxEndCallback c);
-
   /**
    * set the callback for the end of a RX in error, as part of the
    * interconnections between the PHY and the MAC
@@ -441,6 +423,7 @@ public:
    */
   Ptr<SpectrumChannel> GetChannel ();
 
+  /// allow LteUePhy class friend access
   friend class LteUePhy;
   
  /**

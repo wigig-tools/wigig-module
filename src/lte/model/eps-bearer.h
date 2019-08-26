@@ -27,13 +27,13 @@
 namespace ns3 {
 
 /**
- * 3GPP TS 36.143 9.2.1.18 GBR QoS Information
+ * 3GPP TS 36.413 9.2.1.18 GBR QoS Information
  *
  */
 struct GbrQosInformation
 {
   /** 
-   * Default constructor, inizializes member variables to zero or equivalent
+   * Default constructor, initializes member variables to zero or equivalent
    */
   GbrQosInformation ();
 
@@ -51,7 +51,7 @@ struct GbrQosInformation
 struct AllocationRetentionPriority
 {
   /** 
-   * Default constructor, inizializes member variables to zero or equivalent
+   * Default constructor, initializes member variables to zero or equivalent
    */
   AllocationRetentionPriority ();
   uint8_t priorityLevel;     ///< 1-15; 1 = highest

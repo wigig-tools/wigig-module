@@ -103,6 +103,8 @@ enum WifiCodeRate
   WIFI_CODE_RATE_52_63,
   /** Rate 13/14 */
   WIFI_CODE_RATE_13_14,
+  /** Rate 7/8 */
+  WIFI_CODE_RATE_7_8,
 };
 
 /**
@@ -259,7 +261,9 @@ public:
   uint64_t GetDataRate (void) const;
 
 private:
+  /// allow WifiModeFactory class access
   friend class WifiModeFactory;
+  /// allow WifiPhyTag class access
   friend class WifiPhyTag; // access the UID-based constructor
   /**
    * Create a WifiMode from a given unique ID.
@@ -363,6 +367,7 @@ public:
 
 
 private:
+  /// allow WifiMode class access
   friend class WifiMode;
   friend std::istream & operator >> (std::istream &is, WifiMode &mode);
 

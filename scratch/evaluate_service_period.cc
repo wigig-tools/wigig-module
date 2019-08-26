@@ -1,14 +1,16 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
+#include "ns3/flow-monitor-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/wifi-module.h"
 #include "common-functions.h"
+#include <iomanip>
 
 /**
  *
@@ -107,14 +109,17 @@ CalculateThroughput (void)
   thr1 = CalculateSingleStreamThroughput (sink1, westEastLastTotalRx, westEastAverageThroughput);
   thr2 = CalculateSingleStreamThroughput (sink2, westSouthTotalRx, westSouthAverageThroughput);
   thr3 = CalculateSingleStreamThroughput (sink3, apWestTotalRx, apWestAverageThroughput);
-  std::cout << now.GetSeconds () << '\t' << thr1 << '\t'<< thr2 << '\t'<< thr3 << std::endl;
+  std::cout << std::left << std::setw (12) << now.GetSeconds ()
+            << std::left << std::setw (12) << thr1
+            << std::left << std::setw (12) << thr2
+            << std::left << std::setw (12) << thr3 << std::endl;
   Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
 }
 
 void
-StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
+StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t aid)
 {
-  std::cout << "DMG STA " << staWifiMac->GetAddress () << " associated with DMG AP " << address << std::endl;
+  std::cout << "DMG STA: " << staWifiMac->GetAddress () << " associated with DMG PCP/AP: " << address << std::endl;
   std::cout << "Association ID (AID) = " << staWifiMac->GetAssociationID () << std::endl;
   assoicatedStations++;
   /* Check if all stations have assoicated with the PCP/AP */
@@ -135,7 +140,17 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
             }
         }
 
-      std::cout << "All stations got associated with " << address << std::endl;
+      std::cout << "All stations got associated with DMG PCP/AP: " << address << std::endl;
+
+      /* For simplicity we assume that each station is aware of the capabilities of the peer station */
+      /* Otherwise, we have to request the capabilities of the peer station. */
+      westWifiMac->StorePeerDmgCapabilities (eastWifiMac);
+      westWifiMac->StorePeerDmgCapabilities (southWifiMac);
+      eastWifiMac->StorePeerDmgCapabilities (westWifiMac);
+      eastWifiMac->StorePeerDmgCapabilities (southWifiMac);
+      southWifiMac->StorePeerDmgCapabilities (westWifiMac);
+      southWifiMac->StorePeerDmgCapabilities (eastWifiMac);
+
       /* Schedule Beamforming Training SPs */
       uint32_t allocationStart = 0;
       allocationStart = apWifiMac->AllocateBeamformingServicePeriod (westWifiMac->GetAssociationID (),
@@ -148,8 +163,9 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
 }
 
 void
-SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
@@ -191,20 +207,20 @@ SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
 int
 main (int argc, char *argv[])
 {
-  uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
-  string dataRate1 = "300Mbps";                 /* Application Layer Data Rate for WestNode->EastNode. */
-  string dataRate2 = "300Mbps";                 /* Application Layer Data Rate for WestNode->SouthNode. */
-  string dataRate3 = "400Mbps";                 /* Application Layer Data Rate for ApNode->WestNode. */
+  uint32_t packetSize = 1472;                   /* Transport Layer Payload size in bytes. */
+  string dataRate1 = "50Mbps";                  /* Application Layer Data Rate for WestNode->EastNode. */
+  string dataRate2 = "40Mbps";                  /* Application Layer Data Rate for WestNode->SouthNode. */
+  string dataRate3 = "100Mbps";                 /* Application Layer Data Rate for ApNode->WestNode. */
   uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
-  uint32_t queueSize = 100000;                  /* Wifi Mac Queue Size. */
-  string phyMode = "DMG_MCS24";                 /* Type of the Physical Layer. */
+  uint32_t queueSize = 1000;                    /* Wifi Mac Queue Size. */
+  string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
   bool verbose = false;                         /* Print Logging Information. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
   bool pcapTracing = false;                     /* PCAP Tracing is enabled or not. */
 
   /* Command line argument parser setup. */
   CommandLine cmd;
-  cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
+  cmd.AddValue ("packetSize", "Payload size in bytes", packetSize);
   cmd.AddValue ("dataRate1", "Data rate for OnOff Application WestNode->EastNode", dataRate1);
   cmd.AddValue ("dataRate2", "Data rate for OnOff Application WestNode->SouthNode", dataRate2);
   cmd.AddValue ("dataRate3", "Data rate for OnOff Application ApNode->WestNode", dataRate3);
@@ -224,7 +240,7 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -237,38 +253,30 @@ main (int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup physical layer ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes directional antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
-  /* Make four nodes and set them up with the phy and the mac */
+  /* Make four nodes and set them up with the PHY and the MAC */
   NodeContainer wifiNodes;
   wifiNodes.Create (4);
   Ptr<Node> apNode = wifiNodes.Get (0);
@@ -287,8 +295,13 @@ main (int argc, char *argv[])
                    "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                    "ATIPresent", BooleanValue (false));
+
+  /* Set Simple Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (8));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);
@@ -344,29 +357,29 @@ main (int argc, char *argv[])
   OnOffHelper src;
   src.SetAttribute ("Remote", AddressValue (InetSocketAddress (staInterfaces.GetAddress (2), 9999)));
   src.SetAttribute ("MaxBytes", UintegerValue (0));
-  src.SetAttribute ("PacketSize", UintegerValue (payloadSize));
+  src.SetAttribute ("PacketSize", UintegerValue (packetSize));
   src.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1e6]"));
   src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
   src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate1)));
-  srcApp = src.Install (westNode);
-  srcApp.Start (Seconds (3.0));
+  srcApp.Add (src.Install (westNode));
 
   /* Install Simple UDP Transmiter on the West Node (Transmit to the South Node) */
   src.SetAttribute ("Remote", AddressValue (InetSocketAddress (staInterfaces.GetAddress (1), 9999)));
   src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate2)));
-  srcApp = src.Install (westNode);
-  srcApp.Start (Seconds (3.0));
+  srcApp.Add (src.Install (westNode));
 
   /* Install Simple UDP Transmiter on the AP Node (Transmit to the West Node) */
   src.SetAttribute ("Remote", AddressValue (InetSocketAddress (staInterfaces.GetAddress (0), 9999)));
   src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate3)));
-  srcApp = src.Install (apNode);
-  srcApp.Start (Seconds (3.0));
+  srcApp.Add (src.Install (apNode));
 
-  /* Set Maximum number of packets in WifiMacQueue */
-  Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/DcaTxop/Queue/MaxPackets", UintegerValue (queueSize));
+  /* Start and stop applications */
+  srcApp.Start (Seconds (3.0));
+  srcApp.Stop (Seconds (simulationTime));
+  sinks.Start (Seconds (3.0));
+
+  /* Set the maximum number of packets in WifiMacQueue */
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/BE_EdcaTxopN/Queue/MaxPackets", UintegerValue (queueSize));
-  Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::DmgWifiMac/SPQueue/MaxPackets", UintegerValue (queueSize));
 
   /* Schedule Throughput Calulcations */
   Simulator::Schedule (Seconds (3.1), &CalculateThroughput);
@@ -374,12 +387,17 @@ main (int argc, char *argv[])
   /* Enable Traces */
   if (pcapTracing)
     {
-      wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+      wifiPhy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
+      wifiPhy.SetSnapshotLength (120);
       wifiPhy.EnablePcap ("Traces/AccessPoint", apDevice, false);
       wifiPhy.EnablePcap ("Traces/WestNode", staDevices.Get (0), false);
       wifiPhy.EnablePcap ("Traces/SouthNode", staDevices.Get (1), false);
       wifiPhy.EnablePcap ("Traces/EastNode", staDevices.Get (2), false);
     }
+
+  /* Install FlowMonitor on all nodes */
+  FlowMonitorHelper flowmon;
+  Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
 
   /* Stations */
   apWifiNetDevice = StaticCast<WifiNetDevice> (apDevice.Get (0));
@@ -402,22 +420,46 @@ main (int argc, char *argv[])
   eastWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, eastWifiMac));
 
   /* Print Output */
-  std::cout << "Time(s)" << '\t' << "SP1" << '\t'<< "SP2" << '\t'<< "SP3" << std::endl;
+  std::cout << std::left << std::setw (12) << "Time  [s]"
+            << std::left << std::setw (12) << "SP1 [Mbps]"
+            << std::left << std::setw (12) << "SP2 [Mbps]"
+            << std::left << std::setw (12) << "SP3 [Mbps]" << std::endl;
 
-  Simulator::Stop (Seconds (simulationTime));
+  Simulator::Stop (Seconds (simulationTime + 0.101));
   Simulator::Run ();
   Simulator::Destroy ();
 
-  /* Print Results Summary */
-  std::cout << "Total number of packets received during each service period:" << std::endl;
-  std::cout << "A1 = " << sink1->GetTotalReceivedPackets () << std::endl;
-  std::cout << "A2 = " << sink2->GetTotalReceivedPackets () << std::endl;
-  std::cout << "A2 = " << sink3->GetTotalReceivedPackets () << std::endl;
+  /* Print per flow statistics */
+  monitor->CheckForLostPackets ();
+  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
+    {
+      Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+      std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")" << std::endl;;
+      std::cout << "  Tx Packets: " << i->second.txPackets << std::endl;
+      std::cout << "  Tx Bytes:   " << i->second.txBytes << std::endl;
+      std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
+      std::cout << "  Rx Packets: " << i->second.rxPackets << std::endl;;
+      std::cout << "  Rx Bytes:   " << i->second.rxBytes << std::endl;
+      std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
+    }
 
-  std::cout << "Total throughput during each service period:" << std::endl;
-  std::cout << "A1 = " << westEastAverageThroughput/((simulationTime - 3) * 10) << std::endl;
-  std::cout << "A2 = " << westSouthAverageThroughput/((simulationTime - 3) * 10) << std::endl;
-  std::cout << "A3 = " << apWestAverageThroughput/((simulationTime - 3) * 10) << std::endl;
+  /* Print Application Layer Results Summary */
+  Ptr<OnOffApplication> onoff;
+  Ptr<PacketSink> sink;
+  std::cout << "\nApplication Layer Statistics:" << std::endl;;
+  for (uint8_t i = 0; i < srcApp.GetN (); i++)
+    {
+      onoff = StaticCast<OnOffApplication> (srcApp.Get (i));
+      sink = StaticCast<PacketSink> (sinks.Get (i));
+      std::cout << "Stats (" << i + 1 << ")" << std::endl;
+      std::cout << "  Tx Packets: " << onoff->GetTotalTxPackets () << std::endl;
+      std::cout << "  Tx Bytes:   " << onoff->GetTotalTxBytes () << std::endl;
+      std::cout << "  Rx Packets: " << sink->GetTotalReceivedPackets () << std::endl;
+      std::cout << "  Rx Bytes:   " << sink->GetTotalRx () << std::endl;
+      std::cout << "  Throughput: " << sink->GetTotalRx () * 8.0 / ((simulationTime - 3) * 1e6) << " Mbps" << std::endl;
+    }
 
   return 0;
 }

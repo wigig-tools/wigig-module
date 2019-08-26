@@ -32,6 +32,8 @@ class TypeId;
 
 /**
  * \ingroup packet
+ * \ingroup wave
+ *
  * \brief This tag will be used to support higher layer control DataRate
  * and TxPwr_Level for transmission.
  * If the high layer enables adaptable mode,  DataRate will be the
@@ -45,10 +47,20 @@ class TypeId;
 class HigherLayerTxVectorTag : public Tag
 {
 public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
   static TypeId GetTypeId (void);
   virtual TypeId GetInstanceTypeId (void) const;
 
   HigherLayerTxVectorTag (void);
+  /**
+   * Constructor
+   *
+   * \param txVector wifi transmit vector
+   * \param adaptable is adaptable?
+   */
   HigherLayerTxVectorTag (WifiTxVector txVector, bool adaptable);
   /**
    * \returns the tx vector for transmission
@@ -65,8 +77,8 @@ public:
   virtual void Print (std::ostream &os) const;
 
 private:
-  WifiTxVector m_txVector;
-  bool m_adaptable;
+  WifiTxVector m_txVector; ///< transmit vector
+  bool m_adaptable; ///< adaptable
 };
 
 } // namespace ns3

@@ -40,9 +40,10 @@ In brief, the native |ns3| TCP model supports a full bidirectional TCP with
 connection setup and close logic.  Several congestion control algorithms
 are supported, with NewReno the default, and Westwood, Hybla, HighSpeed,
 Vegas, Scalable, Veno, Binary Increase Congestion Control (BIC), Yet Another
-HighSpeed TCP (YeAH), Illinois, H-TCP and Low Extra Delay Background Transport
-(LEDBAT) also supported. The model also supports Selective Acknowledgements
-(SACK). Multipath-TCP is not yet supported in the |ns3| releases.
+HighSpeed TCP (YeAH), Illinois, H-TCP, Low Extra Delay Background Transport
+(LEDBAT) and TCP Low Priority (TCP-LP) also supported. The model also supports
+Selective Acknowledgements (SACK). Multipath-TCP is not yet supported in the |ns3|
+releases.
 
 Model history
 +++++++++++++
@@ -271,9 +272,9 @@ Figure :ref:`fig-tcp-state-machine`.
   in the tx buffer has been transmitted). This does not prevent the socket in
   receiving data, and employing retransmit mechanism if losses are detected. If
   the application calls *Close()* with unread data in its rx buffer, the socket
-  will send a reset. If the socket is in the state SYN_SENT, CLOSING, LISTEN or
-  LAST_ACK, after that call the application will be notified with
-  *NotifyNormalClose()*. In all the other cases, the notification is delayed
+  will send a reset. If the socket is in the state SYN_SENT, CLOSING, LISTEN,
+  FIN_WAIT_2, or LAST_ACK, after that call the application will be notified with
+  *NotifyNormalClose()*. In other cases, the notification is delayed
   (see *NotifyNormalClose()*).
 
 -----------------------------------------
@@ -303,7 +304,7 @@ callback as well.
   - Received an ACK for the FIN sent, with or without the FIN bit set (we are in LAST_ACK)
   - The socket reaches the maximum amount of retries in retransmitting the SYN (*)
   - We receive a timeout in the LAST_ACK state
-  - After 2*Maximum Segment Lifetime seconds passed since the socket entered the TIME_WAIT state.
+  - Upon entering the TIME_WAIT state, before waiting the 2*Maximum Segment Lifetime seconds to finally deallocate the socket.
 
 *NotifyErrorClose*: *SetCloseCallbacks*, 2nd argument
   Invoked when we send an RST segment (for whatever reason) or we reached the
@@ -733,6 +734,33 @@ implementation are:
 
 More information about LEDBAT is available in RFC 6817: https://tools.ietf.org/html/rfc6817
 
+TCP-LP
+^^^^^^
+
+TCP-Low priority is a delay based congestion control protocol in which the low
+priority data utilizes only the excess bandwidth available on an end-to-end path.
+TCP-LP uses one way delay measurements as an indicator of congestion as it does
+not influence cross-traffic in the reverse direction.
+
+On acknowledgement:
+
+.. math::
+
+  One way delay = Receiver timestamp - Receiver timestamp echo reply
+  Smoothed one way delay = 7/8 * Old Smoothed one way delay + 1/8 * one way delay
+  If smoothed one way delay > owdMin + 15 * (owdMax - owdMin) / 100
+    if LP_WITHIN_INF
+      cwnd = 1
+    else
+      cwnd = cwnd / 2
+    Inference timer is set
+
+where owdMin and owdMax are the minimum and maximum one way delays experienced
+throughout the connection, LP_WITHIN_INF indicates if TCP-LP is in inference
+phase or not
+
+More information (paper): http://cs.northwestern.edu/~akuzma/rice/doc/TCP-LP.pdf
+
 Validation
 ++++++++++
 
@@ -759,6 +787,7 @@ section below on :ref:`Writing-tcp-tests`.
 * **tcp-yeah-test:** Unit tests on the YeAH congestion control
 * **tcp-illinois-test:** Unit tests on the Illinois congestion control
 * **tcp-ledbat-test:** Unit tests on the LEDBAT congestion control
+* **tcp-lp-test:** Unit tests on the TCP-LP congestion control
 * **tcp-option:** Unit tests on TCP options
 * **tcp-pkts-acked-test:** Unit test the number of time that PktsAcked is called
 * **tcp-rto-test:** Unit test behavior after a RTO timeout occurs
@@ -803,6 +832,7 @@ Linux, and the following operations are defined:
   virtual void IncreaseWindow (Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
   virtual void PktsAcked (Ptr<TcpSocketState> tcb, uint32_t segmentsAcked,const Time& rtt);
   virtual Ptr<TcpCongestionOps> Fork ();
+  virtual void CwndEvent (Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCaEvent_t event);
 
 The most interesting methods to write are GetSsThresh and IncreaseWindow.
 The latter is called when TcpSocketBase decides that it is time to increase
@@ -816,6 +846,9 @@ are then asked to lower such value, and to return it.
 
 PktsAcked is used in case the algorithm needs timing information (such as
 RTT), and it is called each time an ACK is received.
+
+CwndEvent is used in case the algorithm needs the state of socket during different
+congestion window event.
 
 TCP SACK and non-SACK
 +++++++++++++++++++++

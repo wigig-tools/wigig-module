@@ -61,7 +61,7 @@ public:
    *
    * \param channel the YansWifiChannel this YansWifiPhy is to be connected to
    */
-  void SetChannel (Ptr<YansWifiChannel> channel);
+  void SetChannel (const Ptr<YansWifiChannel> channel);
 
   /**
    * \param packet the packet to send
@@ -71,11 +71,6 @@ public:
    * \param txDuration duration of the transmission.
    */
   void StartTx (Ptr<Packet> packet, WifiTxVector txVector, Time txDuration);
-  /**
-   * \param txVector TxVector companioned by this transmission.
-   * \param fieldsRemaining The number of TRN Fields remaining till the end of transmission.
-   */
-  void StartTrnTx (WifiTxVector txVector, uint8_t fieldsRemaining);
 
   virtual Ptr<Channel> GetChannel (void) const;
 

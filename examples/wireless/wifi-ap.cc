@@ -103,10 +103,6 @@ AdvancePosition (Ptr<Node> node)
     }
   SetPosition (node, pos);
 
-  if (g_verbose)
-    {
-      //std::cout << "x="<<pos.x << std::endl;
-    }
   Simulator::Schedule (Seconds (1.0), &AdvancePosition, node);
 }
 
@@ -146,6 +142,7 @@ int main (int argc, char *argv[])
   wifi.SetRemoteStationManager ("ns3::ArfWifiManager");
   // setup stas.
   wifiMac.SetType ("ns3::StaWifiMac",
+                   "ActiveProbing", BooleanValue (true),
                    "Ssid", SsidValue (ssid));
   staDevs = wifi.Install (wifiPhy, wifiMac, stas);
   // setup ap.

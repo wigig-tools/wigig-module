@@ -193,7 +193,7 @@ TcpTxBuffer::Add (Ptr<Packet> p)
       if (p->GetSize () > 0)
         {
           TcpTxItem *item = new TcpTxItem ();
-          item->m_packet = p;
+          item->m_packet = p->Copy ();
           m_appList.insert (m_appList.end (), item);
           m_size += p->GetSize ();
 
@@ -226,7 +226,7 @@ TcpTxBuffer::SizeFromSequence (const SequenceNumber32& seq) const
 Ptr<Packet>
 TcpTxBuffer::CopyFromSequence (uint32_t numBytes, const SequenceNumber32& seq)
 {
-  NS_LOG_FUNCTION (*this << numBytes << seq);
+  NS_LOG_FUNCTION (this << numBytes << seq);
 
   if (m_firstByteSeq > seq)
     {
@@ -908,6 +908,24 @@ TcpTxBuffer::NextSeg (SequenceNumber32 *seq, uint32_t dupThresh,
 }
 
 uint32_t
+TcpTxBuffer::GetRetransmitsCount (void) const
+{
+  NS_LOG_FUNCTION (this);
+  PacketList::const_iterator it;
+  TcpTxItem *item;
+  uint32_t count = 0;
+  for (it = m_sentList.begin (); it != m_sentList.end (); ++it)
+    {
+      item = *it;
+      if (item->m_retrans)
+        {
+          count++;
+        }
+    }
+  return count;
+}
+
+uint32_t
 TcpTxBuffer::BytesInFlight (uint32_t dupThresh, uint32_t segmentSize) const
 {
   PacketList::const_iterator it;
@@ -960,13 +978,13 @@ TcpTxBuffer::ResetScoreboard ()
 }
 
 void
-TcpTxBuffer::ResetSentList ()
+TcpTxBuffer::ResetSentList (uint32_t keepItems)
 {
   NS_LOG_FUNCTION (this);
   TcpTxItem *item;
 
-  // Keep the head; it will then marked as retransmitted.
-  while (m_sentList.size () > 1)
+  // Keep the head items; they will then marked as lost
+  while (m_sentList.size () > keepItems)
     {
       item = m_sentList.back ();
       item->m_retrans = item->m_sacked = false;

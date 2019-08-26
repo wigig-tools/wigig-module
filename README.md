@@ -1,5 +1,8 @@
-## Latest News:
-We just got a new paper accepted in WNS3-2019, which brings a lot of new features and capabilities to the current model. The new features include:
+## Introduction:
+This is a repository for the development of the WLAN IEEE 802.11ad/ay standard in network simulator ns-3. Both IEEE 802.11ad/ay supports wireless networking in the unlicensed 60 GHz band. Our implementation paves the way to perform high fidelity simulations for large dense wireless networks consisting of devices with heterogeneous capabilities and constraints. For more information on the project, please refer to our publications.
+
+## New Release:
+We are happy to release a new version of our ns-3 IEEE 802.11ad model. The new version brings a lot of new features and capabilities:
 
 1. Beamforming Codebook design for beamforming training and beam steering.
 1. Quasi-deterministic channel model to simulate real propagation environments.
@@ -8,13 +11,11 @@ We just got a new paper accepted in WNS3-2019, which brings a lot of new feature
 1. Accurate BER vs. SNR lookup tables for all PHY layers.
 1. Beam refinement for both transmit and receive beam patterns.
 1. Multi-AP support without the need for decentralized clustering.
-1. Many new examples and bug fixes.
 
-We are planning to release the new version of the code around August 2019.
+We are still in the process of cleaning up the project and many comprehensive set of examples.
 
-## Introduction:
-This is a repository for the development of WLAN IEEE 802.11ad/ay model in network simulator ns-3. The implemented model supports the following features:
-
+## Features:
+The implemented model supports the following features:
 1. DMG Channel Access Periods (BTI/A-BFT/ATI/DTI with both CBAP and Service Periods).
 1. Beamforming Training (BT) in both BHI and DTI access periods.
 1. DMG PLCP Model for 802.11ad frame transmission and reception.
@@ -29,29 +30,14 @@ This is a repository for the development of WLAN IEEE 802.11ad/ay model in netwo
 1. Spatial Sharing and Interference Assessment. 
 
 ## Project Road-map:
-
-### Short-Term Road-map:
-I am planning to release the following new features around June/July:
-1. Codebook design for supporting multiple-phased antenna array per device. 
-1. Codebook generator application.
-1. Accurate error models (BER-SNR lookup table for different Modulation and Coding Schemes).
-1. Improved beamforming training mechanisms for multi-antenna support.
-1. QD-Channel model using Ray-Tracer application.
-1. Bug fixes and code usability improvement.
-
-### Long Term Road-map:
-The following features are being developed but in slow progress:
+We are developing the following set of features:
 1. Add 802.11ay PHY frame structure, new MAC frame formats, and new Information Elements.
-1. Add support for SU/MU-MIMO signaling and communication. I am planning to model it in a more advanced way compared to the way currently done in 802.11n/ac model (Doubling the achieved throughout).
-1. Improve the PHY layer model and implementation.
+1. Add support for SU/MU-MIMO signaling, beamforming, and communication.
 
 ## Limitation:
 Below is a list of the limitation in the code:
 1. Data communication in SP allocation does not support A-MPDU aggregation and only A-MSDU aggregation. The reason is A-MPDU aggregation requires establishing Block Acknowledgement agreement between the initiator and the responder, which requires a bi-directional transmission in the SP allocation. However, communication in SP is only allowed in a uni-directional way. To solve the previous problem, Reverse Directional Protocol is required.
-1. The current implementation does not support Multi-AP operation using CSMA/CA. To support Multi-AP scenario, you need to enable Decentralized clustering.
 1. Not all the features have been tested in complex scenarios. In case, you run into a bug, feel free to report it.
-1. The model uses a simplified Error Model contributed by Daniel Halperin in "Augmenting Data Center Networks with
-Multi-gigabit Wireless Links". The error uses a single PER vs. SNR curve for all MCSs.
 
 ## Prerequisites:
 Before start using the 802.11ad model, please keep the following in mind:
@@ -66,16 +52,16 @@ Once you have completed all these steps, you can proceed with my model.
 ## Building the Project:
 The current implementation is based on ns3-26. As I changed some of the Wifi module APIs, this will affect Mesh module too. For this reason, you should disable building both examples and tests; otherwise, the build will fail. To save time and evaluate the IEEE 802.11ad model only, type the following command:
 
-    ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi'
+    ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi','flow-monitor','spectrum'
     ./waf build
 
 The previous command builds the required models only to run IEEE 802.11ad with its provided scripts in debug mode. To build the project in optimized mode for fast execution type the following command:
 
-    ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi' --enable-static -d optimized
+    ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi','flow-monitor','spectrum' --enable-static -d optimized
     ./waf build
 
 ## Tutorial Scripts:
-The project includes different scripts located in the scratch folder to test the previously listed features and mechanisms. At the beginning of each script, I add some description regarding the tested functionality, network topology, expected output, and usage method.
+The project includes different scripts located in the scratch folder to test the previously listed features and mechanisms. At the beginning of each script, we added some description regarding the tested functionality, network topology, expected output, and usage method.
 
 ## Publications:
 The implementation is based on the existing model of the WLAN IEEE 802.11 in ns-3. The following papers include background on IEEE 802.11ad, implementation details, and evaluation section for this model. If you use our model in your research, please cite the following papers: 

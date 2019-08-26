@@ -257,20 +257,18 @@ def main(argv):
         #  Create another ad hoc network and devices
         # 
         ssid = ns.wifi.Ssid('wifi-infra' + str(i))
-        wifiInfra = ns.wifi.WifiHelper.Default()
+        wifiInfra = ns.wifi.WifiHelper()
         wifiPhy.SetChannel(wifiChannel.Create())
         wifiInfra.SetRemoteStationManager('ns3::ArfWifiManager')
         macInfra = ns.wifi.WifiMacHelper();
         macInfra.SetType("ns3::StaWifiMac",
-                         "Ssid", ns.wifi.SsidValue(ssid),
-                         "ActiveProbing", ns.core.BooleanValue(False))
+                         "Ssid", ns.wifi.SsidValue(ssid))
 
         # setup stas
         staDevices = wifiInfra.Install(wifiPhy, macInfra, stas)
         # setup ap.
         macInfra.SetType("ns3::ApWifiMac",
                          "Ssid", ns.wifi.SsidValue(ssid),
-                         "BeaconGeneration", ns.core.BooleanValue(True),
                          "BeaconInterval", ns.core.TimeValue(ns.core.Seconds(2.5)))
         apDevices = wifiInfra.Install(wifiPhy, macInfra, backbone.Get(i))
         # Collect all of these new devices

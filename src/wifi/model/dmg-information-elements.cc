@@ -1,6 +1,6 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -8,6 +8,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "dmg-information-elements.h"
+#include <cmath>
 
 NS_LOG_COMPONENT_DEFINE ("DmgInformationElements");
 
@@ -586,6 +587,12 @@ RequestElement::AddRequestElementID (WifiInformationElementId id)
   m_list.push_back (id);
 }
 
+void
+RequestElement::AddListOfRequestedElemetID (WifiInformationElementIdList &list)
+{
+  m_list = list;
+}
+
 WifiInformationElementIdList
 RequestElement::GetWifiInformationElementIdList (void) const
 {
@@ -620,6 +627,506 @@ operator >> (std::istream &is, RequestElement &element)
 
   element.AddRequestElementID (c1);
 
+  return is;
+}
+
+/***************************************************
+*             TSPEC Element (8.4.2.32)
+****************************************************/
+
+TspecElement::TspecElement ()
+  : m_trafficType (TRAFFIC_TYPE_PERIODIC_TRAFFIC_PATTERN),
+    m_tsid (0),
+    m_dataDirection (DATA_DIRECTION_UPLINK),
+    m_accessPolicy (ACCESS_POLICY_RESERVED),
+    m_aggregation (0),
+    m_apsd (0),
+    m_userPriority (0),
+    m_tsInfoAckPolicy (ACK_POLICY_RESERVED),
+    m_schedule (0),
+    m_nominalMsduSize (0),
+    m_maximumMsduSize (0),
+    m_minimumServiceInterval (0),
+    m_maximumServiceInterval (0),
+    m_inactivityInterval (0),
+    m_suspensionInterval (0),
+    m_serviceStartTime (0),
+    m_minimumDateRate (0),
+    m_meanDateRate (0),
+    m_peakDateRate (0),
+    m_burstSize (0),
+    m_delayBound (0),
+    m_minimumPhyRate (0),
+    m_surplusBandwidthAllowance (0),
+    m_mediumTime (0),
+    m_allocationID (0),
+    m_allocationDirection (ALLOCATION_DIRECTION_SOURCE),
+    m_amsduSubframe (0),
+    m_reliabilityIndex (0)
+{
+}
+
+WifiInformationElementId
+TspecElement::ElementId () const
+{
+  return IE_TSPEC;
+}
+
+uint8_t
+TspecElement::GetInformationFieldSize () const
+{
+  return 57;
+}
+
+void
+TspecElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint16_t tsInfoField1 = 0;
+  uint8_t tsInfoField2;
+  tsInfoField1 |= m_trafficType & 0x1;
+  tsInfoField1 |= (m_tsid  & 0xF) << 1;
+  tsInfoField1 |= (m_dataDirection & 0x3) << 5;
+  tsInfoField1 |= (m_accessPolicy & 0x3) << 7;
+  tsInfoField1 |= (m_aggregation & 0x1) << 9;
+  tsInfoField1 |= (m_apsd & 0x1) << 10;
+  tsInfoField1 |= (m_userPriority & 0x7) << 11;
+  tsInfoField1 |= (m_tsInfoAckPolicy & 0x3) << 14;
+  tsInfoField2 = m_schedule & 0x1;
+
+  start.WriteHtolsbU16 (tsInfoField1);
+  start.WriteU8 (tsInfoField2);
+  start.WriteHtolsbU16 (m_nominalMsduSize);
+  start.WriteHtolsbU16 (m_maximumMsduSize);
+  start.WriteHtolsbU32 (m_minimumServiceInterval);
+  start.WriteHtolsbU32 (m_maximumServiceInterval);
+  start.WriteHtolsbU32 (m_inactivityInterval);
+  start.WriteHtolsbU32 (m_suspensionInterval);
+  start.WriteHtolsbU32 (m_serviceStartTime);
+  start.WriteHtolsbU32 (m_minimumDateRate);
+  start.WriteHtolsbU32 (m_meanDateRate);
+  start.WriteHtolsbU32 (m_peakDateRate);
+  start.WriteHtolsbU32 (m_burstSize);
+  start.WriteHtolsbU32 (m_delayBound);
+  start.WriteHtolsbU32 (m_minimumPhyRate);
+  start.WriteHtolsbU16 (m_surplusBandwidthAllowance);
+  start.WriteHtolsbU16 (m_mediumTime);
+  start.WriteHtolsbU16 (GetDmgAttributesField ());
+}
+
+uint8_t
+TspecElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  uint16_t tsInfoField1 = 0;
+  uint8_t tsInfoField2;
+  tsInfoField1 = i.ReadLsbtohU16 ();
+  m_trafficType = tsInfoField1 & 0x1;
+  m_tsid = (tsInfoField1 >> 1) & 0xF;
+  m_dataDirection = (tsInfoField1 >> 5) & 0x3;
+  m_accessPolicy = (tsInfoField1 >> 7) & 0x3;
+  m_aggregation = (tsInfoField1 >> 9) & 0x1;
+  m_apsd = (tsInfoField1 >> 10) & 0x1;
+  m_userPriority = (tsInfoField1 >> 11) & 0x7;
+  m_tsInfoAckPolicy = (tsInfoField1 >> 14) & 0x3;
+  tsInfoField2 = i.ReadU8 ();
+  m_schedule = tsInfoField2 & 0x1;
+
+  m_nominalMsduSize = start.ReadLsbtohU16 ();
+  m_maximumMsduSize = start.ReadLsbtohU16 ();
+  m_minimumServiceInterval = start.ReadLsbtohU32 ();
+  m_maximumServiceInterval = start.ReadLsbtohU32 ();
+  m_inactivityInterval = start.ReadLsbtohU32 ();
+  m_suspensionInterval = start.ReadLsbtohU32 ();
+  m_serviceStartTime = start.ReadLsbtohU32 ();
+  m_minimumDateRate = start.ReadLsbtohU32 ();
+  m_meanDateRate = start.ReadLsbtohU32 ();
+  m_peakDateRate = start.ReadLsbtohU32 ();
+  m_burstSize = start.ReadLsbtohU32 ();
+  m_delayBound = start.ReadLsbtohU32 ();
+  m_minimumPhyRate = start.ReadLsbtohU32 ();
+  m_surplusBandwidthAllowance = start.ReadLsbtohU16 ();
+  m_mediumTime = start.ReadLsbtohU16 ();
+  SetDmgAttributesField (start.ReadLsbtohU16 ());
+
+  return length;
+}
+
+void
+TspecElement::SetDmgAttributesField (uint16_t infieldfo)
+{
+  m_allocationID = infieldfo & 0xF;
+  m_allocationDirection = (infieldfo >> 6) & 0x1;
+  m_amsduSubframe = (infieldfo >> 7) & 0x1;
+  m_reliabilityIndex = (infieldfo >> 8) & 0x3;
+}
+
+uint16_t
+TspecElement::GetDmgAttributesField (void) const
+{
+  uint16_t dmgAttributes = 0;
+  dmgAttributes |= m_allocationID & 0xF;
+  dmgAttributes |= (m_allocationDirection & 0x1) << 6;
+  dmgAttributes |= (m_amsduSubframe & 0x1) << 7;
+  dmgAttributes |= (m_reliabilityIndex & 0x3) << 8;
+  return dmgAttributes;
+}
+
+void
+TspecElement::SetTrafficType (TrafficType type)
+{
+  m_trafficType = static_cast<uint8_t> (type);
+}
+
+void
+TspecElement::SetTSID (uint8_t id)
+{
+  m_tsid = id;
+}
+
+void
+TspecElement::SetDataDirection (DataDirection direction)
+{
+  m_dataDirection = static_cast<uint8_t> (direction);
+}
+
+void
+TspecElement::SetAccessPolicy (AccessPolicy policy)
+{
+  m_accessPolicy = static_cast<uint8_t> (policy);
+}
+
+void
+TspecElement::SetAggregation (bool enable)
+{
+  m_aggregation = enable;
+}
+
+void
+TspecElement::SetAPSD (bool enable)
+{
+  m_apsd = enable;
+}
+
+void
+TspecElement::SetUserPriority (uint8_t priority)
+{
+  m_userPriority = priority;
+}
+
+void
+TspecElement::SetTSInfoAckPolicy (TSInfoAckPolicy policy)
+{
+  m_tsInfoAckPolicy = static_cast<uint8_t> (policy);
+}
+
+void
+TspecElement::SetSchedule (bool schedule)
+{
+  m_schedule = schedule;
+}
+
+void
+TspecElement::SetNominalMsduSize (uint16_t size, bool fixed)
+{
+  m_nominalMsduSize = static_cast<uint8_t> (fixed) << 14;
+  m_nominalMsduSize |= size & 0x7FFF;
+}
+
+void
+TspecElement::SetMaximumMsduSize (uint16_t size)
+{
+  m_maximumMsduSize = size;
+}
+
+void
+TspecElement::SetMinimumServiceInterval (uint32_t interval)
+{
+  m_minimumServiceInterval = interval;
+}
+
+void
+TspecElement::SetMaximumServiceInterval (uint32_t interval)
+{
+  m_maximumServiceInterval = interval;
+}
+
+void
+TspecElement::SetInactivityInterval (uint32_t interval)
+{
+  m_inactivityInterval = interval;
+}
+
+void
+TspecElement::SetSuspensionInterval (uint32_t interval)
+{
+  m_suspensionInterval = interval;
+}
+
+void
+TspecElement::SetServiceStartTime (uint32_t time)
+{
+  m_serviceStartTime = time;
+}
+
+void
+TspecElement::SetMinimumDataRate (uint32_t rate)
+{
+  m_minimumDateRate = rate;
+}
+
+void
+TspecElement::SetMeanDataRate (uint32_t rate)
+{
+  m_meanDateRate = rate;
+}
+
+void
+TspecElement::SetPeakDataRate (uint32_t rate)
+{
+  m_peakDateRate = rate;
+}
+
+void
+TspecElement::SetBurstSize (uint32_t size)
+{
+  m_burstSize = size;
+}
+
+void
+TspecElement::SetDelayBound (uint32_t bound)
+{
+  m_delayBound = bound;
+}
+void
+TspecElement::SetMinimumPhyRate (uint32_t rate)
+{
+  m_minimumPhyRate = rate;
+}
+
+void
+TspecElement::SetSurplusBandwidthAllowance (uint16_t allowance)
+{
+  m_surplusBandwidthAllowance = allowance;
+}
+
+void
+TspecElement::SetMediumTime (uint16_t time)
+{
+  m_mediumTime = time;
+}
+
+void
+TspecElement::SetAllocationID (uint8_t id)
+{
+  m_allocationID = id;
+}
+
+void
+TspecElement::SetAllocationDirection (AllocationDirection dircetion)
+{
+  m_allocationDirection = static_cast<AllocationDirection> (dircetion);
+}
+
+void
+TspecElement::SetAmsduSubframe (uint8_t amsdu)
+{
+  m_amsduSubframe = amsdu;
+}
+
+void
+TspecElement::SetReliabilityIndex (uint8_t index)
+{
+  m_reliabilityIndex = index;
+}
+
+TrafficType
+TspecElement::GetTrafficType (void) const
+{
+  return static_cast<TrafficType> (m_trafficType);
+}
+
+uint8_t
+TspecElement::GetTSID (void) const
+{
+  return m_tsid;
+}
+
+DataDirection
+TspecElement::GetDataDirection (void) const
+{
+  return static_cast<DataDirection> (m_dataDirection);
+}
+
+AccessPolicy
+TspecElement::GetAccessPolicy (void) const
+{
+  return static_cast<AccessPolicy> (m_accessPolicy);
+}
+
+bool
+TspecElement::GetAggregation (void) const
+{
+  return m_aggregation;
+}
+
+bool
+TspecElement::GetAPSD (void) const
+{
+  return m_apsd;
+}
+
+uint8_t
+TspecElement::GetUserPriority (void) const
+{
+  return m_userPriority;
+}
+
+TSInfoAckPolicy
+TspecElement::GetTSInfoAckPolicy (void) const
+{
+  return static_cast<TSInfoAckPolicy> (m_tsInfoAckPolicy);
+}
+
+bool
+TspecElement::GetSchedule (void) const
+{
+  return m_schedule;
+}
+
+uint16_t
+TspecElement::GetNominalMsduSize (void) const
+{
+  return m_nominalMsduSize & 0x3FFF;
+}
+
+bool
+TspecElement::IsMsduSizeFixed (void) const
+{
+  bool fixed = static_cast<bool> ((m_nominalMsduSize >> 14) & 0x1);
+  return fixed;
+}
+
+uint16_t
+TspecElement::GetMaximumMsduSize (void) const
+{
+  return m_maximumMsduSize;
+}
+
+uint32_t
+TspecElement::GetMinimumServiceInterval (void) const
+{
+  return m_minimumServiceInterval;
+}
+
+uint32_t
+TspecElement::GetMaximumServiceInterval (void) const
+{
+  return m_maximumServiceInterval;
+}
+
+uint32_t
+TspecElement::GetInactivityInterval (void) const
+{
+  return m_inactivityInterval;
+}
+
+uint32_t
+TspecElement::GetSuspensionInterval (void) const
+{
+  return m_suspensionInterval;
+}
+
+uint32_t
+TspecElement::GetServiceStartTime (void) const
+{
+  return m_serviceStartTime;
+}
+
+uint32_t
+TspecElement::GetMinimumDataRate (void) const
+{
+  return m_minimumDateRate;
+}
+
+uint32_t
+TspecElement::GetMeanDataRate (void) const
+{
+  return m_meanDateRate;
+}
+
+uint32_t
+TspecElement::GetPeakDataRate (void) const
+{
+  return m_peakDateRate;
+}
+
+uint32_t
+TspecElement::GetBurstSize (void) const
+{
+  return m_burstSize;
+}
+
+uint32_t
+TspecElement::GetDelayBound (void) const
+{
+  return m_delayBound;
+}
+
+uint32_t
+TspecElement::GetMinimumPhyRate (void) const
+{
+  return m_minimumPhyRate;
+}
+
+uint16_t
+TspecElement::GetSurplusBandwidthAllowance (void) const
+{
+  return m_surplusBandwidthAllowance;
+}
+
+uint16_t
+TspecElement::GetMediumTime (void) const
+{
+  return m_mediumTime;
+}
+
+uint8_t
+TspecElement::GetAllocationID (void) const
+{
+  return m_allocationID;
+}
+
+AllocationDirection
+TspecElement::GetAllocationDirection (void) const
+{
+  return static_cast<AllocationDirection> (m_allocationDirection);
+}
+
+uint8_t
+TspecElement::GetAmsduSubframe (void) const
+{
+  return m_amsduSubframe;
+}
+
+uint8_t
+TspecElement::GetReliabilityIndex (void) const
+{
+  return m_reliabilityIndex;
+}
+
+ATTRIBUTE_HELPER_CPP (TspecElement);
+
+std::ostream &
+operator << (std::ostream &os, const TspecElement &element)
+{
+  return os;
+}
+
+std::istream &
+operator >> (std::istream &is, TspecElement &element)
+{
+  uint32_t c1;
+  is >> c1;
   return is;
 }
 
@@ -729,7 +1236,7 @@ TimeoutIntervalElement::DeserializeInformationField (Buffer::Iterator start, uin
 }
 
 void
-TimeoutIntervalElement::SetTimeoutIntervalType (enum TimeoutIntervalType type)
+TimeoutIntervalElement::SetTimeoutIntervalType (TimeoutIntervalType type)
 {
   m_timeoutIntervalType = type;
 }
@@ -740,10 +1247,10 @@ TimeoutIntervalElement::SetTimeoutIntervalValue (uint32_t value)
   m_timeoutIntervalValue = value;
 }
 
-enum TimeoutIntervalType
+TimeoutIntervalType
 TimeoutIntervalElement::GetTimeoutIntervalType () const
 {
-  return static_cast<enum TimeoutIntervalType> (m_timeoutIntervalType);
+  return static_cast<TimeoutIntervalType> (m_timeoutIntervalType);
 }
 
 uint32_t
@@ -769,7 +1276,7 @@ operator >> (std::istream &is, TimeoutIntervalElement &element)
   uint32_t c2;
   is >> c1 >> c2;
 
-  element.SetTimeoutIntervalType (static_cast<enum TimeoutIntervalType> (c1));
+  element.SetTimeoutIntervalType (static_cast<TimeoutIntervalType> (c1));
   element.SetTimeoutIntervalValue (c2);
 
   return is;
@@ -1040,14 +1547,16 @@ BeamRefinementElement::BeamRefinementElement ()
     m_bsFbckAntennaId (0),
     m_snrRequested (false),
     m_channelMeasurementRequested (false),
-    m_numberOfTapsRequested (0),
+    m_numberOfTapsRequested (TAPS_1),
     m_sectorIdOrderRequested (false),
     m_snrPresent (false),
     m_channelMeasurementPresent (false),
     m_tapDelayPresent (false),
-    m_numberOfTapsPresent (0),
+    m_numberOfTapsPresent (TAPS_1),
     m_numberOfMeasurements (0),
     m_sectorIdOrderPresent (false),
+    m_linkType (false),
+    m_antennaType (false),
     m_numberOfBeams (0),
     m_midExtension (false),
     m_capabilityRequest (false)
@@ -1072,7 +1581,7 @@ BeamRefinementElement::SerializeInformationField (Buffer::Iterator start) const
   uint32_t value1 = 0;
   uint8_t value2 = 0;
 
-  value1 |= m_initiator & 0x1;
+  value1 |= (m_initiator & 0x1);
   value1 |= (m_txTrainResponse & 0x1) << 1;
   value1 |= (m_rxTrainResponse & 0x1) << 2;
   value1 |= (m_txTrnOk & 0x1) << 3;
@@ -1082,17 +1591,18 @@ BeamRefinementElement::SerializeInformationField (Buffer::Iterator start) const
   /* FBCK-REQ */
   value1 |= (m_snrRequested & 0x1) << 13;
   value1 |= (m_channelMeasurementRequested & 0x1) << 14;
-  value1 |= (m_numberOfTapsRequested & 0x3) << 15;
+  value1 |= (static_cast<uint8_t> (m_numberOfTapsRequested) & 0x3) << 15;
   value1 |= (m_sectorIdOrderRequested & 0x1) << 17;
   /* FBCK-TYPE */
   value1 |= (m_snrPresent & 0x1) << 18;
   value1 |= (m_channelMeasurementPresent & 0x1) << 19;
   value1 |= (m_tapDelayPresent & 0x1) << 20;
-  value1 |= (m_numberOfTapsPresent & 0x3) << 21;
+  value1 |= (static_cast<uint8_t> (m_numberOfTapsPresent) & 0x3) << 21;
   value1 |= (m_numberOfMeasurements & 0x7F) << 23;
   value1 |= (m_sectorIdOrderPresent & 0x1) << 30;
-  value1 |= (m_numberOfBeams & 0x1) << 31;
-  value2 |= (m_numberOfBeams >> 1) & 0xF;
+  value1 |= (m_linkType & 0x1) << 31;
+  value2 |= (m_antennaType & 0x1);
+  value2 |= (m_numberOfBeams & 0x7) << 1;
 
   value2 |= (m_midExtension & 0x1) << 4;
   value2 |= (m_capabilityRequest & 0x1) << 5;
@@ -1118,17 +1628,18 @@ BeamRefinementElement::DeserializeInformationField (Buffer::Iterator start, uint
   /* FBCK-REQ */
   m_snrRequested = (value1 >> 13) & 0x1;
   m_channelMeasurementRequested = (value1 >> 14) & 0x1;
-  m_numberOfTapsRequested = (value1 >> 15) & 0x3;
+  m_numberOfTapsRequested = static_cast<NUMBER_OF_TAPS> ((value1 >> 15) & 0x3);
   m_sectorIdOrderRequested = (value1 >> 17) & 0x1;
   /* FBCK-TYPE */
   m_snrPresent = (value1 >> 18) & 0x1;
   m_channelMeasurementPresent = (value1 >> 19) & 0x1;
   m_tapDelayPresent = (value1 >> 20) & 0x1;
-  m_numberOfTapsPresent = (value1 >> 21) & 0x3;
+  m_numberOfTapsPresent = static_cast<NUMBER_OF_TAPS> ((value1 >> 21) & 0x3);
   m_numberOfMeasurements = (value1 >> 23) & 0x7F;
   m_sectorIdOrderPresent = (value1 >> 30) & 0x1;
-  m_numberOfBeams = (value1 >> 31) & 0x01;
-  m_numberOfBeams |= (value2 << 1) & 0x1E;
+  m_linkType = (value1 >> 31) & 0x1;
+  m_antennaType = value2 & 0x1;
+  m_numberOfBeams = (value2 >> 1) & 0x7;
 
   m_midExtension = (value2 >> 4) & 0x1;
   m_capabilityRequest = (value2 >> 5) & 0x1;
@@ -1167,9 +1678,9 @@ BeamRefinementElement::SetTxssFbckReq (bool feedback)
 }
 
 void
-BeamRefinementElement::SetBsFbck (uint8_t feedback)
+BeamRefinementElement::SetBsFbck (uint8_t index)
 {
-  m_bsFbck = feedback;
+  m_bsFbck = index;
 }
 
 void
@@ -1192,7 +1703,7 @@ BeamRefinementElement::SetChannelMeasurementRequested (bool requested)
 }
 
 void
-BeamRefinementElement::SetNumberOfTapsRequested (uint8_t number)
+BeamRefinementElement::SetNumberOfTapsRequested (NUMBER_OF_TAPS number)
 {
   m_numberOfTapsRequested = number;
 }
@@ -1215,7 +1726,7 @@ BeamRefinementElement::IsChannelMeasurementRequested (void) const
   return m_channelMeasurementRequested;
 }
 
-uint8_t
+NUMBER_OF_TAPS
 BeamRefinementElement::GetNumberOfTapsRequested (void) const
 {
   return m_numberOfTapsRequested;
@@ -1247,7 +1758,7 @@ BeamRefinementElement::SetTapDelayPresent (bool present)
 }
 
 void
-BeamRefinementElement::SetNumberOfTapsPresent (uint8_t number)
+BeamRefinementElement::SetNumberOfTapsPresent (NUMBER_OF_TAPS number)
 {
   m_numberOfTapsPresent = number;
 }
@@ -1262,6 +1773,18 @@ void
 BeamRefinementElement::SetSectorIdOrderPresent (bool present)
 {
   m_sectorIdOrderPresent = present;
+}
+
+void
+BeamRefinementElement::SetLinkType (bool linkType)
+{
+  m_linkType = linkType;
+}
+
+void
+BeamRefinementElement::SetAntennaType (bool type)
+{
+  m_antennaType = type;
 }
 
 void
@@ -1288,7 +1811,7 @@ BeamRefinementElement::IsTapDelayPresent (void) const
   return m_tapDelayPresent;
 }
 
-uint8_t
+NUMBER_OF_TAPS
 BeamRefinementElement::GetNumberOfTapsPresent (void) const
 {
   return m_numberOfTapsPresent;
@@ -1304,6 +1827,18 @@ bool
 BeamRefinementElement::IsSectorIdOrderPresent (void) const
 {
   return m_sectorIdOrderPresent;
+}
+
+bool
+BeamRefinementElement::GetLinkType (void) const
+{
+  return m_linkType;
+}
+
+bool
+BeamRefinementElement::GetAntennaType (void) const
+{
+  return m_antennaType;
 }
 
 uint8_t
@@ -2886,7 +3421,7 @@ MultiBandElement::DeserializeInformationField (Buffer::Iterator start, uint8_t l
 }
 
 void
-MultiBandElement::SetStaRole (enum StaRole role)
+MultiBandElement::SetStaRole (StaRole role)
 {
   m_staRole = role;
 }
@@ -2903,10 +3438,10 @@ MultiBandElement::SetPairwiseCipherSuitePresent (bool present)
   m_pairWiseCipher = present;
 }
 
-enum StaRole
+StaRole
 MultiBandElement::GetStaRole (void) const
 {
-  return static_cast<enum StaRole> (m_staRole);
+  return static_cast<StaRole> (m_staRole);
 }
 
 bool
@@ -4699,13 +5234,11 @@ void
 EcpacPolicyElement::SerializeInformationField (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
-
   uint8_t policyDetail = 0;
   policyDetail |= m_bhiEnforced & 0x1;
   policyDetail |= (m_txssCbapEnforced & 0x1) << 1;
   policyDetail |= m_bhiEnforced & 0x1;
   i.WriteU8 (policyDetail);
-
   WriteTo (i, m_ccsrID);
   i.WriteHtolsbU32 (m_timestampOffsetBitmap);
   if (m_txssCbapEnforced)
@@ -4720,12 +5253,10 @@ uint8_t
 EcpacPolicyElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
 {
   Buffer::Iterator i = start;
-
-  uint8_t policyDetail =   i.ReadU8 ();;
+  uint8_t policyDetail =   i.ReadU8 ();
   m_bhiEnforced = (policyDetail & 0x1);
   m_txssCbapEnforced = (policyDetail >> 1) & 0x1;
   m_bhiEnforced = (policyDetail >> 2) & 0x1;
-
   ReadFrom (i, m_ccsrID);
   m_timestampOffsetBitmap = i.ReadLsbtohU32 ();
   if (m_txssCbapEnforced)
@@ -4734,7 +5265,6 @@ EcpacPolicyElement::DeserializeInformationField (Buffer::Iterator start, uint8_t
       m_txssCbapDuration = i.ReadU8 ();
       m_txssCbapMaxMem = i.ReadU8 ();
     }
-
   return length;
 }
 
@@ -4844,6 +5374,1103 @@ std::ostream
 
 std::istream
 &operator >> (std::istream &is, EcpacPolicyElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*EDMG Channel Measurement Feedback Element 9.4.2.253
+****************************************************/
+
+EDMGChannelMeasurementFeedbackElement::EDMGChannelMeasurementFeedbackElement ()
+{
+}
+
+WifiInformationElementId
+EDMGChannelMeasurementFeedbackElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+EDMGChannelMeasurementFeedbackElement::ElementIdExtension () const
+{
+  return IE_EXTENSION_EDMG_CHANNEL_MEASUREMENT_FEEDBACK;
+}
+
+uint8_t
+EDMGChannelMeasurementFeedbackElement::GetInformationFieldSize () const
+{
+  uint8_t size;
+  uint16_t numBits = 0;
+  numBits += m_edmgSectorIDOrder_List.size () * 17;
+  numBits += m_brp_CDOWN_List.size () * 6;
+  numBits += m_tap_Delay_List.size () * 12;
+  size = std::ceil (numBits/8);
+  return size;
+}
+
+void
+EDMGChannelMeasurementFeedbackElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  for (EDMGSectorIDOrder_ListCI it = m_edmgSectorIDOrder_List.begin (); it != m_edmgSectorIDOrder_List.end (); it++)
+    {
+      uint32_t value = 0;
+      value |= (it->SectorID & 0x7FF);
+      value |= (it->TXAntennaID & 0x7) << 11;
+      value |= (it->RXAntennaID & 0x7) << 14;
+      start.WriteHtolsbU32 (value);
+    }
+  for (BRP_CDOWN_LIST_CI it = m_brp_CDOWN_List.begin (); it != m_brp_CDOWN_List.end (); it++)
+    {
+      start.WriteU8 ((*it));
+    }
+  for (Tap_Delay_List_CI it = m_tap_Delay_List.begin (); it != m_tap_Delay_List.end (); it++)
+    {
+      start.WriteHtolsbU16 ((*it));
+    }
+}
+
+uint8_t
+EDMGChannelMeasurementFeedbackElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  return length;
+}
+
+void
+EDMGChannelMeasurementFeedbackElement::Add_EDMG_SectorIDOrder (EDMGSectorIDOrder &order)
+{
+  m_edmgSectorIDOrder_List.push_back (order);
+}
+
+void
+EDMGChannelMeasurementFeedbackElement::Add_BRP_CDOWN (BRP_CDOWN brpCdown)
+{
+  m_brp_CDOWN_List.push_back (brpCdown);
+}
+
+void
+EDMGChannelMeasurementFeedbackElement::Add_Tap_Delay (Tap_Delay tapDelay)
+{
+  m_tap_Delay_List.push_back (tapDelay);
+}
+
+EDMGSectorIDOrder_List
+EDMGChannelMeasurementFeedbackElement::Get_EDMG_SectorIDOrder_List (void) const
+{
+  return m_edmgSectorIDOrder_List;
+}
+
+BRP_CDOWN_LIST
+EDMGChannelMeasurementFeedbackElement::Get_BRP_CDOWN_List (void) const
+{
+  return m_brp_CDOWN_List;
+}
+
+Tap_Delay_List
+EDMGChannelMeasurementFeedbackElement::Get_Tap_Delay_List (void) const
+{
+  return m_tap_Delay_List;
+}
+
+ATTRIBUTE_HELPER_CPP (EDMGChannelMeasurementFeedbackElement);
+
+std::ostream &operator << (std::ostream &os, const EDMGChannelMeasurementFeedbackElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, EDMGChannelMeasurementFeedbackElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*         EDMG Group ID Set Element 9.4.2.254
+****************************************************/
+
+EDMGGroupIDSetElement::EDMGGroupIDSetElement ()
+  : m_numEDMGGroups (0)
+{
+}
+
+WifiInformationElementId
+EDMGGroupIDSetElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+EDMGGroupIDSetElement::ElementIdExtension () const
+{
+  return IE_EXTENSION_EDMG_GROUP_ID_SET;
+}
+
+uint8_t
+EDMGGroupIDSetElement::GetInformationFieldSize () const
+{
+  uint8_t size = 0;
+  size += 1;  /* Number of Groups */
+  for (EDMGGroupTuplesCI it = m_edmgGroupTuples.begin (); it != m_edmgGroupTuples.end (); it++)
+    {
+      size += 2 + it->aidList.size ();
+    }
+  return size;
+}
+
+void
+EDMGGroupIDSetElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint8_t groupSize;
+  start.WriteU8 (m_numEDMGGroups);
+  for (EDMGGroupTuplesCI it = m_edmgGroupTuples.begin (); it != m_edmgGroupTuples.end (); it++)
+    {
+      start.WriteU8 (it->groupID);
+      groupSize = it->aidList.size () & 0x1F;
+      start.WriteU8 (groupSize);
+      for (AID_LIST_CI aidIT = it->aidList.begin (); aidIT != it->aidList.end (); aidIT++)
+        {
+          start.WriteU8 ((*aidIT));
+        }
+    }
+}
+
+uint8_t
+EDMGGroupIDSetElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint8_t size = 0;
+  m_numEDMGGroups = start.ReadU8 ();
+  for (uint8_t i = 0; i < m_numEDMGGroups; i++)
+    {
+      EDMGGroupTuple tuple;
+      tuple.groupID = start.ReadU8 ();
+      size = start.ReadU8 ();
+      for (uint8_t j = 0; j < size; size++)
+        {
+          tuple.aidList.push_back (start.ReadU8 ());
+        }
+      m_edmgGroupTuples.push_back (tuple);
+    }
+  return length;
+}
+
+void
+EDMGGroupIDSetElement::SetNumberofEDMGGroups (uint8_t number)
+{
+  m_numEDMGGroups = number;
+}
+
+void
+EDMGGroupIDSetElement::AddEDMGGroupTuple (EDMGGroupTuple &tuple)
+{
+  m_edmgGroupTuples.push_back (tuple);
+}
+
+uint8_t
+EDMGGroupIDSetElement::GetNumberofEDMGGroups (void) const
+{
+  return m_numEDMGGroups;
+}
+
+EDMGGroupTuples
+EDMGGroupIDSetElement::GetEDMGGroupTuples (void) const
+{
+  return m_edmgGroupTuples;
+}
+
+ATTRIBUTE_HELPER_CPP (EDMGGroupIDSetElement);
+
+std::ostream &operator << (std::ostream &os, const EDMGGroupIDSetElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, EDMGGroupIDSetElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*         MIMO Setup Control Element 9.4.2.258
+****************************************************/
+
+MimoSetupControlElement::MimoSetupControlElement ()
+  : m_mimoBeamformingType (MU_MIMO_BEAMFORMING),
+    m_mimoPhaseType (MIMO_PHASE_RECPIROCAL),
+    m_edmgGroupID (0),
+    m_groupUserMask (0),
+    m_LTxRx (0),
+    m_requestedEDMGTRNUnitM (0),
+    m_isInitiator (false),
+    m_channelMeasurementRequested (false),
+    m_numberOfTapsRequested (0),
+    m_numberOfTXSectorCombinationsRequested (0),
+    m_channelAggregationRequested (false)
+{
+}
+
+WifiInformationElementId
+MimoSetupControlElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+MimoSetupControlElement::ElementIdExtension () const
+{
+  return IE_EXTENSION_MIMO_SETUP_CONTROL;
+}
+
+uint8_t
+MimoSetupControlElement::GetInformationFieldSize () const
+{
+  return 9;
+}
+
+void
+MimoSetupControlElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint64_t val1 = 0;
+  uint8_t val2 = 0;
+  val1 |= (m_mimoBeamformingType & 0x1);
+  val1 |= (m_mimoPhaseType & 0x1) << 1;
+  val1 |= (m_edmgGroupID) << 2;
+  val1 |= (m_groupUserMask) << 10;
+  val1 |= uint64_t (m_LTxRx) << 42;
+  val1 |= uint64_t (m_requestedEDMGTRNUnitM & 0xF) << 50;
+  val1 |= uint64_t (m_isInitiator & 0x1) << 54;
+  val1 |= uint64_t (m_channelMeasurementRequested & 0x1) << 55;
+  val1 |= uint64_t (m_numberOfTapsRequested & 0x3) << 56;
+  val1 |= uint64_t (m_numberOfTXSectorCombinationsRequested & 0x1F) << 59;
+  val2 |= (m_numberOfTXSectorCombinationsRequested >> 5) & 0x1;
+  val2 |= (m_channelAggregationRequested & 0x1) << 1;
+  start.WriteHtolsbU64 (val1);
+  start.WriteU8 (val2);
+}
+
+uint8_t
+MimoSetupControlElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint64_t val1 = start.ReadLsbtohU64 ();
+  uint8_t val2 = start.ReadU8 ();
+  m_mimoBeamformingType = static_cast<MimoBeamformingType> (val1 & 0x1);
+  m_mimoPhaseType = static_cast<MimoPhaseType> ((val1 >> 1) & 0x1);
+  m_edmgGroupID = (val1 >> 2 ) & 0xFF;
+  m_groupUserMask = (val1 >> 10) & 0xFFFFFFFF;
+  m_LTxRx = (val1 >> 42) & 0xFF;
+  m_requestedEDMGTRNUnitM = (val1 >> 50) & 0xF;
+  m_isInitiator = (val1 >> 54) & 0x1;
+  m_channelMeasurementRequested = (val1 >> 55) & 0x1;
+  m_numberOfTapsRequested = (val1 >> 56) & 0x3;
+  m_numberOfTXSectorCombinationsRequested |= (val1 >> 59) & 0x1F;
+  m_numberOfTXSectorCombinationsRequested |= (val2 & 0x1) << 5;
+  m_channelAggregationRequested = (val2 >> 1) & 0x1;
+  return length;
+}
+
+void
+MimoSetupControlElement::SetMimoBeamformingType (MimoBeamformingType type)
+{
+  m_mimoBeamformingType = type;
+}
+
+void
+MimoSetupControlElement::SetMimoPhaseType (MimoPhaseType type)
+{
+  m_mimoPhaseType = type;
+}
+
+void
+MimoSetupControlElement::SetEDMGGroupID (uint8_t groupID)
+{
+  m_edmgGroupID = groupID;
+}
+
+void
+MimoSetupControlElement::SetGroupUserMask (uint32_t mask)
+{
+  m_groupUserMask = mask;
+}
+
+void
+MimoSetupControlElement::SetLTxRx (uint8_t number)
+{
+  m_LTxRx = number;
+}
+
+void
+MimoSetupControlElement::SetRequestedEDMGTRNUnitM (uint8_t unit)
+{
+  m_requestedEDMGTRNUnitM = unit;
+}
+
+void
+MimoSetupControlElement::SetAsInitiator (bool isInitiator)
+{
+  m_isInitiator = isInitiator;
+}
+
+void
+MimoSetupControlElement::SetChannelMeasurementRequested (bool value)
+{
+  m_channelMeasurementRequested = value;
+}
+
+void
+MimoSetupControlElement::SetNumberOfTapsRequested (uint8_t taps)
+{
+  m_numberOfTapsRequested = taps;
+}
+
+void
+MimoSetupControlElement::SetNumberOfTXSectorCombinationsRequested (uint8_t requested)
+{
+  m_numberOfTXSectorCombinationsRequested = requested;
+}
+
+void
+MimoSetupControlElement::SetChannelAggregationRequested (bool requested)
+{
+  m_channelAggregationRequested = requested;
+}
+
+MimoBeamformingType
+MimoSetupControlElement::GetMimoBeamformingType (void) const
+{
+  return m_mimoBeamformingType;
+}
+
+MimoPhaseType
+MimoSetupControlElement::GetMimoPhaseType (void) const
+{
+  return m_mimoPhaseType;
+}
+
+uint8_t
+MimoSetupControlElement::GetEDMGGroupID (void) const
+{
+  return m_edmgGroupID;
+}
+
+uint32_t
+MimoSetupControlElement::GetGroupUserMask (void) const
+{
+  return m_groupUserMask;
+}
+
+uint8_t
+MimoSetupControlElement::GetLTxRx (void) const
+{
+  return m_LTxRx;
+}
+
+uint8_t
+MimoSetupControlElement::GetRequestedEDMGTRNUnitM (void) const
+{
+  return m_requestedEDMGTRNUnitM;
+}
+
+bool
+MimoSetupControlElement::IsInitiator (void) const
+{
+  return m_isInitiator;
+}
+
+bool
+MimoSetupControlElement::IsChannelMeasurementRequested (void) const
+{
+  return m_channelMeasurementRequested;
+}
+
+uint8_t
+MimoSetupControlElement::GetNumberOfTapsRequested (void) const
+{
+  return m_numberOfTapsRequested;
+}
+
+uint8_t
+MimoSetupControlElement::GetNumberOfTXSectorCombinationsRequested (void) const
+{
+  return m_numberOfTXSectorCombinationsRequested;
+}
+
+bool
+MimoSetupControlElement::IsChannelAggregationRequested (void) const
+{
+  return m_channelAggregationRequested;
+}
+
+ATTRIBUTE_HELPER_CPP (MimoSetupControlElement);
+
+std::ostream &operator << (std::ostream &os, const MimoSetupControlElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, MimoSetupControlElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*         MIMO Poll Control Element 9.4.2.259
+****************************************************/
+
+MimoPollControlElement::MimoPollControlElement ()
+  : m_mimoBeamformingType (SU_MIMO_BEAMFORMING),
+    m_pollType (POLL_TRAINING_PACKET),
+    m_LTxRx (0),
+    m_requestedEDMGTRNUnitM (0),
+    m_requestedEDMGTRNUnitP (0),
+    m_duration (0)
+{
+}
+
+WifiInformationElementId
+MimoPollControlElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+MimoPollControlElement::ElementIdExtension () const
+{
+  return IE_EXTENSION_MIMO_POLL_CONTROL;
+}
+
+uint8_t
+MimoPollControlElement::GetInformationFieldSize () const
+{
+  return 32;
+}
+
+void
+MimoPollControlElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint32_t val = 0;
+  val |= (m_mimoBeamformingType & 0x1);
+  val |= (m_pollType & 0x1) << 1;
+  val |= (m_LTxRx) << 2;
+  val |= (m_requestedEDMGTRNUnitM & 0xF) << 10;
+  val |= (m_requestedEDMGTRNUnitP & 0x3) << 14;
+  val |= (m_duration & 0x3FFF) << 16;
+  start.WriteHtolsbU32 (val);
+}
+
+uint8_t
+MimoPollControlElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint32_t val = start.ReadLsbtohU32 ();
+  m_mimoBeamformingType = static_cast<MimoBeamformingType> (val & 0x1);
+  m_pollType = static_cast<PollType> ((val >> 1) & 0x1);
+  m_LTxRx = (val >> 2) & 0xFF;
+  m_requestedEDMGTRNUnitM = (val >> 10) & 0xF;
+  m_requestedEDMGTRNUnitP = (val >> 14) & 0x3;
+  m_duration = (val >> 16) & 0x3FFF;
+  return length;
+}
+
+void
+MimoPollControlElement::SetMimoBeamformingType (MimoBeamformingType type)
+{
+  m_mimoBeamformingType = type;
+}
+
+void
+MimoPollControlElement::SetPollType (PollType type)
+{
+  m_pollType = type;
+}
+
+void
+MimoPollControlElement::SetLTxRx (uint8_t number)
+{
+  m_LTxRx = number;
+}
+
+void
+MimoPollControlElement::SetRequestedEDMGTRNUnitM (uint8_t unit)
+{
+  m_requestedEDMGTRNUnitM = unit;
+}
+
+void
+MimoPollControlElement::SetRequestedEDMGTRNUnitP (uint8_t unit)
+{
+  m_requestedEDMGTRNUnitP = unit;
+}
+
+void
+MimoPollControlElement::SetTrainingDuration (uint16_t duration)
+{
+  m_duration = duration;
+}
+
+MimoBeamformingType
+MimoPollControlElement::GetMimoBeamformingType (void) const
+{
+  return m_mimoBeamformingType;
+}
+
+PollType
+MimoPollControlElement::GetPollType (void) const
+{
+  return m_pollType;
+}
+
+uint8_t
+MimoPollControlElement::GetLTxRx (void) const
+{
+  return m_LTxRx;
+}
+
+uint8_t
+MimoPollControlElement::GetRequestedEDMGTRNUnitM (void) const
+{
+  return m_requestedEDMGTRNUnitM;
+}
+
+uint8_t
+MimoPollControlElement::GetRequestedEDMGTRNUnitP (void) const
+{
+  return m_requestedEDMGTRNUnitP;
+}
+
+uint16_t
+MimoPollControlElement::GetTrainingDuration (void) const
+{
+  return m_duration;
+}
+
+ATTRIBUTE_HELPER_CPP (MimoPollControlElement);
+
+std::ostream &operator << (std::ostream &os, const MimoPollControlElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, MimoPollControlElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*        MIMO Feedback Control Element 9.4.2.260
+****************************************************/
+
+MIMOFeedbackControl::MIMOFeedbackControl ()
+  : m_mimoBeamformingType (SU_MIMO_BEAMFORMING),
+    m_linkType (false),
+    m_comebackDelay (0),
+    m_isChannelMeasurementPresent (false),
+    m_isTapDelayPresent(false),
+    m_numberOfTapsPresent (0),
+    m_nummberOfTXSectorCombinationsPresent (0),
+    m_isPrecodingInformationPresent (false),
+    m_ssChannelAggregationPresent (false),
+    m_numberOfColumns (0),
+    m_numberOfRows (0),
+    m_txAntennaMask (0),
+    m_numberOfContiguousChannels (0),
+    m_grouping (0),
+    m_codebookInformationType (false),
+    m_feedbackType (false),
+    m_numberOfFeedbackMatricesOrTaps (0)
+{
+}
+
+WifiInformationElementId
+MIMOFeedbackControl::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+MIMOFeedbackControl::ElementIdExtension () const
+{
+  return IE_EXTENSION_MIMO_FEEDBACK_CONTROL;
+}
+
+uint8_t
+MIMOFeedbackControl::GetInformationFieldSize () const
+{
+  return 6;
+}
+
+void
+MIMOFeedbackControl::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint16_t val1 = 0;
+  uint32_t val2 = 0;
+  val1 |= (m_mimoBeamformingType & 0x1);
+  val1 |= (m_linkType & 0x1) << 1;
+  val1 |= (m_comebackDelay) << 2;
+  val1 |= (m_isChannelMeasurementPresent & 0x1) << 5;
+  val1 |= (m_isTapDelayPresent & 0x1) << 6;
+  val1 |= (m_numberOfTapsPresent & 0x3) << 7;
+  val1 |= (m_nummberOfTXSectorCombinationsPresent & 0x2F) << 9;
+  val1 |= (m_isPrecodingInformationPresent & 0x1) << 15;
+
+  val2 |= (m_ssChannelAggregationPresent & 0x1);
+  val2 |= (m_numberOfColumns & 0x7) << 1;
+  val2 |= (m_numberOfRows & 0x7) << 4;
+  val2 |= (m_txAntennaMask & 0xFF) << 7;
+  val2 |= (m_numberOfContiguousChannels & 0x3) << 15;
+  val2 |= (m_grouping & 0x3) << 17;
+  val2 |= (m_codebookInformationType & 0x1) << 19;
+  val2 |= (m_feedbackType & 0x1) << 20;
+  val2 |= (m_numberOfFeedbackMatricesOrTaps & 0x2FF) << 21;
+
+  start.WriteHtolsbU16 (val1);
+  start.WriteHtolsbU32 (val2);
+}
+
+uint8_t
+MIMOFeedbackControl::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint32_t val1 = start.ReadLsbtohU16 ();
+  uint32_t val2 = start.ReadLsbtohU32 ();
+  m_mimoBeamformingType = static_cast<MimoBeamformingType> (val1 & 0x1);
+  m_linkType = (val1 >> 1) & 0x1;
+  m_comebackDelay = (val1 >> 2) & 0xFF;
+  m_isChannelMeasurementPresent = (val1 >> 5) & 0x1;
+  m_isTapDelayPresent = (val1 >> 6) & 0x1;
+  m_numberOfTapsPresent = (val1 >> 7) & 0x3;
+  m_nummberOfTXSectorCombinationsPresent = (val1 >> 9) & 0x2F;
+  m_isPrecodingInformationPresent = (val1 >> 15) & 0x1;
+
+  m_ssChannelAggregationPresent = (val2 & 0x1);
+  m_numberOfColumns = (val2 >> 1) & 0x7;
+  m_numberOfRows = (val2 >> 4) & 0x7;
+  m_txAntennaMask = (val2 >> 7) & 0xFF;
+  m_numberOfContiguousChannels = (val2 >> 15) & 0x3;
+  m_grouping = (val2 >> 17) & 0x3;
+  m_codebookInformationType = (val2 >> 19) & 0x1;
+  m_feedbackType = (val2 >> 20) & 0x1;
+  m_numberOfFeedbackMatricesOrTaps = (val2 >> 21) & 0x1;
+
+  return length;
+}
+
+void
+MIMOFeedbackControl::SetMimoBeamformingType (MimoBeamformingType type)
+{
+  m_mimoBeamformingType = type;
+}
+
+void
+MIMOFeedbackControl::SetLinkTypeAsInitiator (bool isInitiator)
+{
+  m_linkType = isInitiator;
+}
+
+void
+MIMOFeedbackControl::SetComebackDelay (uint8_t delay)
+{
+  m_comebackDelay = delay;
+}
+
+void
+MIMOFeedbackControl::SetChannelMeasurementPresent (bool present)
+{
+  m_isChannelMeasurementPresent = present;
+}
+
+void
+MIMOFeedbackControl::SetTapDelayPresent (bool present)
+{
+  m_isTapDelayPresent = present;
+}
+
+void
+MIMOFeedbackControl::SetNumberOfTapsPresent (uint8_t taps)
+{
+  m_numberOfTapsPresent = taps;
+}
+
+void
+MIMOFeedbackControl::SetNumberOfTXSectorCombinationsPresent (uint8_t present)
+{
+  m_nummberOfTXSectorCombinationsPresent = present;
+}
+
+void
+MIMOFeedbackControl::SetPrecodingInformationPresent (bool present)
+{
+  m_isPrecodingInformationPresent = present;
+}
+
+void
+MIMOFeedbackControl::SetChannelAggregationPresent (bool present)
+{
+  m_isChannelMeasurementPresent = present;
+}
+
+void
+MIMOFeedbackControl::SetNumberOfColumns (uint8_t nc)
+{
+  m_numberOfColumns = nc;
+}
+
+void
+MIMOFeedbackControl::SetNumberOfRows (uint8_t nr)
+{
+  m_numberOfRows = nr;
+}
+
+void
+MIMOFeedbackControl::SetTxAntennaMask (uint8_t mask)
+{
+  m_txAntennaMask = mask;
+}
+
+void
+MIMOFeedbackControl::SetNumberOfContiguousChannels (uint8_t ncb)
+{
+  m_numberOfContiguousChannels = ncb;
+}
+
+void
+MIMOFeedbackControl::SetGrouping (uint8_t ng)
+{
+  m_grouping = ng;
+}
+
+void
+MIMOFeedbackControl::SetCodebookInformationType (bool type)
+{
+  m_codebookInformationType = type;
+}
+
+void
+MIMOFeedbackControl::SetFeedbackType (bool type)
+{
+  m_feedbackType = type;
+}
+
+void
+MIMOFeedbackControl::SetNumberOfFeedbackMatricesOrTaps (uint16_t number)
+{
+  m_numberOfFeedbackMatricesOrTaps = number;
+}
+
+MimoBeamformingType
+MIMOFeedbackControl::SetMimoBeamformingType (void) const
+{
+  return m_mimoBeamformingType;
+}
+
+bool
+MIMOFeedbackControl::IsLinkTypeAsInitiator (void) const
+{
+  return m_linkType;
+}
+
+uint8_t
+MIMOFeedbackControl::SetComebackDelay (void) const
+{
+  return m_comebackDelay;
+}
+
+bool
+MIMOFeedbackControl::IsChannelMeasurementPresent (void) const
+{
+  return m_isChannelMeasurementPresent;
+}
+
+bool
+MIMOFeedbackControl::IsTapDelayPresent (void) const
+{
+  return m_isTapDelayPresent;
+}
+
+uint8_t
+MIMOFeedbackControl::GetNumberOfTapsPresent (void) const
+{
+  return m_numberOfTapsPresent;
+}
+
+uint8_t
+MIMOFeedbackControl::GetNumberOfTXSectorCombinationsPresent (void) const
+{
+  return m_nummberOfTXSectorCombinationsPresent;
+}
+
+bool
+MIMOFeedbackControl::IsPrecodingInformationPresent(void) const
+{
+  return m_isPrecodingInformationPresent;
+}
+
+bool
+MIMOFeedbackControl::IsChannelAggregationPresent (void) const
+{
+  return m_isChannelMeasurementPresent;
+}
+
+uint8_t
+MIMOFeedbackControl::GetNumberOfColumns (void) const
+{
+  return m_numberOfColumns;
+}
+
+uint8_t
+MIMOFeedbackControl::GetNumberOfRows (void) const
+{
+  return m_numberOfRows;
+}
+
+uint8_t
+MIMOFeedbackControl::GetTxAntennaMask (void) const
+{
+  return m_txAntennaMask;
+}
+
+uint8_t
+MIMOFeedbackControl::GetNumberOfContiguousChannels (void) const
+{
+  return m_numberOfContiguousChannels;
+}
+
+uint8_t
+MIMOFeedbackControl::GetGrouping (void) const
+{
+  return m_grouping;
+}
+
+bool
+MIMOFeedbackControl::GetCodebookInformationType (void) const
+{
+  return m_codebookInformationType;
+}
+
+bool
+MIMOFeedbackControl::GetFeedbackType (void) const
+{
+  return m_feedbackType;
+}
+
+uint16_t
+MIMOFeedbackControl::GetNumberOfFeedbackMatricesOrTaps (void) const
+{
+  return m_numberOfFeedbackMatricesOrTaps;
+}
+
+ATTRIBUTE_HELPER_CPP (MIMOFeedbackControl);
+
+std::ostream &operator << (std::ostream &os, const MIMOFeedbackControl &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, MIMOFeedbackControl &element)
+{
+  return is;
+}
+
+/***************************************************
+*      MIMO Selection Control Element 9.4.2.261
+****************************************************/
+
+MIMOSelectionControlElement::MIMOSelectionControlElement ()
+  : m_edmgGroupID (0),
+    m_numMUConfigurations (0),
+    m_muType (MU_Reciprocal)
+{
+}
+
+WifiInformationElementId
+MIMOSelectionControlElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+MIMOSelectionControlElement::ElementIdExtension () const
+{
+  return IE_EXTENSION_MIMO_SELECTION_CONTROL;
+}
+
+uint8_t
+MIMOSelectionControlElement::GetInformationFieldSize () const
+{
+  return 6;
+}
+
+void
+MIMOSelectionControlElement::SerializeInformationField (Buffer::Iterator start) const
+{
+//  uint8_t val = 0;
+  start.WriteU8 (m_edmgGroupID);
+//  val |= (m_mimoBeamformingType & 0x1);
+//  val |= (m_linkType & 0x1) << 1;
+//  start.WriteHtolsbU16 (val1);
+}
+
+uint8_t
+MIMOSelectionControlElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  m_edmgGroupID = start.ReadU8 ();
+  return length;
+}
+
+void
+MIMOSelectionControlElement::SetEDMGGroupID (uint8_t id)
+{
+  m_edmgGroupID = id;
+}
+
+void
+MIMOSelectionControlElement::SetMultiUserTransmissionConfigurationType (MultiUserTransmissionConfigType type)
+{
+  m_muType = type;
+}
+
+void
+MIMOSelectionControlElement::AddReciprocalMUBFTrainingBasedTransmissionConfig (ReciprocalTransmissionConfig &config)
+{
+  m_reciprocalConfigList.push_back (config);
+}
+
+uint8_t
+MIMOSelectionControlElement::GetEDMGGroupID (void) const
+{
+  return m_edmgGroupID;
+}
+
+uint8_t
+MIMOSelectionControlElement::GetNumberOfMultiUserConfigurations (void) const
+{
+  return m_numMUConfigurations;
+}
+
+MultiUserTransmissionConfigType
+MIMOSelectionControlElement::GetMultiUserTransmissionConfigurationType (void) const
+{
+  return m_muType;
+}
+
+ReciprocalTransmissionConfigList
+MIMOSelectionControlElement::GetReciprocalTransmissionConfigList (void) const
+{
+  return m_reciprocalConfigList;
+}
+
+ATTRIBUTE_HELPER_CPP (MIMOSelectionControlElement);
+
+std::ostream &operator << (std::ostream &os, const MIMOSelectionControlElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, MIMOSelectionControlElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*      Digital BF Feedback Element 9.4.2.269
+****************************************************/
+
+DigitalBFFeedbackElement::DigitalBFFeedbackElement ()
+{
+}
+
+WifiInformationElementId
+DigitalBFFeedbackElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+DigitalBFFeedbackElement::ElementIdExtension () const
+{
+  return IE_EXTENSION_DIGITAL_BF_FEEDBACK;
+}
+
+uint8_t
+DigitalBFFeedbackElement::GetInformationFieldSize () const
+{
+  return 6;
+}
+
+void
+DigitalBFFeedbackElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  /* Iterate over each Digital Beamforming Feedback Matrix*/
+  for (DigitalBeamformingFeedbackInformationCI mat = m_digitalFBInfo.begin (); mat != m_digitalFBInfo.end (); mat++)
+    {
+      /* Iterate over each Digital Feedback Component */
+      for (DigitalBeamformingFeedbackMatrixCI it = (*mat).begin (); it != (*mat).end (); it++)
+        {
+          start.WriteU8 (it->realPart);
+          start.WriteU8 (it->imagPart);
+        }
+    }
+}
+
+uint8_t
+DigitalBFFeedbackElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  return length;
+}
+
+void
+DigitalBFFeedbackElement::AddDigitalBeamformingFeedbackMatrix (DigitalBeamformingFeedbackMatrix &matrix)
+{
+  m_digitalFBInfo.push_back (matrix);
+}
+
+void
+DigitalBFFeedbackElement::AddDifferentialSubcarrierIndex (DifferentialSubcarrierIndex index)
+{
+  m_differentialSubcarrierIndexList.push_back (index);
+}
+
+void
+DigitalBFFeedbackElement::AddRelativeTapDelay (Tap_Delay tapDelay)
+{
+  m_tapDelay.push_back (tapDelay);
+}
+
+void
+DigitalBFFeedbackElement::AddDifferentialSNRforSpaceTimeStream (SNR differentialSNR)
+{
+  m_muExclusiveBeamformingReport.push_back (differentialSNR);
+}
+
+DigitalBeamformingFeedbackInformation
+DigitalBFFeedbackElement::GetDigitalBeamformingFeedbackInformation (void) const
+{
+  return m_digitalFBInfo;
+}
+
+DifferentialSubcarrierIndexList
+DigitalBFFeedbackElement::GetDifferentialSubcarrierIndex (void) const
+{
+  return m_differentialSubcarrierIndexList;
+}
+
+Tap_Delay_List
+DigitalBFFeedbackElement::GetTapDelay (void) const
+{
+  return m_tapDelay;
+}
+
+SNR_LIST
+DigitalBFFeedbackElement::GetMUExclusiveBeamformingReport (void) const
+{
+  return m_muExclusiveBeamformingReport;
+}
+
+ATTRIBUTE_HELPER_CPP (DigitalBFFeedbackElement);
+
+std::ostream &operator << (std::ostream &os, const DigitalBFFeedbackElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, DigitalBFFeedbackElement &element)
 {
   return is;
 }

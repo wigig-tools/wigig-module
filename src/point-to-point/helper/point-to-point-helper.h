@@ -150,6 +150,20 @@ public:
    */
   NetDeviceContainer Install (std::string aNode, std::string bNode);
 
+  /**
+   * Set the maximum length of packet data stored in the PCAP file.
+   *
+   * \param length The length of the snapshot in bytes.
+   */
+  void SetSnapshotLength (uint32_t length);
+
+  /**
+   * Get the maximum length of packet data stored in the PCAP file.
+   *
+   * \return length The length of the snapshot in bytes.
+   */
+  uint32_t GetSnapshotLength (void) const;
+
 private:
   /**
    * \brief Enable pcap output the indicated net device.
@@ -185,6 +199,8 @@ private:
   ObjectFactory m_channelFactory;       //!< Channel Factory
   ObjectFactory m_remoteChannelFactory; //!< Remote Channel Factory
   ObjectFactory m_deviceFactory;        //!< Device Factory
+  uint32_t m_snaplen;                   //!< Snapshot length in bytes.
+
 };
 
 } // namespace ns3

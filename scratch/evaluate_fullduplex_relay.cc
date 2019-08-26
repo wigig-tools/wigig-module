@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -11,12 +11,12 @@
 #include "common-functions.h"
 
 /**
+ * Simulation Objective:
  * This script is used to evaluate IEEE 802.11ad relay operation using Link Switching Type + Full Duplex Amplify and Forward (FD-AF).
+ *
+ * Network Topology:
  * The scenario consists of 3 DMG STAs (Two REDS + 1 RDS) and one PCP/AP.
- * Note: The standard supports only unicast transmission for relay operation. The relay (RDS) is responsible for protecting the
- * period allocated between the source REDS and destinations REDS. In case, the source REDS does no receive Ack/BlockAck during link
- * change interval, the source REDS will defer its transmission by data sensing time which will implicitly signal the destination REDS
- * to switch to the relay link.
+ *
  *
  *                           DMG AP (0,1)
  *
@@ -26,73 +26,20 @@
  *
  *                            RDS (0,-1)
  *
+ * Simulation Description:
+ * The standard supports only unicast transmission for relay operation. The relay (RDS) is responsible for protecting the
+ * period allocated between the source REDS and destinations REDS. In case, the source REDS does no receive Ack/BlockAck during link
+ * change interval, the source REDS will defer its transmission by data sensing time which will implicitly signal the destination REDS
+ * to switch to the relay link.
+ *
+ * Running Simulation:
  * To use this script simply type the following run command:
  * ./waf --run "evaluate_fullduplex"
  *
+ * Output:
  * The simulation generates four PCAP files for each node. You can check the traces which matches exactly
  * the procedure for relay search and relay link establishment defined in the amendment.
  */
-
-
-
-
-
-
-/**
- *
- * Simulation Objective:
- * This script is used to evaluate IEEE 802.11ad relay operation for TCP connection using Link Switching Type working in
- * Half Duplex Decode and Forward relay mode. IEEE 802.11ad defines relay operation mode for SP protection against sudden
- * link interruptions.
- *
- * Network Topology:
- * The scenario consists of 3 DMG STAs (West STA, East STA and, one RDS) and a single PCP/AP.
- *
- *                           DMG AP (0,1)
- *
- *
- * West STA (-1.73,0)                         East STA (1.73,0)
- *
- *
- *                            RDS (0,-1)
- *
- * Simulation Description:
- * In this simulation scenario we use TCP as transport protocol. TCP requires bi-directional transmission. So we need to
- * establish forward and reverse SP allocations since the standard supports only unicast transmission for single SP allocation.
- * As a result, we create the following two SP allocations:
- *
- * SP1 for TCP Segments: West DMG STA -----> East DMG STA (8ms)
- * SP2 for TCP ACKs    : East DMG STA -----> West DMG STA (8ms)
- *
- * We swap betweeen those two SPs allocations during DTI access period up-to certain number of blocks as following:
- *
- * |-----SP1-----| |-----SP2-----| |-----SP1-----| |-----SP2-----| |-----SP1-----| |-----SP2-----|
- *
- * We add guard time between these consecutive SP allocations around 5us for protection.
- *
- * At the beginning each station requests information regarding the capabilities of all other stations. Once this is completed
- * West STA initiates Relay Discovery Procedure. During the relay discovery procedure, WEST STA performs Beamforming Training
- * with EAST STA and all the available RDSs. After WEST STA completes BF with the EAST STA it can establish service period for
- * direct communication without gonig throught the DMG PCP/AP. Once the RLS is completed, we repeat the same previous steps to
- * establish relay link from East STA to West STA. At this point, we schedule the previous SP allocations during DTI period.
- *
- * During the course of the simulation, we implicitly inform all the stations about relay switching decision. The user can enable
- * or disable relay switching per SP allocation.
- *
- * Running Simulation:
- * ./waf --run "evaluate_halfduplex_relay --simulationTime=10 --pcap=true"
- *
- * Output:
- * The simulation generates the following traces:
- * 1. PCAP traces for each station.
- * 2. ASCII traces corresponding to TCP socket information (CWND, RWND, and RTT).
- * 3. ASCII traces corresponding to Wifi MAC Queue size changes for each DMG STA.
- */
-
-
-
-
-
 
 NS_LOG_COMPONENT_DEFINE ("EvaluateFullDuplexRelayOperation");
 
@@ -109,7 +56,7 @@ Ptr<DmgStaWifiMac> srcRedsMac;
 Ptr<DmgStaWifiMac> dstRedsMac;
 Ptr<DmgStaWifiMac> rdsMac;
 
-Ptr<YansWifiChannel> adChannel;
+Ptr<DmgWifiChannel> adChannel;
 Ptr<WifiPhy> srcWifiPhy;
 Ptr<WifiPhy> dstWifiPhy;
 
@@ -143,8 +90,9 @@ RlsCompleted (Mac48Address address)
 }
 
 void
-SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
@@ -204,7 +152,7 @@ SelectRelay (ChannelMeasurementInfoList rdsMeasurements, ChannelMeasurementInfoL
 }
 
 void
-TearDownRelay (Ptr<YansWifiChannel> channel)
+TearDownRelay (void)
 {
   srcRedsMac->TeardownRelay (srcRedsMac->GetAssociationID (),
                              dstRedsMac->GetAssociationID (),
@@ -244,7 +192,7 @@ ServicePeriodStarted (Mac48Address source, Mac48Address destination)
   if (insertPacketDropper)
     {
       std::cout << "Service Period for which we insert packet dropper has started at " << Simulator::Now () << std::endl;
-      Simulator::Schedule (MilliSeconds (1), &YansWifiChannel::AddPacketDropper, adChannel, &GetPacketDropValue, dstWifiPhy, srcWifiPhy);
+      Simulator::Schedule (MilliSeconds (1), &DmgWifiChannel::AddPacketDropper, adChannel, &GetPacketDropValue, dstWifiPhy, srcWifiPhy);
     }
 }
 
@@ -290,7 +238,7 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::WifiMacQueue::MaxPacketNumber", UintegerValue (queueSize));
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -303,36 +251,29 @@ main (int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (56.16e9));
 
   /**** SETUP ALL NODES ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
   wifiPhy.Set ("RxNoiseFigure", DoubleValue (3));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes steerable antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (12),
-                      "Antennas", UintegerValue (1));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -353,8 +294,13 @@ main (int argc, char *argv[])
                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                   "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (12),
                   "BeaconInterval", TimeValue (MicroSeconds (100000)),
-                  "BeaconTransmissionInterval", TimeValue (MicroSeconds (800)),
                   "ATIDuration", TimeValue (MicroSeconds (1000)));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (12));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);
@@ -450,7 +396,7 @@ main (int argc, char *argv[])
   dstRedsMac = StaticCast<DmgStaWifiMac> (dstRedsNetDevice->GetMac ());
   rdsMac = StaticCast<DmgStaWifiMac> (rdsNetDevice->GetMac ());
 
-  adChannel = StaticCast<YansWifiChannel> (srcRedsNetDevice->GetChannel ());
+  adChannel = StaticCast<DmgWifiChannel> (srcRedsNetDevice->GetChannel ());
   srcWifiPhy = srcRedsNetDevice->GetPhy ();
   dstWifiPhy = dstRedsNetDevice->GetPhy ();
 
@@ -474,12 +420,12 @@ main (int argc, char *argv[])
 
   /** Schedule Events **/
   /* Request the DMG Capabilities of other DMG STAs */
-  Simulator::Schedule (Seconds (1.05), &DmgStaWifiMac::RequestInformation, srcRedsMac, dstRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.06), &DmgStaWifiMac::RequestInformation, srcRedsMac, rdsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.07), &DmgStaWifiMac::RequestInformation, rdsMac, srcRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.08), &DmgStaWifiMac::RequestInformation, rdsMac, dstRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.09), &DmgStaWifiMac::RequestInformation, dstRedsMac, srcRedsMac->GetAddress ());
-  Simulator::Schedule (Seconds (1.10), &DmgStaWifiMac::RequestInformation, dstRedsMac, rdsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.05), &DmgStaWifiMac::RequestRelayInformation, srcRedsMac, dstRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.06), &DmgStaWifiMac::RequestRelayInformation, srcRedsMac, rdsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.07), &DmgStaWifiMac::RequestRelayInformation, rdsMac, srcRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.08), &DmgStaWifiMac::RequestRelayInformation, rdsMac, dstRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.09), &DmgStaWifiMac::RequestRelayInformation, dstRedsMac, srcRedsMac->GetAddress ());
+  Simulator::Schedule (Seconds (1.10), &DmgStaWifiMac::RequestRelayInformation, dstRedsMac, rdsMac->GetAddress ());
 
   /* Initiate Relay Discovery Procedure */
   Simulator::Schedule (Seconds (3.0), &DmgStaWifiMac::StartRelayDiscovery, srcRedsMac, dstRedsMac->GetAddress ());
@@ -488,7 +434,7 @@ main (int argc, char *argv[])
   Simulator::Schedule (Seconds (switchTime), &InsertPacketDropper);
 
   /* Schedule tear down event */
-  Simulator::Schedule (Seconds (switchTime + 3), &TearDownRelay, adChannel);
+  Simulator::Schedule (Seconds (switchTime + 3), &TearDownRelay);
 
   Simulator::Stop (Seconds (simulationTime));
   Simulator::Run ();

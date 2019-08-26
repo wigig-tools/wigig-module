@@ -24,7 +24,7 @@
 
 #include <ns3/net-device.h>
 #include <ns3/event-id.h>
-#include <ns3/mac48-address.h>
+#include <ns3/mac64-address.h>
 #include <ns3/traced-callback.h>
 #include <ns3/nstime.h>
 #include <ns3/lte-phy.h>
@@ -98,7 +98,10 @@ protected:
 private:
   /// type conversion operator
   LteNetDevice (const LteNetDevice &);
-  /// assignment operator
+  /**
+   * assignment operator
+   * \returns LteNetDevice
+   */
   LteNetDevice & operator= (const LteNetDevice &);
 
   Ptr<Node> m_node; ///< the node
@@ -109,7 +112,7 @@ private:
   bool m_linkUp; ///< link uo
   mutable uint16_t m_mtu; ///< MTU
 
-  Mac48Address m_address; ///< MAC address
+  Mac64Address m_address; ///< MAC address - only relevant for UEs.
 };
 
 

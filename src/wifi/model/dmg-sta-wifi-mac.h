@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef DMG_STA_WIFI_MAC_H
@@ -15,10 +15,34 @@
 #include "supported-rates.h"
 #include "amsdu-subframe-header.h"
 
+#include "ns3/traced-value.h"
+#include "mgt-headers.h"
+
 namespace ns3  {
 
-class MgtAddBaRequestHeader;
 class UniformRandomVariable;
+
+/**
+ * \ingroup wifi
+ *
+ * Struct to hold information regarding DMG beacons observed.
+ */
+struct DmgBeaconInfo
+{
+  void Clear ()
+    {
+      m_channelNumber = 0;
+      m_bssid = Mac48Address ();
+      m_capabilities = 0;
+      m_snr = 0;
+      m_probeResp = MgtProbeResponseHeader ();
+    }
+  uint32_t m_channelNumber;
+  Mac48Address m_bssid;
+  Ptr<DmgCapabilities> m_capabilities;
+  double m_snr;
+  MgtProbeResponseHeader m_probeResp;
+};
 
 typedef enum {
   DIRECT_LINK = 0,
@@ -125,8 +149,14 @@ public:
   /**
    * Request Information regarding station capabilities.
    * \param stationAddress The address of the station to obtain its capabilities.
+   * \param list A list of the requested element IDs.
    */
-  void RequestInformation (Mac48Address stationAddress);
+  void RequestInformation (Mac48Address stationAddress, WifiInformationElementIdList &list);
+  /**
+   * Request Information regarding station DMG capabilities and relay capabilities.
+   * \param stationAddress The address of the station to obtain its capabilities.
+   */
+  void RequestRelayInformation (Mac48Address stationAddress);
   /**
    * Discover all the available relays in DMG BSS. This method is called by the source REDS.
    * \param stationAddress The MAC address of the station to establish relay link with (Destination REDS).
@@ -143,6 +173,13 @@ public:
    * \param relayAid The AID of the RDS.
    */
   void TeardownRelay (uint16_t sourceAid, uint16_t destinationAid, uint16_t relayAid);
+  /**
+   * Tear down relay operation by either the RDS or the source REDS.
+   * \param sourceAid The AID of the source REDS.
+   * \param destinationAid The AID of the destination REDS.
+   * \param relayAid The AID of the RDS.
+   */
+  void TeardownRelayImmediately (uint16_t sourceAid, uint16_t destinationAid, uint16_t relayAid);
   /**
    * Send Channel Measurement Request to specific DMG STA.
    * \param to The MAC address of the destination STA.
@@ -164,7 +201,7 @@ public:
    * Get Association Identifier (AID).
    * \return The AID of the station.
    */
-  uint16_t GetAssociationID (void);
+  virtual uint16_t GetAssociationID (void);
   /**
    * Create or modify DMG allocation for the transmission of frames between DMG STA
    * that are members of a PBSS or a DMG infrastructure.
@@ -187,6 +224,12 @@ public:
    * \param peerAddress The MAC address of the peer station.
    */
   void CommunicateInServicePeriod (Mac48Address peerAddress);
+  /**
+   * Return whether we are associated with a DMG AP.
+   *
+   * \return true if we are associated with a DMG AP, false otherwise
+   */
+  bool IsAssociated (void) const;
 
 protected:
   friend class MultiBandNetDevice;
@@ -202,6 +245,11 @@ protected:
   void FrameTxOk (const WifiMacHeader &hdr);
   void BrpSetupCompleted (Mac48Address address);
   virtual void NotifyBrpPhaseCompleted (void);
+
+  /**
+   * End Association Beamform Training (A-BFT) period.
+   */
+  void EndAssociationBeamformTraining (void);
 
   void StartChannelQualityMeasurement (Ptr<DirectionalChannelQualityRequestElement> element);
   void ReportChannelQualityMeasurement (TimeBlockMeasurementList list);
@@ -283,8 +331,9 @@ protected:
   void ForwardDataFrame (WifiMacHeader hdr, Ptr<Packet> packet, Mac48Address destAddress);
   /**
    * Do Association Beamforming Training in the A-BFT period.
+   * \param currentSlotIndex The index of the  current SSW slot in A-BFT.
    */
-  void DoAssociationBeamformingTraining (void);
+  void DoAssociationBeamformingTraining (uint8_t currentSlotIndex);
   /**
    * Send Relay Search Request.
    * \param token The dialog token.
@@ -300,7 +349,7 @@ protected:
   void SendChannelMeasurementReport (Mac48Address to, uint8_t token, ChannelMeasurementInfoList &measurementList);
   /**
    * Schedule all the allocation blocks.
-   * \param id The allocation identifier.
+   * \param field The allocation field information..
    * \param role The role of the STA in the relay period.
    */
   void ScheduleAllocationBlocks (AllocationField &field, STA_ROLE role);
@@ -394,9 +443,15 @@ protected:
    */
   virtual void TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr);
   /**
-   *BeamLink Maintenance Timeout.
+   * BeamLink Maintenance Timeout.
    */
   virtual void BeamLinkMaintenanceTimeout (void);
+  /**
+   * Return the DMG capability of the current STA.
+   *
+   * \return the DMG capability that we support
+   */
+  Ptr<DmgCapabilities> GetDmgCapabilities (void) const;
 
 private:
   /**
@@ -439,11 +494,11 @@ private:
    */
   void ProbeRequestTimeout (void);
   /**
-   * Return whether we are associated with an AP.
+   * Return whether we have completed beamforming training with an AP.
    *
-   * \return true if we are associated with an AP, false otherwise
+   * \return true if we have completed beamforming training with an AP, false otherwise
    */
-  bool IsAssociated (void) const;
+  bool IsBeamformedTrained (void) const;
   /**
    * Return whether we are waiting for an association response from an AP.
    *
@@ -461,15 +516,13 @@ private:
    */
   void RestartBeaconWatchdog (Time delay);
   /**
+   * Failed to perform RSS in A-BFT period.
+   */
+  void FailedRssAttempt (void);
+  /**
    * Missed SSW-Feedback from PCP/AP during A-BFT.
    */
   void MissedSswFeedback (void);
-  /**
-   * Return the DMG capability of the current STA.
-   *
-   * \return the DMG capability that we support
-   */
-  Ptr<DmgCapabilities> GetDmgCapabilities (void) const;
   /**
    * Send Service Period Request (SPR) Frame.
    * \param to The MAC address of the PCP/AP.
@@ -478,43 +531,70 @@ private:
    * \param bfField The beamforming training field.
    */
   void SendSprFrame (Mac48Address to, Time duration, DynamicAllocationInfoField &info, BF_Control_Field &bfField);
-
+  /**
+   * Start A-BFT Sector Sweep Slot.
+   */
+  void StartSectorSweepSlot (void);
   /**
    * Start Responder Sector Sweep (RSS) Phase during A-BFT access period.
    * \param stationAddress The address of the station.
-   * \param isTxss Indicate whether the RSS is TxSS or RxSS.
    */
-  void StartAbftResponderSectorSweep (Mac48Address address, bool isTxss);
+  void StartAbftResponderSectorSweep (Mac48Address address);
+  /**
+   * This method is called after waiting in passive mode for beacons to
+   * arrive.  If no good beacons, restart scanning; otherwise, send an
+   * Association request to the highest quality beacon received and move
+   * to WAIT_ASSOC_RESP.
+   */
+  void WaitBeaconTimeout (void);
+  /**
+   * Start the scanning process to find the strongest beacon
+   */
+  void StartScanning (void);
+  /**
+   * Continue scanning process or terminate if no further channels to scan
+   */
+  void ScanningTimeout (void);
 
 private:
+  /** Association Variables and Trace Sources **/
   Time m_probeRequestTimeout;
   Time m_assocRequestTimeout;
-  EventId m_probeRequestEvent;
-  EventId m_assocRequestEvent;
-  EventId m_beaconWatchdog;
-  Time m_beaconWatchdogEnd;                     //! Watch dog timer end time/
+  EventId m_probeRequestEvent;                  //! Event for Probe request.
+  EventId m_assocRequestEvent;                  //! Event for assoication request.
+  EventId m_beaconWatchdog;                     //! Event for  watch dog timer.
+  Time m_beaconWatchdogEnd;                     //! Watch dog timer end time.
   uint32_t m_maxLostBeacons;                    //! Maximum number of beacons we are allowed to miss.
   bool m_activeProbing;                         //! Flag to indicate whether to perform active probing.
   uint16_t m_aid;                               //! AID of the STA.
 
-  TracedCallback<Mac48Address> m_assocLogger;
-  TracedCallback<Mac48Address> m_deAssocLogger;
+  /** Scanning Capability Variables **/
+  Time m_scanningTimeout;                       //! Scanning Operation timeout.
+  EventId m_waitBeaconEvent;                    //! Wait Event for DMG Beacon Reception.
+  std::vector<uint16_t> m_candidateChannels;    //! Candidates channel to scan.
+  DmgBeaconInfo m_bestBeaconObserved;           //! Best received DMG beacon information.
+  TracedValue<Time> m_beaconArrival;            //! Time in queue.
+  uint32_t m_maxMissedBeacons;                  //! Maximum number of missed beacons.
+  std::map<Mac48Address, DmgBeaconInfo> m_availableAPs;
 
   bool m_moreData;                              //! More data field in the last received Data Frame to indicate that the STA
                                                 //! has MSDUs or A-MSDUs buffered for transmission to the frame’s recipient
                                                 //! during the current SP or TXOP.
 
-  /* BI Parameters */
-  EventId   m_abftEvent;                        //!< Association Beamforming training Event.
-  uint8_t   m_nBI;                              //!< Flag to indicate the number of intervals to allocate A-BFT.
+  /** BI Parameters **/
+  EventId m_abftEvent;                          //!< Association Beamforming training Event.
+  uint8_t m_nBI;                                //!< Flag to indicate the number of intervals to allocate A-BFT.
+  uint8_t m_txssSpan;                           //!< The number of BIs to cover all the sectors.
+  uint8_t m_remainingBIs;                       //!< The number of remaining BIs to cover the TxSS of the AP.
+  bool m_completedFragmenteBI;                  //!< Flag to indicate if we have completed BI.
 
-  /* BTI Beamforming */
+  /** BTI Beamforming **/
   bool m_receivedDmgBeacon;
-  uint8_t m_slotIndex;                          //!< The index of the selected slot in the A-BFT period.
   EventId m_sswFbckTimeout;                     //!< Timeout Event for receiving SSW FBCK Frame.
   Ptr<UniformRandomVariable> a_bftSlot;         //!< Random variable for A-BFT slot.
   uint8_t m_remainingSlotsPerABFT;              //!< Remaining Slots in the current A-BFT.
-  uint8_t m_slotOffset;                         //!< Variable used to print the correct slot selected.
+  uint8_t m_currentSlotIndex;                   //!< Current SSW Slot in A-BFT.
+  uint8_t m_selectedSlotIndex;                  //!< Selected SSW slot in A-BFT..
 
   uint32_t m_failedRssAttemptsCounter;          //!< Counter for Failed RSS Attempts during A-BFT.
   uint32_t m_rssAttemptsLimit;                  //!< Maximum Failed RSS Attempts during A-BFT.
@@ -522,8 +602,10 @@ private:
   uint32_t m_rssBackoffLimit;                   //!< Maximum RSS Backoff value.
   Ptr<UniformRandomVariable> m_rssBackoffVariable;//!< Random variable for the RSS Backoff value.
   bool m_staAvailabilityElement;                //!< Flag to indicate whether we include STA Availability element in DMG Beacon.
+  bool m_immediateAbft;                         //!< Flag to indicate if we start A-BFT after receiving fragmented A-BFT.
 
   /* DMG Relay Support Variables */
+  bool m_relayAckRequest;                       //!< Request Relay ACK.
   bool m_relayMode;                             //!< Flag to indicate if we are in relay mode (For RDS).
   bool m_rdsDuplexMode;                         //!< The duplex mode of the RDS.
   uint8_t m_relayLinkChangeInterval;            //!< Relay Link Change Interval reported by the source REDS (MicroSeconds).
@@ -556,7 +638,16 @@ private:
   typedef void (* TransmissionLinkChangedCallback)(Mac48Address address, TransmissionLink link);
   TracedCallback<Mac48Address, TransmissionLink> m_transmissionLinkChanged;
 
-  /* Dynamic Allocation of Service Period */
+  /**
+   * TracedCallback signature for .
+   *
+   * \param address The MAC address of the station.
+   * \param transmissionLink The new transmission link.
+   */
+  typedef void (* RdsDiscoveryCompletedCallback)(RelayCapableStaList rdsList);
+  TracedCallback<RelayCapableStaList> m_rdsDiscoveryCompletedCallback;
+
+  /** Dynamic Allocation of Service Period **/
   bool m_pollingPhase;                            //!< Flag to indicate if we participate in the polling phase.
   SERVICE_PERIOD_PAIR m_currentServicePeriod;
   ServicePeriodRequestCallback m_servicePeriodRequestCallback;
@@ -564,6 +655,9 @@ private:
   /* Spatial Sharing and Interference Mitigation */
   bool m_supportSpsh;                           //!< Flag to indicate whether we support Spatial Sharing and Interference Mitigation.
   Ptr<DirectionalChannelQualityRequestElement> m_reqElem;
+
+  /** DMG BSS peer and service discovery **/
+  TracedCallback<Mac48Address> m_informationReceived;
 
 };
 

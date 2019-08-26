@@ -27,6 +27,7 @@
 #include "supported-rates.h"
 #include "capability-information.h"
 #include "vht-operation.h"
+#include "extended-capabilities.h"
 
 namespace ns3  {
 
@@ -58,6 +59,11 @@ public:
    * access is granted to this MAC.
    */
   void Enqueue (Ptr<const Packet> packet, Mac48Address to);
+
+  /**
+   * \param phy the physical layer attached to this MAC.
+   */
+  void SetWifiPhy (const Ptr<WifiPhy> phy);
 
   /**
    * \param missed the number of beacons which must be missed
@@ -117,10 +123,14 @@ private:
    */
   void SendProbeRequest (void);
   /**
-   * Forward an association request packet to the DCF. The standard is not clear on the correct
-   * queue for management frames if QoS is supported. We always use the DCF.
+   * Forward an association or reassociation request packet to the DCF.
+   * The standard is not clear on the correct queue for management frames if QoS is supported.
+   * We always use the DCF.
+   *
+   * \param isReassoc flag whether it is a reassociation request
+   *
    */
-  void SendAssociationRequest (void);
+  void SendAssociationRequest (bool isReassoc);
   /**
    * Try to ensure that we are associated with an AP by taking an appropriate action
    * depending on the current association status.
@@ -166,6 +176,12 @@ private:
    */
   SupportedRates GetSupportedRates (void) const;
   /**
+   * Return the extended capabilities of the device.
+   *
+   * \return the extended capabilities that we support
+   */
+  Ptr<ExtendedCapabilities> GetExtendedCapabilities (void) const;
+  /**
    * Return the HT capability of the device.
    *
    * \return the HT capability that we support
@@ -192,13 +208,18 @@ private:
    * \param aifsn the number of slots that make up an AIFS
    * \param txopLimit the TXOP limit
    */
-  void SetEdcaParameters (AcIndex ac, uint8_t cwMin, uint8_t cwMax, uint8_t aifsn, Time txopLimit);
+  void SetEdcaParameters (AcIndex ac, uint32_t cwMin, uint32_t cwMax, uint8_t aifsn, Time txopLimit);
   /**
    * Return the Capability information of the current STA.
    *
    * \return the Capability information that we support
    */
   CapabilityInformation GetCapabilities (void) const;
+
+  /**
+   * Indicate that PHY capabilities have changed.
+   */
+  void PhyCapabilitiesChanged (void);
 
   MacState m_state;            ///< MAC state
   Time m_probeRequestTimeout;  ///< probe request timeout

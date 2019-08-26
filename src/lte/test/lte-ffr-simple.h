@@ -84,8 +84,9 @@ public:
   virtual void SetLteFfrRrcSapUser (LteFfrRrcSapUser* s);
   virtual LteFfrRrcSapProvider* GetLteFfrRrcSapProvider ();
 
-  // let the forwarder class access the protected and private members
+  /// let the forwarder class access the protected and private members
   friend class MemberLteFfrSapProvider<LteFfrSimple>;
+  /// let the forwarder class access the protected and private members
   friend class MemberLteFfrRrcSapProvider<LteFfrSimple>;
 
   /**
@@ -155,7 +156,7 @@ private:
   // Uplink Power Control
   uint32_t m_tpc; ///< transmission power control to be used
   uint32_t m_tpcNum; ///< number of TPC configurations
-  bool m_accumulatedMode; ///whether to use the TPC accumulated mode
+  bool m_accumulatedMode; ///< whether to use the TPC accumulated mode
 
 }; // end of class LteFfrSimple
 

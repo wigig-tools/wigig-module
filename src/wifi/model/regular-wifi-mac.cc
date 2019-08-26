@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2008 INRIA
- * Copyright (c) 2015,2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -27,8 +27,9 @@
 #include "mac-tx-middle.h"
 #include "mac-low.h"
 #include "dcf-manager.h"
-#include "msdu-standard-aggregator.h"
-#include "mpdu-standard-aggregator.h"
+#include "msdu-aggregator.h"
+#include "mpdu-aggregator.h"
+#include "wifi-utils.h"
 #include "ns3/simulator.h"
 
 namespace ns3 {
@@ -46,16 +47,16 @@ RegularWifiMac::RegularWifiMac () :
   m_heSupported (0)
 {
   NS_LOG_FUNCTION (this);
-  m_rxMiddle = new MacRxMiddle ();
+  m_rxMiddle = Create<MacRxMiddle> ();
   m_rxMiddle->SetForwardCallback (MakeCallback (&RegularWifiMac::Receive, this));
 
-  m_txMiddle = new MacTxMiddle ();
+  m_txMiddle = Create<MacTxMiddle> ();
 
   m_low = CreateObject<MacLow> ();
   m_low->SetRxCallback (MakeCallback (&MacRxMiddle::Receive, m_rxMiddle));
   m_low->SetMacHigh (this);
 
-  m_dcfManager = new DcfManager ();
+  m_dcfManager = CreateObject<DcfManager> ();
   m_dcfManager->SetupLow (m_low);
 
   m_dca = CreateObject<DcaTxop> ();
@@ -89,7 +90,7 @@ RegularWifiMac::DoInitialize ()
   NS_LOG_FUNCTION (this);
   m_dca->Initialize ();
 
-  for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+  for (EdcaQueues::const_iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
       i->second->Initialize ();
     }
@@ -99,10 +100,8 @@ void
 RegularWifiMac::DoDispose ()
 {
   NS_LOG_FUNCTION (this);
-  delete m_rxMiddle;
-  m_rxMiddle = 0;
 
-  delete m_txMiddle;
+  m_rxMiddle = 0;
   m_txMiddle = 0;
 
   m_low->Dispose ();
@@ -119,8 +118,8 @@ RegularWifiMac::DoDispose ()
       i->second->Dispose ();
       i->second = 0;
     }
-    
-  delete m_dcfManager;
+
+  m_dcfManager->Dispose ();
   m_dcfManager = 0;
 }
 
@@ -163,7 +162,7 @@ RegularWifiMac::MacRxOk (Mac48Address address)
 }
 
 void
-RegularWifiMac::SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> stationManager)
+RegularWifiMac::SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> stationManager)
 {
   NS_LOG_FUNCTION (this << stationManager);
   m_stationManager = stationManager;
@@ -180,7 +179,7 @@ RegularWifiMac::SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> stati
 
   m_dca->SetWifiRemoteStationManager (stationManager);
 
-  for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+  for (EdcaQueues::const_iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
       i->second->SetWifiRemoteStationManager (stationManager);
     }
@@ -259,28 +258,28 @@ RegularWifiMac::SetBkMaxAmpduSize (uint32_t size)
 void
 RegularWifiMac::SetVoBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << (uint16_t) threshold);
+  NS_LOG_FUNCTION (this << +threshold);
   GetVOQueue ()->SetBlockAckThreshold (threshold);
 }
 
 void
 RegularWifiMac::SetViBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << (uint16_t) threshold);
+  NS_LOG_FUNCTION (this << +threshold);
   GetVIQueue ()->SetBlockAckThreshold (threshold);
 }
 
 void
 RegularWifiMac::SetBeBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << (uint16_t) threshold);
+  NS_LOG_FUNCTION (this << +threshold);
   GetBEQueue ()->SetBlockAckThreshold (threshold);
 }
 
 void
 RegularWifiMac::SetBkBlockAckThreshold (uint8_t threshold)
 {
-  NS_LOG_FUNCTION (this << (uint16_t) threshold);
+  NS_LOG_FUNCTION (this << +threshold);
   GetBKQueue ()->SetBlockAckThreshold (threshold);
 }
 
@@ -338,7 +337,7 @@ void
 RegularWifiMac::SetTypeOfStation (TypeOfStation type)
 {
   NS_LOG_FUNCTION (this << type);
-  for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+  for (EdcaQueues::const_iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
       i->second->SetTypeOfStation (type);
     }
@@ -383,7 +382,7 @@ RegularWifiMac::GetBKQueue () const
 }
 
 void
-RegularWifiMac::SetWifiPhy (Ptr<WifiPhy> phy)
+RegularWifiMac::SetWifiPhy (const Ptr<WifiPhy> phy)
 {
   NS_LOG_FUNCTION (this << phy);
   m_phy = phy;
@@ -798,7 +797,7 @@ RegularWifiMac::SupportsSendFrom (void) const
 void
 RegularWifiMac::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to)
 {
-  NS_LOG_FUNCTION (this << packet << from);
+  NS_LOG_FUNCTION (this << packet << from << to);
   m_forwardUp (packet, from, to);
 }
 
@@ -811,7 +810,7 @@ RegularWifiMac::SetupFSTSession (Mac48Address staAddress)
   NS_LOG_FUNCTION (this << staAddress);
 
   WifiMacHeader hdr;
-  hdr.SetAction ();
+  hdr.SetType (WIFI_MAC_MGT_ACTION);
   hdr.SetAddr1 (staAddress);
   hdr.SetAddr2 (GetAddress ());
   hdr.SetAddr3 (GetAddress ());
@@ -868,7 +867,7 @@ RegularWifiMac::SendFstSetupResponse (Mac48Address to, uint8_t token, uint16_t s
 {
   NS_LOG_FUNCTION (this << to << token << status);
   WifiMacHeader hdr;
-  hdr.SetAction ();
+  hdr.SetType (WIFI_MAC_MGT_ACTION);
   hdr.SetAddr1 (to);
   hdr.SetAddr2 (GetAddress ());
   hdr.SetAddr3 (GetAddress ());
@@ -897,7 +896,7 @@ RegularWifiMac::SendFstAckRequest (Mac48Address to, uint8_t dialog, uint32_t fst
 {
   NS_LOG_FUNCTION (this << to << dialog);
   WifiMacHeader hdr;
-  hdr.SetAction ();
+  hdr.SetType (WIFI_MAC_MGT_ACTION);
   hdr.SetAddr1 (to);
   hdr.SetAddr2 (GetAddress ());
   hdr.SetAddr3 (GetAddress ());
@@ -926,7 +925,7 @@ RegularWifiMac::SendFstAckResponse (Mac48Address to, uint8_t dialog, uint32_t fs
 {
   NS_LOG_FUNCTION (this << to << dialog);
   WifiMacHeader hdr;
-  hdr.SetAction ();
+  hdr.SetType (WIFI_MAC_MGT_ACTION);
   hdr.SetAddr1 (to);
   hdr.SetAddr2 (GetAddress ());
   hdr.SetAddr3 (GetAddress ());
@@ -955,7 +954,7 @@ RegularWifiMac::SendFstTearDownFrame (Mac48Address to)
 {
   NS_LOG_FUNCTION (this << to);
   WifiMacHeader hdr;
-  hdr.SetAction ();
+  hdr.SetType (WIFI_MAC_MGT_ACTION);
   hdr.SetAddr1 (to);
   hdr.SetAddr2 (GetAddress ());
   hdr.SetAddr3 (GetAddress ());
@@ -1249,12 +1248,10 @@ RegularWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 }
 
 void
-RegularWifiMac::DeaggregateAmsduAndForward (Ptr<Packet> aggregatedPacket,
-                                            const WifiMacHeader *hdr)
+RegularWifiMac::DeaggregateAmsduAndForward (Ptr<Packet> aggregatedPacket, const WifiMacHeader *hdr)
 {
-  MsduAggregator::DeaggregatedMsdus packets =
-    MsduAggregator::Deaggregate (aggregatedPacket);
-
+  NS_LOG_FUNCTION (this << aggregatedPacket << hdr);
+  MsduAggregator::DeaggregatedMsdus packets = MsduAggregator::Deaggregate (aggregatedPacket);
   for (MsduAggregator::DeaggregatedMsdusCI i = packets.begin ();
        i != packets.end (); ++i)
     {
@@ -1269,7 +1266,7 @@ RegularWifiMac::SendAddBaResponse (const MgtAddBaRequestHeader *reqHdr,
 {
   NS_LOG_FUNCTION (this);
   WifiMacHeader hdr;
-  hdr.SetAction ();
+  hdr.SetType (WIFI_MAC_MGT_ACTION);
   hdr.SetAddr1 (originator);
   hdr.SetAddr2 (GetAddress ());
   hdr.SetAddr3 (GetAddress ());
@@ -1598,7 +1595,7 @@ RegularWifiMac::ConfigureContentionWindow (uint32_t cwMin, uint32_t cwMax)
   ConfigureDcf (m_dca, cwMin, cwMax, isDsssOnly, AC_BE_NQOS);
 
   //Now we configure the EDCA functions
-  for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+  for (EdcaQueues::const_iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
       ConfigureDcf (i->second, cwMin, cwMax, isDsssOnly, i->first);
     }
@@ -1653,16 +1650,16 @@ void
 RegularWifiMac::EnableAggregation (void)
 {
   NS_LOG_FUNCTION (this);
-  for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+  for (EdcaQueues::const_iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
       if (i->second->GetMsduAggregator () == 0)
         {
-          Ptr<MsduStandardAggregator> msduAggregator = CreateObject<MsduStandardAggregator> ();
+          Ptr<MsduAggregator> msduAggregator = CreateObject<MsduAggregator> ();
           i->second->SetMsduAggregator (msduAggregator);
         }
       if (i->second->GetMpduAggregator () == 0)
         {
-          Ptr<MpduStandardAggregator> mpduAggregator = CreateObject<MpduStandardAggregator> ();
+          Ptr<MpduAggregator> mpduAggregator = CreateObject<MpduAggregator> ();
           i->second->SetMpduAggregator (mpduAggregator);
         }
     }
@@ -1673,7 +1670,7 @@ void
 RegularWifiMac::DisableAggregation (void)
 {
   NS_LOG_FUNCTION (this);
-  for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+  for (EdcaQueues::const_iterator i = m_edca.begin (); i != m_edca.end (); ++i)
     {
       i->second->SetMsduAggregator (0);
       i->second->SetMpduAggregator (0);

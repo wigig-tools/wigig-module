@@ -88,11 +88,12 @@ struct MinstrelWifiRemoteStation : public WifiRemoteStation
    * then we wrap back to the row 1 col 1.
    * note: there are many other ways to do this.
    */
-  uint32_t m_col, m_index;       ///< index
+  uint8_t m_col;                 ///< vector index
+  uint8_t m_index;               ///< vector index
   uint32_t m_maxTpRate;          ///< the current throughput rate
   uint32_t m_maxTpRate2;         ///< second highest throughput rate
   uint32_t m_maxProbRate;        ///< rate with highest prob of success
-  uint32_t m_nModes;             ///< number of modes supported
+  uint8_t m_nModes;              ///< number of modes supported
   int m_totalPacketsCount;       ///< total number of packets as of now
   int m_samplePacketsCount;      ///< how many packets we have sample so far
   int m_numSamplesDeferred;      ///< number samles deferred
@@ -163,8 +164,8 @@ public:
   virtual ~MinstrelWifiManager ();
 
   // Inherited from WifiRemoteStationManager
-  void SetupPhy (Ptr<WifiPhy> phy);
-  void SetupMac (Ptr<WifiMac> mac);
+  void SetupPhy (const Ptr<WifiPhy> phy);
+  void SetupMac (const Ptr<WifiMac> mac);
   void SetHtSupported (bool enable);
   void SetVhtSupported (bool enable);
   void SetHeSupported (bool enable);
@@ -275,7 +276,12 @@ private:
 
   bool IsLowLatency (void) const;
 
-  /// for estimating the TxTime of a packet with a given mode
+  /**
+   * for estimating the TxTime of a packet with a given mode
+   *
+   * \param mode Wi-Fi mode
+   * \returns the transmission time
+   */
   Time GetCalcTxTime (WifiMode mode) const;
   /**
    * Add transmission time for the given mode to an internal list.

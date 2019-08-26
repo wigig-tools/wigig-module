@@ -21,7 +21,6 @@
  */
 
 #include "ns3/simulator.h"
-#include "ns3/drop-tail-queue.h"
 #include "ns3/node.h"
 #include "ss-net-device.h"
 #include "wimax-phy.h"
@@ -923,8 +922,8 @@ SubscriberStationNetDevice::DoReceive (Ptr<Packet> packet)
               // intended for base station, ignore
               break;
             case ManagementMessageType::MESSAGE_TYPE_RNG_RSP:
-              NS_ASSERT_MSG (SS_STATE_WAITING_RNG_RSP,
-                             "SS: Error while receiving a ranging response message: SS state should be SS_STATE_WAITING_RNG_RSP");
+              NS_ASSERT_MSG (GetState () >= SS_STATE_WAITING_REG_RANG_INTRVL,
+                             "SS: Error while receiving a ranging response message: SS state should be at least SS_STATE_WAITING_REG_RANG_INTRVL");
               packet->RemoveHeader (rngrsp);
               m_linkManager->PerformRanging (cid, rngrsp);
               break;
@@ -942,7 +941,7 @@ SubscriberStationNetDevice::DoReceive (Ptr<Packet> packet)
               // intended for base station, ignore
               break;
             case ManagementMessageType::MESSAGE_TYPE_RNG_RSP:
-              NS_ASSERT_MSG (SS_STATE_WAITING_RNG_RSP,
+              NS_ASSERT_MSG (GetState () == SS_STATE_WAITING_RNG_RSP,
                              "SS: Error while receiving a ranging response message: SS state should be SS_STATE_WAITING_RNG_RSP");
               packet->RemoveHeader (rngrsp);
               m_linkManager->PerformRanging (cid, rngrsp);
@@ -1264,12 +1263,12 @@ SubscriberStationNetDevice::IsRegistered (void) const
 }
 
 Time
-SubscriberStationNetDevice::GetTimeToAllocation (Time defferTime)
+SubscriberStationNetDevice::GetTimeToAllocation (Time deferTime)
 {
   Time timeAlreadyElapsed = Simulator::Now () - m_frameStartTime;
   Time timeToUlSubframe = Seconds (m_allocationStartTime * GetPhy ()->GetPsDuration ().GetSeconds ())
     - timeAlreadyElapsed;
-  return timeToUlSubframe + defferTime;
+  return timeToUlSubframe + deferTime;
 }
 
 void

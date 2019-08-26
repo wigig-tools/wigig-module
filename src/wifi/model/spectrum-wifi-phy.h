@@ -27,12 +27,13 @@
 #define SPECTRUM_WIFI_PHY_H
 
 #include "ns3/antenna-model.h"
-#include "wifi-phy.h"
-#include "wifi-spectrum-phy-interface.h"
 #include "ns3/spectrum-channel.h"
-#include "ns3/spectrum-interference.h"
+#include "ns3/spectrum-model.h"
+#include "wifi-phy.h"
 
 namespace ns3 {
+
+class WifiSpectrumPhyInterface;
 
 /**
  * \brief 802.11 PHY layer model
@@ -63,7 +64,7 @@ public:
    *
    * \param channel the SpectrumChannel this SpectrumWifiPhy is to be connected to
    */
-  void SetChannel (Ptr<SpectrumChannel> channel);
+  void SetChannel (const Ptr<SpectrumChannel> channel);
   /**
    * Add a channel number to the list of operational channels.  This method
    * is used to support scanning for strongest base station.
@@ -101,10 +102,14 @@ public:
    */
   void StartTx (Ptr<Packet> packet, WifiTxVector txVector, Time txDuration);
   /**
-   * \param txVector TxVector companioned by this transmission.
-   * \param fieldsRemaining The number of TRN Fields remaining till the end of transmission.
+   * Get the center frequency of the channel corresponding the current TxVector rather than
+   * that of the supported channel width.
+   * Consider that this "primary channel" is on the lower part for the time being.
+   *
+   * \param txVector the TXVECTOR that has the channel width that is to be used
+   * \return the center frequency corresponding to the channel width to be used
    */
-  void StartTrnTx (WifiTxVector txVector, uint8_t fieldsRemaining);
+  uint16_t GetCenterFrequencyForChannelWidth (WifiTxVector txVector) const;
 
   /**
    * Method to encapsulate the creation of the WifiSpectrumPhyInterface
@@ -129,7 +134,7 @@ public:
    * Note:  this method may be split into separate SetTx and SetRx
    * methods in the future if the modelling need for this arises
    */
-  void SetAntenna (Ptr<AntennaModel> antenna);
+  void SetAntenna (const Ptr<AntennaModel> antenna);
   /**
    * Get the antenna model used for reception
    *
@@ -149,6 +154,19 @@ public:
   double GetBandBandwidth (void) const;
 
   /**
+   * \param currentChannelWidth channel width of the current transmission (MHz)
+   * \return the width of the guard band (MHz)
+   *
+   * Note: in order to properly model out of band transmissions for OFDM, the guard
+   * band has been configured so as to expand the modeled spectrum up to the
+   * outermost referenced point in "Transmit spectrum mask" sections' PSDs of
+   * each PHY specification of 802.11-2016 standard. It thus ultimately corresponds
+   * to the current channel bandwidth (which can be different from devices max
+   * channel width).
+   */
+  uint16_t GetGuardBandwidth (uint16_t currentChannelWidth) const;
+
+  /**
    * Callback invoked when the Phy model starts to process a signal
    *
    * \param signalType Whether signal is WiFi (true) or foreign (false)
@@ -160,6 +178,16 @@ public:
 
   Ptr<Channel> GetChannel (void) const;
 
+  // The following four methods call to the base WifiPhy class method
+  // but also generate a new SpectrumModel if called during runtime
+
+  virtual void SetChannelNumber (uint8_t id);
+
+  virtual void SetFrequency (uint16_t freq);
+
+  virtual void SetChannelWidth (uint16_t channelwidth);
+
+  virtual void ConfigureStandard (WifiPhyStandard standard);
 
 protected:
   // Inherited
@@ -170,14 +198,20 @@ protected:
 private:
   /**
    * \param centerFrequency center frequency (MHz)
-   * \param channelWidth channel width (MHz) of the channel
+   * \param channelWidth channel width (MHz) of the channel for the current transmission
    * \param txPowerW power in W to spread across the bands
+   * \param modulationClass the modulation class
    * \return Ptr to SpectrumValue
    *
    * This is a helper function to create the right Tx PSD corresponding
    * to the standard in use.
    */
-  Ptr<SpectrumValue> GetTxPowerSpectralDensity (uint16_t centerFrequency, uint8_t channelWidth, double txPowerW) const;
+  Ptr<SpectrumValue> GetTxPowerSpectralDensity (uint16_t centerFrequency, uint16_t channelWidth, double txPowerW, WifiModulationClass modulationClass) const;
+
+  /**
+   * Perform run-time spectrum model change
+   */
+  void ResetSpectrumModel (void);
 
   Ptr<SpectrumChannel> m_channel;        //!< SpectrumChannel that this SpectrumWifiPhy is connected to
   std::vector<uint8_t> m_operationalChannelList; //!< List of possible channels

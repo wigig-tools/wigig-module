@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -82,7 +82,7 @@ DoInsertBlockage ()
  * \param peerWifiPhy The Peer WifiPhy to establish this blockage with.
  */
 void
-InsertBlockage (Ptr<YansWifiChannel> channel, Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy)
+InsertBlockage (Ptr<DmgWifiChannel> channel, Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy)
 {
   std::cout << "Blockage Inserted at " << Simulator::Now () << std::endl;
   channel->AddBlockage (&DoInsertBlockage, srcWifiPhy, dstWifiPhy);
@@ -94,7 +94,7 @@ main(int argc, char *argv[])
   uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
   string dataRate = "100Mbps";                  /* Application Layer Data Rate. */
   uint32_t queueSize = 1000;                    /* Wifi Mac Queue Size. */
-  string adPhyMode = "DMG_MCS24";               /* Type of the 802.11ad Physical Layer. */
+  string adPhyMode = "DMG_MCS12";               /* Type of the 802.11ad Physical Layer. */
   string nPhyMode = "HtMcs7";                   /* Type of the 802.11n Physical Layer. */
   uint32_t llt = 100;                           /* Link Loss Timeout. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
@@ -106,7 +106,7 @@ main(int argc, char *argv[])
   cmd.AddValue ("dataRate", "Payload size in bytes", dataRate);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
   cmd.AddValue ("blockageValue", "The amount of attenuation in [dBm] the blockage adds", m_blockageValue);
-  cmd.AddValue ("llt", "LLT", llt);
+  cmd.AddValue ("llt", "Link loss time", llt);
   cmd.AddValue ("adPhyMode", "802.11ad PHY Mode", adPhyMode);
   cmd.AddValue ("nPhyMode", "802.11n PHY Mode", nPhyMode);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
@@ -116,40 +116,39 @@ main(int argc, char *argv[])
   /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
   Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-//  Config::SetDefault ("ns3::WifiMacQueue::MaxPacketNumber", UintegerValue (queueSize));
+  Config::SetDefault ("ns3::QueueBase::MaxPackets", UintegerValue (queueSize));
 
   /**** Allocate 802.11ad Wifi MAC ****/
   /* Add a DMG upper mac */
   DmgWifiMacHelper adWifiMac = DmgWifiMacHelper::Default ();
 
   /**** Set up 60 Ghz Channel ****/
-  YansWifiChannelHelper adWifiChannel ;
+  DmgWifiChannelHelper adWifiChannel ;
   /* Simple propagation delay model */
   adWifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   adWifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup Physical Layer ****/
-  YansWifiPhyHelper adWifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper adWifiPhy = DmgWifiPhyHelper::Default ();
   adWifiPhy.SetChannel (adWifiChannel.Create ());
   adWifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   adWifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   adWifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  adWifiPhy.Set ("TxGain", DoubleValue (0));
-  adWifiPhy.Set ("RxGain", DoubleValue (0));
-  adWifiPhy.Set("RxNoiseFigure", DoubleValue (10));
+  adWifiPhy.Set ("ChannelNumber", UintegerValue (2));
   adWifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   adWifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  adWifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   ObjectFactory adremoteStationManager = ObjectFactory ();
   adremoteStationManager.SetTypeId ("ns3::ConstantRateWifiManager");
   adremoteStationManager.Set ("ControlMode", StringValue (adPhyMode));
   adremoteStationManager.Set ("DataMode", StringValue (adPhyMode));
 
-  adWifiPhy.EnableAntenna (true, true);
-  adWifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                        "Sectors", UintegerValue (4),
-                        "Antennas", UintegerValue (1));
+  /* Set Analytical Codebook for the DMG Devices */
+  ObjectFactory adCodebook = ObjectFactory ();
+  adCodebook.SetTypeId ("ns3::CodebookAnalytical");
+  adCodebook.Set ("CodebookType", EnumValue (SIMPLE_CODEBOOK));
+  adCodebook.Set ("Antennas", UintegerValue (1));
+  adCodebook.Set ("Sectors", UintegerValue (8));
 
   /* 802.11ad Structure */
   WifiTechnologyHelperStruct adWifiStruct;
@@ -159,11 +158,11 @@ main(int argc, char *argv[])
   adWifiStruct.Standard = WIFI_PHY_STANDARD_80211ad;
   adWifiStruct.Operational = true;
 
-  /**** Allocate 802.11ad Wifi MAC ****/
-  /* Add a DMG upper mac */
-  HtWifiMacHelper nWifiMac = HtWifiMacHelper::Default ();
+  /**** Allocate 802.11n Wifi MAC ****/
+  /* Add an upper MAC */
+  WifiMacHelper nWifiMac;
 
-  /**** Set up Legacy Channel ****/
+  /**** Set up microwave Channel ****/
   YansWifiChannelHelper nWifiChannel ;
   nWifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   nWifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (2.4e9));
@@ -174,13 +173,10 @@ main(int argc, char *argv[])
   nWifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   nWifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   nWifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  nWifiPhy.Set ("TxGain", DoubleValue (0));
-  nWifiPhy.Set ("RxGain", DoubleValue (0));
   nWifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   nWifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   nWifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   nWifiPhy.SetErrorRateModel ("ns3::YansErrorRateModel");
-  nWifiPhy.EnableAntenna (false, false);
   ObjectFactory nRemoteStationManager = ObjectFactory ();
   nRemoteStationManager.SetTypeId ("ns3::ConstantRateWifiManager");
   nRemoteStationManager.Set ("ControlMode", StringValue (nPhyMode));
@@ -214,7 +210,6 @@ main(int argc, char *argv[])
                      "BE_MaxAmsduSize", UintegerValue (7935),
                      "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                      "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                     "BeaconTransmissionInterval", TimeValue (MicroSeconds (400)),
                      "ATIPresent", BooleanValue (false),
                      "SupportMultiBand", BooleanValue (true));
 
@@ -335,7 +330,7 @@ main(int argc, char *argv[])
   /* Variables */
   staMultibandDevice = StaticCast<MultiBandNetDevice> (staDevices.Get (0));
   apMultibandDevice = StaticCast<MultiBandNetDevice> (apDevice.Get (0));
-  Ptr<YansWifiChannel> adChannel = StaticCast<YansWifiChannel> (staMultibandDevice->GetChannel ());
+  Ptr<DmgWifiChannel> adChannel = StaticCast<DmgWifiChannel> (staMultibandDevice->GetChannel ());
   Ptr<WifiPhy> srcWifiPhy = apMultibandDevice->GetPhy ();
   Ptr<WifiPhy> dstWifiPhy = staMultibandDevice->GetPhy ();
 

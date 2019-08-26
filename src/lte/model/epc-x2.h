@@ -98,6 +98,7 @@ public:
  */
 class EpcX2 : public Object
 {
+  /// allow EpcX2SpecificEpcX2SapProvider<EpcX2> class friend access
   friend class EpcX2SpecificEpcX2SapProvider<EpcX2>;
 
 public:
@@ -177,7 +178,7 @@ protected:
   virtual void DoSendHandoverPreparationFailure (EpcX2SapProvider::HandoverPreparationFailureParams params);
   /**
    * Send SN status transfer function
-   * \param params the SN status transer parameters 
+   * \param params the SN status transfer parameters 
    */
   virtual void DoSendSnStatusTransfer (EpcX2SapProvider::SnStatusTransferParams params);
   /**
@@ -192,7 +193,7 @@ protected:
   virtual void DoSendLoadInformation (EpcX2SapProvider::LoadInformationParams params);
   /**
    * Send resource status update function
-   * \param params the sedn reosurce status update parameters
+   * \param params the send resource status update parameters
    */
   virtual void DoSendResourceStatusUpdate (EpcX2SapProvider::ResourceStatusUpdateParams params);
   /**

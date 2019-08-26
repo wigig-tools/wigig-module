@@ -1,6 +1,7 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2010 CTTC
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -69,7 +70,6 @@ public:
    *
    * \param mode WifiMode
    * \param powerLevel transmission power level
-   * \param retries retries
    * \param preamble preamble type
    * \param guardInterval the guard interval duration in nanoseconds
    * \param nTx the number of TX antennas
@@ -81,7 +81,6 @@ public:
    */
   WifiTxVector (WifiMode mode,
                 uint8_t powerLevel,
-                uint8_t retries,
                 WifiPreamble preamble,
                 uint16_t guardInterval,
                 uint8_t nTx,
@@ -110,16 +109,6 @@ public:
    * \param powerlevel
    */
   void SetTxPowerLevel (uint8_t powerlevel);
-  /**
-   * \returns the number of retries
-   */
-  uint8_t GetRetries (void) const;
-  /**
-   * Sets the number of retries
-   *
-   * \param retries
-   */
-  void SetRetries (uint8_t retries);
   /**
    * \returns the preamble type
    */
@@ -205,8 +194,16 @@ public:
    * \param stbc enable or disable STBC
    */
   void SetStbc (bool stbc);
+  /**
+   * The standard disallows certain combinations of WifiMode, number of
+   * spatial streams, and channel widths.  This method can be used to
+   * check whether this WifiTxVector contains an invalid combination.
+   *
+   * \return true if the WifiTxVector parameters are allowed by the standard
+   */
+   bool IsValid (void) const;
 
-  /* DMG Tx Vector*/
+  /** DMG Tx Vector **/
 
   /**
    * Set BRP Packet Type.
@@ -235,7 +232,7 @@ public:
   /**
    * \return True if Beam Tracking requested, otherwise false.
    */
-  bool IsBeamTrackingRequested (void);
+  bool IsBeamTrackingRequested (void) const;
   /**
    * In the TXVECTOR, LAST_RSSI indicates the received power level of
    * the last packet with a valid PHY header that was received a SIFS period
@@ -259,6 +256,10 @@ public:
    */
   uint8_t GetLastRssi (void) const;
 
+public:
+  uint8_t remainingTrnUnits;
+  uint8_t remainingTrnSubfields;
+
 private:
   WifiMode m_mode;               /**< The DATARATE parameter in Table 15-4.
                                  It is the value that will be passed
@@ -266,8 +267,6 @@ private:
   uint8_t  m_txPowerLevel;       /**< The TXPWR_LEVEL parameter in Table 15-4.
                                  It is the value that will be passed
                                  to PMD_TXPWRLVL.request */
-  uint8_t  m_retries;            /**< The DATA_RETRIES/RTS_RETRIES parameter
-                                 for Click radiotap information */
   WifiPreamble m_preamble;       /**< preamble */
   uint16_t m_channelWidth;       /**< channel width in MHz */
   uint16_t m_guardInterval;      /**< guard interval duration in nanoseconds */
@@ -280,10 +279,10 @@ private:
   bool     m_modeInitialized;         /**< Internal initialization flag */
   bool     m_txPowerLevelInitialized; /**< Internal initialization flag */
 
-  PacketType  m_packetType;
-  uint8_t     m_traingFieldLength;
-  bool        m_beamTrackingRequest;      //*!< Flag to indicate the need for beam tracking. */
-  uint8_t     m_lastRssi;                 //*!< Last Received Signal Strength Indicator. */
+  PacketType  m_packetType;               //!< BRP-RX or BRP-TX packet.
+  uint8_t     m_traingFieldLength;        //!< The length of the training fields (Number of TRN-Units).
+  bool        m_beamTrackingRequest;      //!< Flag to indicate the need for beam tracking.
+  uint8_t     m_lastRssi;                 //!< Last Received Signal Strength Indicator.
 
 };
 

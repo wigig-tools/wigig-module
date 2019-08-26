@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/log.h"
@@ -59,6 +59,13 @@ DmgAdhocWifiMac::DoDispose ()
 {
   NS_LOG_FUNCTION (this);
   DmgWifiMac::DoDispose ();
+}
+
+uint16_t
+DmgAdhocWifiMac::GetAssociationID (void)
+{
+  NS_LOG_FUNCTION (this);
+  return AID_AP;
 }
 
 void
@@ -187,7 +194,7 @@ DmgAdhocWifiMac::TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr)
 {
   NS_LOG_FUNCTION (this);
   /* After transmission we stay in quasi-omni mode since we do not know which station will transmit to us */
-  m_phy->GetDirectionalAntenna ()->SetInOmniReceivingMode ();
+  m_codebook->SetReceivingInQuasiOmniMode ();
   DmgWifiMac::TxOk (packet, hdr);
 }
 
@@ -219,8 +226,8 @@ DmgAdhocWifiMac::GetMultiBandElement (void) const
 }
 
 void
-DmgAdhocWifiMac::AddAntennaConfig (SECTOR_ID txSectorID, ANTENNA_ID txAntennaID,
-                                   SECTOR_ID rxSectorID, ANTENNA_ID rxAntennaID,
+DmgAdhocWifiMac::AddAntennaConfig (SectorID txSectorID, AntennaID txAntennaID,
+                                   SectorID rxSectorID, AntennaID rxAntennaID,
                                    Mac48Address address)
 {
   ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (txSectorID, txAntennaID);

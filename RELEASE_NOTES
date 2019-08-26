@@ -18,17 +18,221 @@ This release is not yet available.
 
 Supported platforms
 -------------------
+This release is intended to work on systems with the following minimal
+requirements (Note:  not all features available on all platforms):
+
+This release has been tested on the following platforms:
 
 New user-visible features
 -------------------------
+- (tcp) Added TCP-LP as congestion control module
+- (lr-wpan) Extended addressing mode is now supported.
+- (tcp) Implemented the core functionality of TCP Pacing.
+- (internet) Ipv[4,6]AddressGenerator can now check if an address or a network is allocated.
+- (internet) Ipv6AddressHelper is now more pedantic but you can use more than one in a script.
+- (lte) UEs can now use IPv6 to send and receive traffic.
 
 Bugs fixed
 ----------
+- Bug 1745 - There can be only one Ipv6AddressHelper in a script
+- Bug 2505 - network:  Avoid asserts in Header/Trailer deserialization
+- Bug 2656 - wifi: Minstrel and MinstrelHt provide different results for 802.11a/b/g
+- Bug 2653 - tcp: Avoid saving smaller TS in case of packet reordering
+- Bug 2764 - wifi: WifiSpectrumModelId doesn't distinguish 11ax from legacy
+- Bug 2766 - core: Modify logging for int64x64 to avoid stack overflow
+- Bug 2768 - lte: LteUeNetDevice has a null MAC address
+- Bug 2807 - energy: GetTotalEnergyConsumption is not updated correctly
+- Bug 2809 - wifi: Wifi doesn't fully stop when energy is depleted
+- Bug 2813 - wifi: OFDM 10 MHz and 5 MHz PHYs do not have correct subcarrier frequency spacings
+- Bug 2820 - wifi: segmentation fault when Rrpaa wifi manager is used
+- Bug 2824 - ICMP opcode fr fragment timeout drop is wrong
+- Bug 2828 - OLSR simple P2P example produces wrong results
+- Bug 2827 - wifi: Active scanning not working with 802.11n/ac/ax
+- Bug 2836 - wifi: Missing VHT information in radiotap header when A-MPDU is used
+- Bug 2838 - wifi: ht-wifi-network crashes with RTS/CTS enabled and frequency set to 2.4GHz
+- Bug 2843 - spectrum, wifi: Incorrect channel width and center frequency provided for non-HT PPDUs when building SpectralDensity
+- Bug 2848 - wifi: Association ID not correctly set upon association
+- Bug 2849 - lte: Received RLC and PDCP PDUs are missing in the stats files
+- Bug 2854 - wifi: he-wifi-network crashes when frequency is set at 2.4 GHz
+
+Known issues
+------------
+In general, known issues are tracked on the project tracker available
+at http://www.nsnam.org/bugzilla/
+
+Release 3.27
+============
+
+Availability
+------------
+This release is available from:
+https://www.nsnam.org/release/ns-allinone-3.27.tar.bz2
+
+Supported platforms
+-------------------
+This release is intended to work on systems with the following minimal
+requirements (Note:  not all features available on all platforms):
+- g++-4.9 or later (Note:  this is an upgraded requirement from ns-3.26)
+- Apple LLVM version 7.0.2 or later 
+- clang-3.3 or later
+- Python 2.7 (Python 2 series) or Python 3.4 (Python 3 series) or later
+
+This release has been tested on the following platforms:
+- Ubuntu 17.04 (64 bit) with g++-6.3.0
+- Ubuntu 16.04 (64 bit) with g++-5.4.0
+- Ubuntu 14.04.5 (64 bit) with g++-4.9.4
+  - Note: the default g++ version (4.8) must be upgraded 
+- Fedora Core 26 (64 bit) with g++-7.1.1
+- Fedora Core 22 (64 bit) with g++-5.3.1
+- CentOS/RHEL 7.4 (64-bit) with g++-6.3.1
+  - Note: the default g++ version (4.8) must be upgraded 
+- CentOS/RHEL 6.8 (64-bit) with g++-4.9.2
+  - Note: the default g++ version (4.4) must be upgraded 
+  - Note: the default Python version (2.6) must be upgraded 
+- OS X Sierra 10.12.6 with Xcode 9.0 and Apple LLVM version 9.0.0
+- OS X El Capitan 10.11.6 with Xcode 8.2.1 and Apple LLVM version 8.0.0
+- OS X Yosemite 10.10.5 with Xcode 7.2.1 and Apple LLVM version 7.0.2
+- Windows 10 Linux Subsystem with g++-5.4.0
+
+New user-visible features
+-------------------------
+- (build) Modules can also be located in contrib/ directory (as well as src/)
+- (core) Logging timestamp precision has been improved
+- (lte) LTE carrier aggregation feature according to 3GPP Release 10 is now supported.
+- (traffic-control) CsmaNetDevice, SimpleNetDevice and WifiNetDevice support flow control.
+- (traffic-control) Added support for queue discs to mark packets, and ECN support has been added to RED
+- (traffic-control) A multi-queue aware queue disc modelled after Linux mq
+- (traffic-control) Added support for detailed statistics output of queue discs
+- (traffic-control) Added support for tracing queue sojourn times
+- (tcp) The SACK option and the RFC 6675 loss recovery algorithm are now supported.
+- (tcp) A LEDBAT model has been added.
+- (wifi) 802.11ax High Efficiency (HE) physical layer modes are now supported.
+- (wifi) A new RRPAA rate control mechanism has been added.
+- (wifi) A new trace source for TXOP duration is now supported
+- (wifi) Frame capture effect can now be modelled
+- (uan) World Ocean System Simulation (WOSS) integration, and new PER models
+
+Bugs fixed
+----------
+- Bug 1034 - wifi: No trace source for packet dropping from WifiMacQueue
 - Bug 2007 - uan: Remove deprecation on SetRxThresholdDb
-- Bug 2450 - LogDistancePropagationLossModel is not continuous
+- Bug 2048 - lte: Fix scheduler resource allocation when CQI==0 (out of rante)
+- Bug 2133 - tcp: Avoid assert when receiving data in FIN_WAIT_1 or _2 states
+- Bug 2214 - tcp: Use of ScheduleNow only in selected part of the code
+- Bug 2221 - network: Remove constraint on size of ns3::Packet Tag objects
+- Bug 2256 - tcp: bytes in flight now updated in TcpTxBuffer
+- Bug 2263 - tcp: Support processing of multiple TCP options
+- Bug 2285 - tcp: Loss of ack of SYN can cause improper connection setup
+- Bug 2367 - wifi: BlockAckManager does not remove iterators to freed items
+- Bug 2450 - propagation: LogDistancePropagationLossModel is not continuous
+- Bug 2456 - lte: MemberCschedSapProvider and Member CschedSapProvider templates
+- Bug 2464 - spectrum: Store spectrum conversion matrix in CSR format
+- Bug 2467 - spectrum: Do not schedule StartRx for receivers on other models
+- Bug 2471 - wifi: unable to disable Block Ack agreement for 802.11n 
+- Bug 2477 - wifi: DCF manager assert
+- Bug 2485 - traffic-control: Check queue full before checking RED thresholds
+- Bug 2491 - wifi: replace DcfManager::MY_DEBUG
 - Bug 2492 - uan: Make use of RxGain attribute in UanPhyGen class
-- Bug 2511 - HT Greenfield is not working
-- Bug 2521 - Include ipv6-option.h in wscript
+- Bug 2511 - wifi: HT Greenfield is not working
+- Bug 2512 - traffic-control: Byte mode not configured correctly for RED test
+- Bug 2513 - core: ParetoRandomVariable needs a "scale", not a "mean" attribute
+- Bug 2518 - build: Suppress printing of list of modules for Python programs
+- Bug 2519 - lte: m_windowOffsetsMap.end () dereference
+- Bug 2520 - examples: TCP variant not configured in wifi-tcp.cc
+- Bug 2521 - internet: Include ipv6-option.h in wscript
+- Bug 2523 - lte: Generate the RLC PDU properly
+- Bug 2527 - internet: PrintRoutingTable adds an optional Time::Units parameter
+- Bug 2528 - wifi: 802.11n RIFS cannot be enabled
+- Bug 2529 - wifi: Missing trace for Block ACK timeout or missing MPDUs
+- Bug 2530 - aodv: Rename aodv::SetBalckListTimeout to aodv::SetBlackListTimeout
+- Bug 2531 - lte: Set HARQ feedback default value to avoid false retrasmissions
+- Bug 2532 - wifi: Inconsistencies between 802.11n MCS and NSS value in TXVECTOR
+- Bug 2533 - wifi: Provide better 802.11n/ac PHY abstraction for SIMO/MISO/MIMO
+- Bug 2534 - traffic-control: ARED and PIE examples should return 1 upon exit
+- Bug 2535 - utils: memory leak in bench-simulator.cc
+- Bug 2536 - wimax: fixed dead assignment and potential memory leak in wimax
+- Bug 2537 - traffic-control: Fix dead assigment on CoDel::DoDequeue
+- Bug 2538 - tap-bridge: fixed dead assignment on tap-bridge
+- Bug 2540 - mesh: fixed dead assignment on mesh/ie-dot11s-perr
+- Bug 2541 - wifi: preamble not assigned correctly
+- Bug 2542 - wifi: dead assignment on wifi mac-low
+- Bug 2543 - lte: Fix when EstimateUlSinr returns NO_SINR
+- Bug 2545 - flow-monitor: Optimized build fails for flow-monitor
+- Bug 2547 - tcp: dead assignments on various tcp congestion controls
+- Bug 2551 - wifi: wifi preamble should be part of TXVECTOR
+- Bug 2552 - wifi: Remove code duplication between Yans and Spectrum
+- Bug 2554 - wave: Fix static analysis warning
+- Bug 2556 - csma, point-to-point: Avoid modification of transmitted packets
+- Bug 2557 - point-to-point:  Fix dead assignments in queue-discs-benchmark
+- Bug 2559 - tcp: TCP advertised window still incorrect
+- Bug 2561 - tcp: TCP can not use Connect after a BindToNetDevice
+- Bug 2563 - bindings: pybindgen version check to >= minimum version required
+- Bug 2564 - wifi: Simulation crashes when CtsTimeout triggered for A-MPDU
+- Bug 2565 - tcp: Do not wait for 2*MSL to notify socket close
+- Bug 2566 - wifi: BlockAckManager::GetNRetryNeededPackets missing some packets
+- Bug 2568 - examples: Avoid enumerating TCP variants
+- Bug 2577 - wifi: crashes when A-MPDU and multiple TOS used, upon CTS timeout
+- Bug 2578 - wifi: Unexpected assert "Internal collision but no packet in queue"
+- Bug 2584 - wifi: MacLow triggers StartNext even if there is no TXOP
+- Bug 2587 - tcp: Avoid overflow in htcp.cc
+- Bug 2590 - traffic-control: Minor enhancements in red-queue-disc{.h, .cc}
+- Bug 2591 - wifi: 802.11e Block Ack cannot be enabled on HT/VHT stations
+- Bug 2594 - wifi: vht-wifi-network very low throughtput at MCS 6, 160 MHz, SGI
+- Bug 2596 - network: EthernetTrailer::GetFcs() should be const
+- Bug 2601 - wifi: HT stations should use 40 MHz width if configured  80 or 160z
+- Bug 2604 - wifi: QosData frames separation with Block Ack enabled
+- Bug 2605 - wifi: HT/VHT station sending to legacy results in null throughput
+- Bug 2606 - wifi: Ideal rate manager for HT/VHT station to a legacy AP
+- Bug 2607 - wifi: Correct overflow in channel width loop in Minstrel HT
+- Bug 2613 - tcp: MaxRxSequence () is sometimes too large
+- Bug 2614 - internet: RIP header version should be set to 2
+- Bug 2615 - wifi: When the TXOP limit is nonzero, fragment in some cases
+- Bug 2617 - traffic-control: PfifoFastQueueDisc::Peek all bands
+- Bug 2621 - wifi:  Fix mismatch between log message and action
+- Bug 2624 - lte: Inconsistent coding of type and naming
+- Bug 2627 - internet: Ipv6RawSocket does not honor the bound interface
+- Bug 2628 - wifi: Simulation crashes because of an out of range TID
+- Bug 2629 - wifi: Assert failure in MinstrelHtWifiManager::GetLowestIndex
+- Bug 2632 - lte: Build error due to uninitialized variable in rem helper
+- Bug 2646 - lte: lena-simple-eps-emu example will never work
+- Bug 2647 - wifi: ideal-wifi-manager-example crashes when NSS > 1
+- Bug 2649 - tcp: Disabling TCP SACK doesn't fall back to NewReno
+- Bug 2654 - wifi: Rraa wifi manager cannot be used with 802.11b
+- Bug 2655 - wifi: A-MPDU simulation using TCP sometimes fails
+- Bug 2658 - core: Avoid unexpected TracedValue type conversions
+- Bug 2660 - traffic-control: TrafficControlHelper::Default configuration
+- Bug 2661 - wave: Fix outdated class references in documentation
+- Bug 2665 - internet: Ipv4RawSocket can not send to broadcast or multicast
+- Bug 2666 - lte: Remove deprecated variables/config paths
+- Bug 2668 - various: Make template classes use NS_LOG_* macros
+- Bug 2671 - internet: ArpCache::Entry::SetMacAddress is misspelled
+- Bug 2673 - wifi: run-time channel switch does not update WiFi spectrum model
+- Bug 2675 - traffic-control: Use correct string value in PIE example
+- Bug 2716 - tcp: TCP socket ignoring FIN flag when in FIN_WAIT state
+- Bug 2717 - internet: Fix mask for Ipv4RoutingTableEntry::CreateDefaultRoute
+- Bug 2722 - wifi: 802.11g sends DSSS spectrum signals inappropriately
+- Bug 2731 - lte: Allow retranmission in RLC AM when PR expires, vtS overflows
+- Bug 2732 - applications: BulkSend Tx trace is fired too much
+- Bug 2733 - wifi: Ideal wifi manager cannot handle NSS higher than 1
+- Bug 2741 - internet: IPv4 fragmentation fails on last fragment fragmentation
+- Bug 2744 - wifi: 802.11n/ac with RTS/CTS crashes for a large number of nodes
+- Bug 2751 - traffic-control: QueueDisc::Enqueue() order of operations
+- Bug 2756 - internet: Ipv4AddressGenerator underestimates available addresses
+- Bug 2757 - wifi: 802.11n/ac/ax maximum TXOP is not properly enforced
+- Bug 2758 - internet: IPv4 sockets bound to unicast receiving subnet broadcast
+- Bug 2759 - internet: Packet conversion from broadcast to subnet-directed
+- Bug 2760 - internet: OLSR uses unicast-bound sockets to receive broadcasts
+- Bug 2761 - wifi: Packet has no Traffic ID for CTS frames when A-MPDU is used
+- Bug 2762 - internet: BindToNetDevice behaviour is not coherent with Linux
+- Bug 2763 - wifi: management packets in PCAPs are marked as wrong by Wireshark
+- Bug 2769 - tcp: Set ssthresh correctly upon RTO
+- Bug 2771 - wifi: IdealWifiManager problems under different number of antennas
+- Bug 2776 - wifi: Fix segmentation fault in MacLow
+- Bug 2777 - lte: Save bearer info in m_drbMap, needed for handover request
+- Bug 2781 - tcp: Do not go beyond limit in TcpTxBuffer
+- Bug 2783 - wifi: MonitorSnifferRx SNR is invariant to RxNoiseFigure
+- Bug 2786 - lte:  Remove unimplemented declaration
+- Bug 2796 - tcp: NSC TCP transmission flow control not working
 
 Known issues
 ------------

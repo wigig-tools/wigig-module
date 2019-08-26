@@ -43,16 +43,65 @@ public:
   
   /**
    * Return a SpectrumModel instance corresponding to the center frequency
-   * and channel width.  The model includes +/- 10 MHz of guard bands
-   * (i.e. the model will span (channelWidth + 20) MHz of bandwidth).
+   * and channel width.  The spectrum model spans the channel width 
+   * +/- the guard bands (i.e. the model will span (channelWidth + 
+   * 2 * guardBandwidth) MHz of bandwidth).  
    *
    * \param centerFrequency center frequency (MHz)
    * \param channelWidth channel width (MHz)
    * \param bandBandwidth width of each band (Hz)
+   * \param guardBandwidth width of the guard band (MHz)
+   *
    * \return the static SpectrumModel instance corresponding to the
    * given carrier frequency and channel width configuration. 
    */
-  static Ptr<SpectrumModel> GetSpectrumModel (uint32_t centerFrequency, uint32_t channelWidth, double bandBandwidth);
+  static Ptr<SpectrumModel> GetSpectrumModel (uint32_t centerFrequency, uint16_t channelWidth, double bandBandwidth, double guardBandwidth);
+
+  //TR++
+  /**
+   * Return a SpectrumModel instance corresponding to the center frequency
+   * and channel width.  The spectrum model spans the channel width
+   * +/- the guard bands (i.e. the model will span (channelWidth +
+   * 2 * guardBandwidth) MHz of bandwidth).
+   *
+   * \param centerFrequency center frequency (MHz)
+   * \param channelWidth channel width (MHz)
+   * \param bandBandwidth width of each band (Hz)
+   * \param guardBandwidth width of the guard band (MHz)
+   *
+   * \return the static SpectrumModel instance corresponding to the
+   * given carrier frequency and channel width configuration.
+   */
+  static Ptr<SpectrumModel> GetDmgSpectrumModel (uint32_t centerFrequency, uint16_t channelWidth, double bandBandwidth, double guardBandwidth);
+  //TR--
+
+  /**
+   * Create a transmit power spectral density corresponding to DSSS 
+   *
+   * The center frequency typically corresponds to 802.11b channel 
+   * center frequencies but is not restricted to those frequencies.
+   *
+   * \note There is no channel width parameter; this method assumes 22 MHz
+   *
+   * \param centerFrequency center frequency (MHz)
+   * \param txPowerW  transmit power (W) to allocate
+   * \param guardBandwidth width of the guard band (MHz)
+   * \returns a pointer to a newly allocated SpectrumValue representing the DSSS Transmit Power Spectral Density in W/Hz
+   */
+  static Ptr<SpectrumValue> CreateDsssTxPowerSpectralDensity (uint32_t centerFrequency, double txPowerW, double guardBandwidth);
+
+  /**
+   * Create a transmit power spectral density corresponding to OFDM 
+   * (802.11a/g).  Channel width may vary between 20, 10, and 5 MHz.
+   * Guard bandwidth also typically varies with channel width.
+   *
+   * \param centerFrequency center frequency (MHz)
+   * \param channelWidth channel width (MHz)
+   * \param txPowerW  transmit power (W) to allocate
+   * \param guardBandwidth width of the guard band (MHz)
+   * \return a pointer to a newly allocated SpectrumValue representing the OFDM Transmit Power Spectral Density in W/Hz for each Band
+   */
+  static Ptr<SpectrumValue> CreateOfdmTxPowerSpectralDensity (uint32_t centerFrequency, uint16_t channelWidth, double txPowerW, double guardBandwidth);
 
   /**
    * Create a transmit power spectral density corresponding to OFDM 
@@ -62,55 +111,68 @@ public:
    * \param centerFrequency center frequency (MHz)
    * \param channelWidth channel width (MHz)
    * \param txPowerW  transmit power (W) to allocate
+   * \param guardBandwidth width of the guard band (MHz)
+   * \return a pointer to a newly allocated SpectrumValue representing the HT OFDM Transmit Power Spectral Density in W/Hz for each Band
    */
-  static Ptr<SpectrumValue> CreateHtOfdmTxPowerSpectralDensity (uint32_t centerFrequency, uint32_t channelWidth, double txPowerW);
+  static Ptr<SpectrumValue> CreateHtOfdmTxPowerSpectralDensity (uint32_t centerFrequency, uint16_t channelWidth, double txPowerW, double guardBandwidth);
 
   /**
    * Create a transmit power spectral density corresponding to OFDM 
-   * (802.11a/g).  Channel width may vary between 20, 10, and 5 MHz.
+   * High Efficiency (HE) (802.11ax).  Channel width may vary between 
+   * 20, 40, 80, and 160 MHz.
    *
    * \param centerFrequency center frequency (MHz)
    * \param channelWidth channel width (MHz)
    * \param txPowerW  transmit power (W) to allocate
+   * \param guardBandwidth width of the guard band (MHz)
+   * \return a pointer to a newly allocated SpectrumValue representing the HE OFDM Transmit Power Spectral Density in W/Hz for each Band
    */
-  static Ptr<SpectrumValue> CreateOfdmTxPowerSpectralDensity (uint32_t centerFrequency, uint32_t channelWidth, double txPowerW);
+  static Ptr<SpectrumValue> CreateHeOfdmTxPowerSpectralDensity (uint32_t centerFrequency, uint16_t channelWidth, double txPowerW, double guardBandwidth);
 
   /**
-   * Create a transmit power spectral density corresponding to DSSS 
-   *
-   * The center frequency typically corresponds to 802.11b channel 
-   * center frequencies but is not restricted to those frequencies.
-   *
-   * \param centerFrequency center frequency (MHz)
-   * \param txPowerW  transmit power (W) to allocate
-   */
-  static Ptr<SpectrumValue> CreateDsssTxPowerSpectralDensity (uint32_t centerFrequency, double txPowerW);
-
-  /**
+   * Create a power spectral density corresponding to the noise
    *
    * \param centerFrequency center frequency (MHz)
    * \param channelWidth channel width (MHz)
    * \param bandBandwidth width of each band (Hz)
    * \param noiseFigure the noise figure in dB w.r.t. a reference temperature of 290K
+   * \param guardBandwidth width of the guard band (MHz)
    * \return a pointer to a newly allocated SpectrumValue representing the noise Power Spectral Density in W/Hz for each Band
    */
-  static Ptr<SpectrumValue> CreateNoisePowerSpectralDensity (uint32_t centerFrequency, uint32_t channelWidth, double bandBandwidth, double noiseFigure);
+  static Ptr<SpectrumValue> CreateNoisePowerSpectralDensity (uint32_t centerFrequency, uint16_t channelWidth, double bandBandwidth, double noiseFigure, double guardBandwidth);
 
   /**
-   * \param centerFrequency center frequency (MHz)
-   * \param channelWidth channel width (MHz)
+   * Create a thermal noise power spectral density
+   *
+   * \param noiseFigure the noise figure
+   * \param spectrumModel the spectrum model
    * \return a pointer to a newly allocated SpectrumValue representing the noise Power Spectral Density in W/Hz corresponding to thermal noise, for each Band
    */
   static Ptr<SpectrumValue> CreateNoisePowerSpectralDensity (double noiseFigure, Ptr<SpectrumModel> spectrumModel);
 
   /**
+   * Create a spectral density corresponding to the RF filter
+   *
    * \param centerFrequency center frequency (MHz)
    * \param channelWidth channel width (MHz)
    * \param bandBandwidth width of each band (Hz)
+   * \param guardBandwidth width of the guard band (MHz)
+   *
    * \return a pointer to a SpectrumValue representing the RF filter applied
    * to an received power spectral density
    */
-  static Ptr<SpectrumValue> CreateRfFilter (uint32_t centerFrequency, uint32_t channelWidth, double bandBandwidth);
+  static Ptr<SpectrumValue> CreateRfFilter (uint32_t centerFrequency, uint16_t channelWidth, double bandBandwidth, double guardBandwidth);
+
+  //HANY
+  static  Ptr<SpectrumValue> CreateDmgControlTxPowerSpectralDensity (uint32_t centerFrequency, uint16_t channelWidth,
+                                                             double txPowerW, double guardBandwidth);
+  //HANY
+
+  //TR++
+  static Ptr<SpectrumValue> CreateDmgOfdmTxPowerSpectralDensity (uint32_t centerFrequency, uint16_t channelWidth,
+                                                                 double txPowerW, double guardBandwidth);
+  //TR--
+
 };
 
 /**
@@ -154,7 +216,7 @@ public:
    *
    * @return a Ptr to a newly created SpectrumValue
    */
-  virtual Ptr<SpectrumValue> CreateTxPowerSpectralDensity (double txPower, uint32_t channel);
+  virtual Ptr<SpectrumValue> CreateTxPowerSpectralDensity (double txPower, uint8_t channel);
   /**
    * Creates a SpectrumValue instance which
    * represents the frequency response of the RF filter which is used
@@ -164,7 +226,7 @@ public:
    *
    * @return a Ptr to a newly created SpectrumValue
    */
-  virtual Ptr<SpectrumValue> CreateRfFilter (uint32_t channel);
+  virtual Ptr<SpectrumValue> CreateRfFilter (uint8_t channel);
 };
 
 } // namespace ns3

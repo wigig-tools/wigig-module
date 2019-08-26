@@ -1,15 +1,14 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
 #ifndef DMG_WIFI_MAC_HELPER_H
 #define DMG_WIFI_MAC_HELPER_H
 
-#include "qos-wifi-mac-helper.h"
-#include "wifi-mac-helper.h"
 #include "ns3/qos-utils.h"
+#include "wifi-mac-helper.h"
 
 namespace ns3 {
 
@@ -19,12 +18,12 @@ namespace ns3 {
  * This class can create MACs of type ns3::DmgApWifiMac, ns3::DmgStaWifiMac,
  * and, ns3::DmgAdhocWifiMac, with QosSupported, HTSupported and DMGSupported attributes set to True.
  */
-class DmgWifiMacHelper : public QosWifiMacHelper
+class DmgWifiMacHelper : public WifiMacHelper
 {
 public:
   /**
-   * Create a QosWifiMacHelper that is used to make life easier when working
-   * with Wifi devices using a HT MAC layer.
+   * Create a DmgWifiMacHelper that is used to make life easier when working
+   * with Wifi devices using a DMG MAC layer.
    */
   DmgWifiMacHelper ();
 

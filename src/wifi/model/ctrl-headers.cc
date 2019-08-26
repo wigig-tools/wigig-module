@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015 HANY ASSASA
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -500,7 +500,7 @@ CtrlBAckResponseHeader::SerializeBitmap (Buffer::Iterator start) const
     {
       if (!m_compressed)
         {
-          for (uint32_t j = 0; j < 64; j++)
+          for (uint8_t j = 0; j < 64; j++)
             {
               i.WriteHtolsbU16 (bitmap.m_bitmap[j]);
             }
@@ -532,7 +532,7 @@ CtrlBAckResponseHeader::DeserializeBitmap (Buffer::Iterator start)
     {
       if (!m_compressed)
         {
-          for (uint32_t j = 0; j < 64; j++)
+          for (uint8_t j = 0; j < 64; j++)
             {
               bitmap.m_bitmap[j] = i.ReadLsbtohU16 ();
             }

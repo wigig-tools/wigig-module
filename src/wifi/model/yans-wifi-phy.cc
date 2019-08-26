@@ -1,7 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2005,2006 INRIA
- * Copyright (c) 2015,2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -58,6 +57,7 @@ YansWifiPhy::DoDispose (void)
 {
   NS_LOG_FUNCTION (this);
   m_channel = 0;
+  WifiPhy::DoDispose ();
 }
 
 Ptr<Channel>
@@ -67,8 +67,9 @@ YansWifiPhy::GetChannel (void) const
 }
 
 void
-YansWifiPhy::SetChannel (Ptr<YansWifiChannel> channel)
+YansWifiPhy::SetChannel (const Ptr<YansWifiChannel> channel)
 {
+  NS_LOG_FUNCTION (this << channel);
   m_channel = channel;
   m_channel->Add (this);
 }
@@ -78,13 +79,6 @@ YansWifiPhy::StartTx (Ptr<Packet> packet, WifiTxVector txVector, Time txDuration
 {
   NS_LOG_DEBUG ("Start transmission: signal power before antenna gain=" << GetPowerDbm (txVector.GetTxPowerLevel ()) << "dBm");
   m_channel->Send (this, packet, GetPowerDbm (txVector.GetTxPowerLevel ()) + GetTxGain (), txDuration);
-}
-
-void
-YansWifiPhy::StartTrnTx (WifiTxVector txVector, uint8_t fieldsRemaining)
-{
-  NS_LOG_DEBUG ("Start TRN transmission: signal power before antenna gain=" << GetPowerDbm (txVector.GetTxPowerLevel ()) << "dBm");
-  m_channel->SendTrn (this, GetPowerDbm (txVector.GetTxPowerLevel ()) + GetTxGain (), txVector, fieldsRemaining);
 }
 
 } //namespace ns3

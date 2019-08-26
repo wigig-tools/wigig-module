@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef EXT_HEADERS_H
@@ -186,8 +186,9 @@ public:
   Buffer::Iterator Deserialize (Buffer::Iterator start);
 
   /**
-   * Set the duration of the beacon frame.
-   * \param duration The duration of the beacon frame
+   * The CC Present field is set to 1 to indicate that the Clustering Control field is present in the DMG Beacon.
+   * Otherwise, the Clustering Control field is not present.
+   * \param value
    */
   void SetCCPresent (bool value);
   /**

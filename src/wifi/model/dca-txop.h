@@ -31,7 +31,7 @@ class DcfState;
 class DcfManager;
 class MacLow;
 class MacTxMiddle;
-class RandomStream;
+class UniformRandomVariable;
 class MacStation;
 class MacStations;
 class CtrlBAckResponseHeader;
@@ -61,7 +61,9 @@ class CtrlBAckResponseHeader;
 class DcaTxop : public Object
 {
 public:
+  /// allow DcfListener class access
   friend class DcfListener;
+  /// allow MacLowTransmissionListener class access
   friend class MacLowTransmissionListener;
 
   DcaTxop ();
@@ -107,25 +109,25 @@ public:
    *
    * \param low MacLow.
    */
-  void SetLow (Ptr<MacLow> low);
+  void SetLow (const Ptr<MacLow> low);
   /**
    * Set DcfManager this DcaTxop is associated to.
    *
    * \param manager DcfManager.
    */
-  void SetManager (DcfManager *manager);
+  void SetManager (const Ptr<DcfManager> manager);
   /**
    * Set WifiRemoteStationsManager this DcaTxop is associated to.
    *
    * \param remoteManager WifiRemoteStationManager.
    */
-  virtual void SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> remoteManager);
+  virtual void SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> remoteManager);
   /**
    * Set MacTxMiddle this DcaTxop is associated to.
    *
    * \param txMiddle MacTxMiddle.
    */
-  void SetTxMiddle (MacTxMiddle *txMiddle);
+  void SetTxMiddle (const Ptr<MacTxMiddle> txMiddle);
 
   /**
    * \param callback the callback to invoke when a
@@ -226,9 +228,17 @@ public:
    */
   virtual void NotifySleep (void);
   /**
+   * When off operation occurs, the queue gets cleaned up.
+   */
+  virtual void NotifyOff (void);
+  /**
    * When wake up operation occurs, channel access will be restarted.
    */
   virtual void NotifyWakeUp (void);
+  /**
+   * When on operation occurs, channel access will be started.
+   */
+  virtual void NotifyOn (void);
 
   /* Event handlers */
   /**
@@ -265,6 +275,7 @@ public:
   virtual void GotBlockAck (const CtrlBAckResponseHeader *blockAck, Mac48Address recipient, double rxSnr, WifiMode txMode, double dataSnr);
   /**
    * Event handler when a Block ACK timeout has occurred.
+   * \param nMpdus the number of MPDUs sent in the A-MPDU transmission that results in a Block ACK timeout.
    */
   virtual void MissedBlockAck (uint8_t nMpdus);
 
@@ -305,32 +316,29 @@ public:
    * \return the number of stream indices assigned by this model.
    */
   int64_t AssignStreams (int64_t stream);
+
   /**
-   * Initiate Transmission in this CBAP period.
-   * \param allocationID The unique ID of this allocation.
-   * \param cbapDuration The duration of this service period in microseconds.
+   * Start a new allocation period in the DTI period.
+   * \param allocationType
+   * \param allocationID
+   * \param peerStation
+   * \param allocationDuration
    */
-  void InitiateTransmission (AllocationID allocationID, Time cbapDuration);
+  virtual void StartAllocationPeriod (AllocationType allocationType, AllocationID allocationID,
+                                      Mac48Address peerStation, Time allocationDuration);
   /**
-   * End Current CBAP Period.
+   * End Current Contention Period.
    */
-  void EndCurrentContentionPeriod (void);
+  void EndAllocationPeriod (void);
 
 protected:
+  ///< DcfState associated class
   friend class DcfState;
 
   virtual void DoDispose (void);
   virtual void DoInitialize (void);
 
   /* dcf notifications forwarded here */
-  /**
-   * Check if the DCF requires access.
-   *
-   * \return true if the DCF requires access,
-   *         false otherwise
-   */
-  virtual bool NeedsAccess (void) const;
-
   /**
    * Notify the DCF that access has been granted.
    */
@@ -428,32 +436,40 @@ protected:
    */
   void TxDroppedPacket (Ptr<const WifiMacQueueItem> item);
 
-  DcfState *m_dcf; //!< the DCF state
-  DcfManager *m_manager; //!< the DCF manager
+  Ptr<DcfState> m_dcf; //!< the DCF state
+  Ptr<DcfManager> m_manager; //!< the DCF manager
   TxPacketOk m_txOkCallback; //!< the transmit OK callback
   TxOk m_txOkNoAckCallback; //!< the transmit OK No ACK callback
   TxFailed m_txFailedCallback; //!< the transmit failed callback
   TxDropped m_txDroppedCallback; //!< the packet dropped callback
   Ptr<WifiMacQueue> m_queue; //!< the wifi MAC queue
-  MacTxMiddle *m_txMiddle; //!< the MacTxMiddle
+  Ptr<MacTxMiddle> m_txMiddle; //!< the MacTxMiddle
   Ptr <MacLow> m_low; //!< the MacLow
   Ptr<WifiRemoteStationManager> m_stationManager; //!< the wifi remote station manager
-  RandomStream *m_rng; //!<  the random stream
+  Ptr<UniformRandomVariable> m_rng; //!<  the random stream
 
   Ptr<const Packet> m_currentPacket; //!< the current packet
   WifiMacHeader m_currentHdr; //!< the current header
   MacLowTransmissionParameters m_currentParams; ///< current transmission parameters
   uint8_t m_fragmentNumber; //!< the fragment number
 
-  /* Store packet and header for service period */
+  /* Store packet and header for Allocation Period */
   typedef std::pair<Ptr<const Packet>, WifiMacHeader> PacketInformation;
   typedef std::map<AllocationID, PacketInformation> StoredPackets;
+  typedef StoredPackets::iterator StoredPacketsI;
   typedef StoredPackets::const_iterator StoredPacketsCI;
-  StoredPackets m_storedPackets;
+  StoredPackets m_storedPackets;    //!< Stored packets based on allocation ID.
 
-  AllocationID m_allocationID;      /* Allocation ID for the current contention period */
-  Time m_transmissionStarted;   /* The time of the initiation of transmission */
-  Time m_cbapDuration;          /* The remaining duration till the end of this CBAP allocation*/
+  /** DMG Allocation Variables **/
+  AllocationID m_allocationID;      //!< Allocation ID for the current period.
+  AllocationType m_allocationType;  //!< The type of the current allocation.
+  Mac48Address m_peerStation;       //!< The address of the peer station.
+  Time m_transmissionStarted;       //!< The time of the initiation of transmission.
+  Time m_remainingDuration;         //!< The remaining duration till the end of the current allocation.
+  Time m_allocationDuration;        //!< The duration of the current allocation.
+  bool m_firstTransmission;         //!< Flag to indicate if this is the first transmission in the current allocation period.
+  bool m_accessAllowed;             //!< Flag to indicate whether the access is allowed for the curent EDCA Queue.
+
 };
 
 } //namespace ns3

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -13,25 +13,28 @@
 /**
  * Simulation Objective:
  * This script is used to evaluate IEEE 802.11ad beamforming procedure in BTI + A-BFT. After each BTI and A-BFT access periods
- * we print the selected Transmit Antenna Sector ID for each DMG STA.
+ * we print the selected Transmit Antenna Sector ID for each DMG STA. Each DMG STA uses simple analytical codebook in which
+ * the azimuth plane is divided into equallized sized sectors.
  *
  * Network Topology:
- * Network topology is simple and consists of One Access Point + One Station. Each station has one antenna array with
- * eight virutal sectors to cover 360. v stands for variable location.
+ * Network topology is simple and consists of single access point and one station. Each station has one phased antenna array with
+ * eight virutal sectors to cover the full azimuth plane.
  *
- *              DMG STA (v,v)                        DMG AP (0,0)
+ *
+ *                      DMG AP (0,0)                    DMG STA (X,Y)
+ *
  *
  * Running the Simulation:
  * To run the script type one of the following commands to change the location of the DMG STA and check the corresponding best
  * antenna sector used for communication:
- * ./waf --run "evaluate_beamforming --x_pos=1 --y_pos=0"
- * ./waf --run "evaluate_beamforming --x_pos=1 --y_pos=1"
- * ./waf --run "evaluate_beamforming --x_pos=0 --y_pos=1"
- * ./waf --run "evaluate_beamforming --x_pos=-1 --y_pos=1"
- * ./waf --run "evaluate_beamforming --x_pos=-1 --y_pos=0"
- * ./waf --run "evaluate_beamforming --x_pos=-1 --y_pos=-1"
- * ./waf --run "evaluate_beamforming --x_pos=0 --y_pos=-1"
- * ./waf --run "evaluate_beamforming --x_pos=1 --y_pos=-1"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=1 --y_pos=0"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=1 --y_pos=1"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=0 --y_pos=1"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=-1 --y_pos=1"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=-1 --y_pos=0"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=-1 --y_pos=-1"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=0 --y_pos=-1"
+ * ./waf --run "evaluate_bti_beamforming --x_pos=1 --y_pos=-1"
  *
  */
 
@@ -42,44 +45,13 @@ using namespace std;
 
 Ptr<Node> apWifiNode;
 Ptr<Node> staWifiNode;
-
 Ptr<DmgApWifiMac> apWifiMac;
 Ptr<DmgStaWifiMac> staWifiMac;
 
-/*** Access Point Variables ***/
-Ptr<PacketSink> sink;
-uint64_t lastTotalRx = 0;
-double averagethroughput = 0;
-uint64_t apMacRx = 0;          /* Total received frames in the PHY. */
-double apMacRx_size = 0;       /* Total received frames in the MAC. */
-uint64_t lastMacRx = 0;
-
 void
-CalculateThroughput ()
-{
-  Time now = Simulator::Now ();                                         /* Return the simulator's virtual time. */
-  double cur = (sink->GetTotalRx() - lastTotalRx) * (double) 8/1e6;     /* Convert Application RX Packets to MBits. */
-  double mac_rx = (apMacRx_size - lastMacRx) * (double) 8/1e6;         /* Convert MAC RX Frames to MBits. */
-
-  std::cout << now.GetSeconds () << '\t' << cur << '\t' << mac_rx << std::endl;
-  lastTotalRx = sink->GetTotalRx ();
-
-  averagethroughput += cur;
-  lastMacRx = apMacRx_size;
-
-  Simulator::Schedule (Seconds (1), &CalculateThroughput);
-}
-
-void
-CountFrames (uint64_t *counter, double *sizeAccumulator, const Ptr<const Packet> packet)
-{
-  (*counter)++;
-  *sizeAccumulator += packet->GetSize ();
-}
-
-void
-SLSCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (wifiMac == apWifiMac)
     {
@@ -95,14 +67,9 @@ SLSCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address address,
 int
 main(int argc, char *argv[])
 {
-  string applicationType = "onoff";             /* Type of the Tx application */
-  string dataRate = "1Gbps";                    /* Application Layer Data Rate. */
-  uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
-  string socketType = "ns3::UdpSocketFactory";  /* Socket Type (TCP/UDP) */
-  uint32_t maxPackets = 0;                      /* Maximum Number of Packets */
-  string tcpVariant = "ns3::TcpNewReno";        /* TCP Variant Type. */
-  uint32_t bufferSize = 131072;                 /* TCP Send/Receive Buffer Size. */
-  string phyMode = "DMG_MCS24";                 /* Type of the Physical Layer. */
+  AntennaID antennas = 1;                       /* The number of antennas. */
+  SectorID sectors = 8;                         /* The number of sectors per antenna. */
+  string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
   double x_pos = 1.0;                           /* The X position of the DMG STA. */
   double y_pos = 0.0;                           /* The Y position of the DMG STA. */
   bool verbose = false;                         /* Print Logging Information. */
@@ -112,13 +79,8 @@ main(int argc, char *argv[])
   /* Command line argument parser setup. */
   CommandLine cmd;
 
-  cmd.AddValue ("applicationType", "Type of the Tx Application: onoff or bulk", applicationType);
-  cmd.AddValue ("payloadSize", "Application payload size in bytes", payloadSize);
-  cmd.AddValue ("socketType", "Type of the ns-3 Socket (ns3::TcpSocketFactory, ns3::UdpSocketFactory)", socketType);
-  cmd.AddValue ("maxPackets", "Maximum number of packets to send", maxPackets);
-  cmd.AddValue ("dataRate", "Payload size in bytes", dataRate);
-  cmd.AddValue ("tcpVariant", "Transport protocol to use: TcpTahoe, TcpReno, TcpNewReno, TcpWestwood, TcpWestwoodPlus ", tcpVariant);
-  cmd.AddValue ("bufferSize", "TCP Buffer Size (Send/Receive)", bufferSize);
+  cmd.AddValue ("antennas", "Number of Phased Antenna Arrays [1-4]", antennas);
+  cmd.AddValue ("sectors", "Number of Sectors per Phased Antenna Array", sectors);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
   cmd.AddValue ("x_pos", "The X position of the DMG STA", x_pos);
   cmd.AddValue ("y_pos", "The Y position of the DMG STA", y_pos);
@@ -131,20 +93,8 @@ main(int argc, char *argv[])
   Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
 
-  /*** Configure TCP Options ***/
-  /* Select TCP variant */
-  TypeId tid = TypeId::LookupByName (tcpVariant);
-  Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (tid));
-  /* Configure TCP Segment Size */
-  Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (payloadSize));
-  Config::SetDefault ("ns3::TcpSocket::SndBufSize", UintegerValue (bufferSize));
-  Config::SetDefault ("ns3::TcpSocket::RcvBufSize", UintegerValue (bufferSize));
-
-  /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
-
-  /* Basic setup */
-  wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
+  /**** DmgWifiHelper is a meta-helper ****/
+  DmgWifiHelper wifi;
 
   /* Turn on logging */
   if (verbose)
@@ -154,36 +104,28 @@ main(int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (56.16e9));
 
   /**** SETUP ALL NODES ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (20.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (20.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes steerable antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
   /* Make two nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -202,9 +144,13 @@ main(int argc, char *argv[])
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "EnableBeaconRandomization", BooleanValue (true),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "BeaconTransmissionInterval", TimeValue (MicroSeconds (400)),
-                   "ATIPresent", BooleanValue (true),
-                   "ATIDuration", TimeValue (MicroSeconds (600)));
+                   "ATIPresent", BooleanValue (false));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (antennas),
+                    "Sectors", UintegerValue (sectors));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apWifiNode);
@@ -245,34 +191,6 @@ main(int argc, char *argv[])
   /* We do not want any ARP packets */
   PopulateArpCache ();
 
-  /* Install Simple UDP Server on the access point */
-  PacketSinkHelper sinkHelper (socketType, InetSocketAddress (Ipv4Address::GetAny (), 9999));
-  ApplicationContainer sinkApp = sinkHelper.Install (apWifiNode);
-  sink = StaticCast<PacketSink> (sinkApp.Get (0));
-  sinkApp.Start (Seconds (0.0));
-
-  /* Install TCP/UDP Transmitter on the station */
-  Address dest (InetSocketAddress (apInterface.GetAddress (0), 9999));
-  ApplicationContainer srcApp;
-  if (applicationType == "onoff")
-    {
-      OnOffHelper src (socketType, dest);
-      src.SetAttribute ("MaxBytes", UintegerValue (0));
-      src.SetAttribute ("PacketSize", UintegerValue (payloadSize));
-      src.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1e6]"));
-      src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-      src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate)));
-
-      srcApp = src.Install (staWifiNode);
-    }
-  else if (applicationType == "bulk")
-    {
-      BulkSendHelper src (socketType, dest);
-      srcApp= src.Install (staWifiNode);
-    }
-
-  srcApp.Start (Seconds (1.0));
-
   /* Enable Traces */
   if (pcapTracing)
     {
@@ -281,26 +199,17 @@ main(int argc, char *argv[])
       wifiPhy.EnablePcap ("Traces/Station", staDevice, false);
     }
 
-  /* Since we have one node, so we steer AP antenna sector towarads it */
+  /* Connect SLS traces */
   Ptr<WifiNetDevice> apWifiNetDevice = StaticCast<WifiNetDevice> (apDevice.Get (0));
   Ptr<WifiNetDevice> staWifiNetDevice = StaticCast<WifiNetDevice> (staDevice.Get (0));
   apWifiMac = StaticCast<DmgApWifiMac> (apWifiNetDevice->GetMac ());
   staWifiMac = StaticCast<DmgStaWifiMac> (staWifiNetDevice->GetMac ());
-  Simulator::Schedule (Seconds (0.9), &DmgApWifiMac::SteerAntennaToward, apWifiMac,
-                       Mac48Address::ConvertFrom (staWifiNetDevice->GetAddress ()));
-
-  /* Accummulate Rx MAC Frames */
-  apWifiMac->TraceConnectWithoutContext ("MacRx", MakeBoundCallback(&CountFrames, &apMacRx, &apMacRx_size));
-
-  /* Connect SLS traces */
   apWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, apWifiMac));
   staWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, staWifiMac));
 
-  Simulator::Schedule (Seconds (2.0), &CalculateThroughput);
   Simulator::Stop (Seconds (simulationTime));
   Simulator::Run ();
 
-  cout << "Average received throughput [Mbps] = " << averagethroughput/(simulationTime - 1) << endl;
   cout << "End Simulation at " << Simulator::Now ().GetSeconds () << endl;
 
   Simulator::Destroy ();

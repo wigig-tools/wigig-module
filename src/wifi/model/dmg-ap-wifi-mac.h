@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
- * Author: Hany Assasa <hany.assasa@hotmail.com>
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef DMG_AP_WIFI_MAC_H
 #define DMG_AP_WIFI_MAC_H
@@ -35,6 +35,12 @@ public:
 
   DmgApWifiMac ();
   virtual ~DmgApWifiMac ();
+
+  /**
+   * Get Association Identifier (AID).
+   * \return The AID of the station.
+   */
+  virtual uint16_t GetAssociationID (void);
   /**
    * \param stationManager the station manager attached to this MAC.
    */
@@ -96,6 +102,14 @@ public:
    * \return the interval between two beacon transmissions.
    */
   Time GetBeaconTransmissionInterval (void) const;
+  /**
+   * \param periodicity the A-BFT periodicity.
+   */
+  void SetAbftPeriodicity (uint8_t periodicity);
+  /**
+   * \return the A-BFT periodicity.
+   */
+  uint8_t GetAbftPeriodicity (void) const;
   /**
    * Allocate CBAP period to be announced in DMG Beacon or Announce Frame.
    * \param staticAllocation Is the allocation static.
@@ -162,6 +176,10 @@ public:
                                 uint32_t allocationStart, uint16_t blockDuration,
                                 uint16_t blockPeriod, uint8_t blocks);
   /**
+   * ContinueBeamformingInDTI
+   */
+  void ContinueBeamformingInDTI (void);
+  /**
    * Allocate SP allocation for Beamforming training.
    * \param srcAid The AID of the source DMG STA.
    * \param dstAid The AID of the destination DMG STA.
@@ -171,6 +189,19 @@ public:
    */
   uint32_t AllocateBeamformingServicePeriod (uint8_t srcAid, uint8_t dstAid,
                                              uint32_t allocationStart, bool isTxss);
+  /**
+   * Allocate SP allocation for Beamforming training.
+   * \param srcAid The AID of the source DMG STA.
+   * \param dstAid The AID of the destination DMG STA.
+   * \param allocationStart The start time of the allocation relative to the beginning of DTI.
+   * \param allocationDuration The duration of the beamforming allocation.
+   * \param isInitiatorTxss Is the Initiator Beamforming TxSS or RxSS.
+   * \param isResponderTxss Is the Responder Beamforming TxSS or RxSS.
+   * \return The start of the next allocation period.
+   */
+  uint32_t AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destAid,
+                                             uint32_t allocationStart, uint16_t allocationDuration,
+                                             bool isInitiatorTxss, bool isResponderTxss);
   /**
    * Modify schedulling parameters of an existing allocation.
    * \param id A unique identifier for the allocation.
@@ -239,6 +270,11 @@ public:
   void SendDirectionalChannelQualityRequest (Mac48Address to, uint16_t numOfRepts,
                                              Ptr<DirectionalChannelQualityRequestElement> element);
 
+  /**
+   * Start DMG AP Operation by transmitting Beaconing.
+   */
+  void StartAccessPoint (void);
+
 protected:
   friend class DmgBeaconDca;
   Time GetBTIRemainingTime (void) const;
@@ -260,6 +296,11 @@ protected:
    * Start Syn Beacon Interval.
    */
   void StartSynBeaconInterval (void);
+  /**
+   * Return the DMG capability of the current PCP/AP.
+   * \return the DMG capabilities the PCP/AP supports.
+   */
+  Ptr<DmgCapabilities> GetDmgCapabilities (void) const;
 
 private:
   virtual void DoDispose (void);
@@ -275,6 +316,11 @@ private:
   virtual void BrpSetupCompleted (Mac48Address address);
   virtual void NotifyBrpPhaseCompleted (void);
   virtual void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
+
+  /**
+   * Start Beacon Header Interval (BHI).
+   */
+  void StartBeaconHeaderInterval (void);
   /**
    * The packet we sent was successfully received by the receiver
    * (i.e. we received an ACK from the receiver). If the packet
@@ -347,8 +393,9 @@ private:
    *
    * \param to the MAC address of the STA we are sending an association response to.
    * \param success indicates whether the association was successful or not.
+   * \return If success return the AID of the station, otherwise 0.
    */
-  void SendAssocResp (Mac48Address to, bool success);
+  uint16_t SendAssocResp (Mac48Address to, bool success);
   /**
    * Get the duration of a polling period.
    * \param pollFrameTxTime The TX time of a poll frame.
@@ -416,11 +463,6 @@ private:
    */
   void SendAnnounceFrame (Mac48Address to);
   /**
-   * Return the DMG capability of the current PCP/AP.
-   * \return the DMG capabilities the PCP/AP supports.
-   */
-  Ptr<DmgCapabilities> GetDmgCapabilities (void) const;
-  /**
    * Get DMG Operation element.
    * \return Pointer to the DMG Operation element.
    */
@@ -440,33 +482,47 @@ private:
    */
   void CleanupAllocations (void);
   /**
-   * Send One DMG Beacon frame with the provided arguments.
-   * \param antennaID The ID of the current Antenna.
-   * \param sectorID The ID of the current sector in the antenna.
-   * \param count Number of remaining DMG Beacons till the end of BTI.
+   * Calculate BTI access period variables.
    */
-  void SendOneDMGBeacon (uint8_t sectorID, uint8_t antennaID, uint16_t count);
+  void CalculateBTIVariables (void);
+  /**
+   * Send One DMG Beacon frame with the provided arguments.
+   */
+  void SendOneDMGBeacon (void);
   /**
    * Get Beacon Header Interval Duration
    * \return The duration of BHI.
    */
   Time GetBHIDuration (void) const;
+  /**
+   * \return the next Association ID to be allocated by the DMG PCP/AP.
+   */
+  uint16_t GetNextAssociationId (void);
 
 private:
+  /** DMG PCP/AP Power Status **/
+  bool m_startedAP;                     //!< Flag to indicate whether we started DMG AP.
+
+  /** Assoication Information **/
+  std::map<uint16_t, Mac48Address> m_staList;//!< Map of all stations currently associated to the DMG PCP/AP with their association ID.
+
   /** BTI Period Variables **/
-  Ptr<DmgBeaconDca> m_beaconDca;        //!< Dedicated DcaTxop for beacons.
-  EventId m_beaconEvent;		//!< Event to generate one beacon.
-  DcfManager *m_beaconDcfManager;       //!< DCF manager (access to channel)
-  Time m_btiRemaining;                  //!< Remaining Time to the end of the current BTI.
-  Time m_beaconTransmitted;             //!< The time at which we transmitted DMG Beacon.
-  std::vector<ANTENNA_CONFIGURATION> m_antennaConfigurationTable; //! Table with the current antenna configuration.
-  uint32_t m_antennaConfigurationIndex; //! Index of the current antenna configuration.
-  uint32_t m_antennaConfigurationOffset;//! The first antenna configuration to start BTI with.
+  Ptr<DmgBeaconDca> m_beaconDca;        //!< Dedicated DcaTxop for DMG Beacons.
+  EventId m_beaconEvent;		//!< Event to generate one DMG Beacon.
+  Time m_btiStarted;                    //!< The time at which we started BTI access period.
+  Time m_dmgBeaconDuration;             //!< Exact DMG beacon duration.
+  Time m_dmgBeaconDurationUs;           //!< DMG BEacon Duration in Microseconds.
+  Time m_nextDmgBeaconDelay;            //!< DMG Beacon transmission delay due to difference in clock.
+  Time m_btiDuration;                   //!< The length of the Beacon Transmission Interval (BTI).
   bool m_beaconRandomization;           //!< Flag to indicate whether we want to randomize selection of DMG Beacon at each BI.
-  Time m_beaconingDelay;                //!< The amount of delay to add before the beginning of DMG Beaconning.
+  Ptr<RandomVariableStream> m_beaconJitter; //!< RandomVariableStream used to randomize the time of the first DMG beacon.
+  bool m_enableBeaconJitter;            //!< Flag whether the first beacon should be generated at random time.
   bool m_allowBeaconing;                //!< Flag to indicate whether we want to start Beaconing upon initialization.
+  bool m_announceDmgCapabilities;       //!< Flag to indicate whether we announce DMG Capabilities in DMG Beacons.
   bool m_announceOperationElement;      //!< Flag to indicate whether we transmit DMG operation element in DMG Beacons.
   bool m_scheduleElement;               //!< Flag to indicate whether we transmit Extended Schedule element in DMG Beacons.
+  bool m_isABFTResponderTXSS;           //!< Flag to indicate whether the responder in A-BFT is TxSS or RxSS.
+  std::vector<Mac48Address> m_beamformingInDTI; //!< List of the stations to train in DTI because beamforming is not completed in BTI.
 
   /** DMG PCP/AP Clustering **/
   bool m_enableDecentralizedClustering; //!< Flag to inidicate if decentralized clustering is enabled.
@@ -475,8 +531,8 @@ private:
   uint8_t m_clusterMaxMem;              //!< The maximum number of cluster members.
   uint8_t m_beaconSPDuration;           //!< The size of a Beacon SP in MicroSeconds.
   ClusterMemberRole m_clusterRole;      //!< The role of the node in the current cluster.
-  typedef std::map<uint8_t, bool> BEACON_SP_STATUS_MAP;
-  typedef BEACON_SP_STATUS_MAP::const_iterator BEACON_SP_STATUS_MAPCI;
+  typedef std::map<uint8_t, bool> BEACON_SP_STATUS_MAP;                 //!< Typedef for mapping the status of each BeaconSP.
+  typedef BEACON_SP_STATUS_MAP::const_iterator BEACON_SP_STATUS_MAP_CI; //!< Typedef for const iterator through BeaconSP.
   BEACON_SP_STATUS_MAP m_spStatus;      //!< The status of each Beacon SP in the monitor period.
   bool m_monitoringChannel;             //!< Flag to indicate if we have started monitoring the channel for cluster formation.
   bool m_beaconReceived;                //!< Flag to indicate if we have received beacon during BeaconSP.
@@ -484,7 +540,7 @@ private:
   Time m_clusterTimeInterval;           //!< The interval between two consectuve Beacon SPs.
   Time m_channelMonitorTime;            //!< The channel monitor time.
   Time m_startedMonitoringChannel;      //!< The time we started monitoring channel for DMG Beacons.
-  Time m_clusterBeaconSPDuration;
+  Time m_clusterBeaconSPDuration;       //!< The duration of the Beacon SP.
 
   TracedCallback<Mac48Address, uint8_t> m_joinedCluster;  //!< The PCP/AP has joined a cluster.
   /**
@@ -496,10 +552,11 @@ private:
   typedef void (* JoinedClusterCallback)(Mac48Address clusterID, uint8_t index);
 
   /** A-BFT Access Period Variables **/
-  bool m_isResponderTXSS;               //!< Flag to indicate if RSS in A-BFT is TxSS or RxSS.
   uint8_t m_abftPeriodicity;            //!< The periodicity of the A-BFT in DMG Beacon.
+  EventId m_sswFbckEvent;               //!< Event related to sending SSW FBCK.
   /* Ensure only one DMG STA is communicating with us during single A-BFT slot */
   bool m_receivedOneSSW;                //!< Flag to indicate if we received SSW Frame during SSW-Slot in A-BFT period.
+  bool m_abftCollision;                 //!< Flad to indicate if we experienced any collision in the current A-BFT slot.
   Mac48Address m_peerAbftStation;       //!< The MAC address of the station we received SSW from.
   uint8_t m_remainingSlots;
   Time m_atiStartTime;                  //!< The start time of ATI Period.
@@ -507,26 +564,18 @@ private:
   /** BRP Phase Variables **/
   typedef std::map<Mac48Address, bool> STATION_BRP_MAP;
   STATION_BRP_MAP m_stationBrpMap;      //!< Map to indicate if a station has conducted BRP Phase or not.
-  uint16_t m_aidCounter;                //!< Association Identifier.
 
   /**
    * Type definition for storing IEs of the associated stations.
    */
-  typedef std::map<Mac48Address, WifiInformationElementMap> AssociatedStationsInfoByAddress;
-  AssociatedStationsInfoByAddress m_associatedStationsInfoByAddress;
+  typedef std::map<Mac48Address, WifiInformationElementMap> AssociatedStationsInformation;
+  typedef AssociatedStationsInformation::iterator AssociatedStationsInformationI;
+  typedef AssociatedStationsInformation::const_iterator AssociatedStationsInformationCI;
+  AssociatedStationsInformation m_associatedStationsInfoByAddress;
   std::map<uint16_t, WifiInformationElementMap> m_associatedStationsInfoByAid;
 
-  /* Beacon Interval */
-  Time m_dtiStartTime;                                      //!< The start time of the DTI access period.
+  /** Beacon Interval **/
   TracedCallback<Mac48Address> m_biStarted;                 //!< Trace Callback for starting new Beacon Interval.
-  TracedCallback<Mac48Address, Time> m_dtiStarted;          //!< Trace Callback for starting new DTI access period.
-  /**
-   * TracedCallback signature for DTI access period start event.
-   *
-   * \param address The MAC address of the station.
-   * \param duration The duration of the DTI period.
-   */
-  typedef void (* DtiStartedCallback)(Mac48Address address, Time duration);
 
   /** Traffic Stream Allocation **/
   TracedCallback<Mac48Address, DmgTspecElement> m_addTsRequestReceived;   //!< DMG ADDTS Request received.

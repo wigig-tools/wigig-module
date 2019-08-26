@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/assert.h"
@@ -72,7 +72,7 @@ DmgAtiDca::RestartAccessIfNeeded (void)
 {
   NS_LOG_FUNCTION (this);
   if ((m_currentPacket != 0
-       || m_queue->HasPackets ())
+       || !m_queue->IsEmpty ())
       && !m_dcf->IsAccessRequested ()
       && m_allowTransmission)
     {
@@ -85,7 +85,7 @@ DmgAtiDca::StartAccessIfNeeded (void)
 {
   NS_LOG_FUNCTION (this);
   if (m_currentPacket == 0
-      && m_queue->HasPackets ()
+      && !m_queue->IsEmpty ()
       && !m_dcf->IsAccessRequested ()
       && m_allowTransmission)
     {
@@ -148,7 +148,7 @@ DmgAtiDca::NotifyAccessGranted (void)
 
   if (m_currentPacket == 0)
     {
-      if (!m_queue->HasPackets ())
+      if (m_queue->IsEmpty ())
         {
           NS_LOG_DEBUG ("queue empty");
           return;

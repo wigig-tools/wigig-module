@@ -71,6 +71,7 @@ class Packet;
  */
 class UeManager : public Object
 {
+  /// allow LtePdcpSpecificLtePdcpSapUser<UeManager> class friend access
   friend class LtePdcpSpecificLtePdcpSapUser<UeManager>;
 
 public:
@@ -103,10 +104,11 @@ public:
    * \param rrc pointer to the LteEnbRrc holding this UeManager
    * \param rnti RNTI of the UE
    * \param s initial state of the UeManager
+   * \param componentCarrierId primary component carrier ID
    * 
    * \return 
    */
-  UeManager (Ptr<LteEnbRrc> rrc, uint16_t rnti, State s);
+  UeManager (Ptr<LteEnbRrc> rrc, uint16_t rnti, State s, uint8_t componentCarrierId);
 
   virtual ~UeManager (void);
 
@@ -320,6 +322,12 @@ public:
    */
   uint64_t GetImsi (void) const;
 
+  /**
+   *
+   * \return the primary component carrier ID
+   */
+  uint8_t GetComponentCarrierId () const;
+
   /** 
    * 
    * \return the SRS Configuration Index
@@ -487,6 +495,10 @@ private:
    * unique UE identifier.
    */
   uint64_t m_imsi;
+  /**
+   * ID of the primary CC for this UE
+   */
+  uint8_t m_componentCarrierId;
   
   uint8_t m_lastRrcTransactionIdentifier; ///< last RRC transaction identifier
 
@@ -565,14 +577,23 @@ private:
 class LteEnbRrc : public Object
 {
 
+  /// allow EnbRrcMemberLteEnbCmacSapUser class friend access
   friend class EnbRrcMemberLteEnbCmacSapUser;
+  /// allow MemberLteHandoverManagementSapUser<LteEnbRrc> class friend access
   friend class MemberLteHandoverManagementSapUser<LteEnbRrc>;
+  /// allow MemberLteAnrSapUser<LteEnbRrc> class friend access
   friend class MemberLteAnrSapUser<LteEnbRrc>;
+  /// allow MemberLteFfrRrcSapUser<LteEnbRrc> class friend access
   friend class MemberLteFfrRrcSapUser<LteEnbRrc>;
+  /// allow MemberLteEnbRrcSapProvider<LteEnbRrc> class friend access
   friend class MemberLteEnbRrcSapProvider<LteEnbRrc>;
+  /// allow MemberLteEnbRrcSapProvider<LteEnbRrc> class friend access
   friend class MemberEpcEnbS1SapUser<LteEnbRrc>;
+  /// allow MemberEpcEnbS1SapUser<LteEnbRrc> class friend access
   friend class EpcX2SpecificEpcX2SapUser<LteEnbRrc>;
+  /// allow UeManager class friend access
   friend class UeManager;
+  /// allow  MemberLteCcmRrcSapUser<LteEnbRrc> class friend access
   friend class MemberLteCcmRrcSapUser<LteEnbRrc>;
 
 public:
@@ -833,15 +854,16 @@ public:
    * `LteHelper::InstallEnbDevice` (i.e. before the simulation starts).
    *
    * \warning Raises an error when executed more than once.
+   *
+   * \param ccPhyConf the component carrier configuration
    */
-  void ConfigureCell (uint16_t cellId);
+  void ConfigureCell (std::map<uint8_t, Ptr<ComponentCarrierEnb>> ccPhyConf);
 
   /**
    * \brief Configure carriers.
    * \param ccPhyConf the component carrier configuration
-   * \param numberOfCarriers the number of carriers
    */
-  void ConfigureCarriers (std::map<uint8_t, ComponentCarrier > ccPhyConf, uint16_t numberOfCarriers);
+  void ConfigureCarriers (std::map<uint8_t, Ptr<ComponentCarrierEnb>> ccPhyConf);
 
   /** 
    * set the cell id of this eNB
@@ -857,6 +879,24 @@ public:
    * \param ccIndex 
    */
   void SetCellId (uint16_t m_cellId, uint8_t ccIndex);
+
+  /**
+   * convert the cell id to component carrier id
+   *
+   * \param cellId Cell ID
+   *
+   * \return corresponding component carrier id
+   */
+  uint8_t CellToComponentCarrierId (uint16_t cellId);
+
+  /**
+   * convert the component carrier id to cell id
+   *
+   * \param componentCarrierId component carrier ID
+   *
+   * \return corresponding cell ID
+   */
+  uint16_t ComponentCarrierToCellId (uint8_t componentCarrierId);
 
   /** 
    * Enqueue an IP data packet on the proper bearer for downlink
@@ -996,19 +1036,53 @@ private:
 
   // RRC SAP methods
 
-  /// Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::CompleteSetupUe interface to UeManager::CompleteSetupUe
+  /**
+   * Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::CompleteSetupUe interface to UeManager::CompleteSetupUe
+   * \param rnti the RNTI
+   * \param params the LteEnbRrcSapProvider::CompleteSetupUeParameters
+   */
   void DoCompleteSetupUe (uint16_t rnti, LteEnbRrcSapProvider::CompleteSetupUeParameters params);
-  /// Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionRequest interface to UeManager::RecvRrcConnectionRequest
+  /**
+   * Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionRequest interface to UeManager::RecvRrcConnectionRequest
+   *
+   * \param rnti the RNTI
+   * \param msg the LteRrcSap::RrcConnectionRequest
+   */
   void DoRecvRrcConnectionRequest (uint16_t rnti, LteRrcSap::RrcConnectionRequest msg);
-  /// Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionSetupCompleted interface to UeManager::RecvRrcConnectionSetupCompleted
+  /**
+   * Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionSetupCompleted interface to UeManager::RecvRrcConnectionSetupCompleted
+   *
+   * \param rnti the RNTI
+   * \param msg the LteRrcSap::RrcConnectionSetupCompleted
+   */
   void DoRecvRrcConnectionSetupCompleted (uint16_t rnti, LteRrcSap::RrcConnectionSetupCompleted msg);
-  /// Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionReconfigurationCompleted interface to UeManager::RecvRrcConnectionReconfigurationCompleted
+  /**
+   * Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionReconfigurationCompleted interface to UeManager::RecvRrcConnectionReconfigurationCompleted
+   *
+   * \param rnti the RNTI
+   * \param msg the LteRrcSap::RrcConnectionReconfigurationCompleted
+   */
   void DoRecvRrcConnectionReconfigurationCompleted (uint16_t rnti, LteRrcSap::RrcConnectionReconfigurationCompleted msg);
-  /// Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionReestablishmentRequest interface to UeManager::RecvRrcConnectionReestablishmentRequest
+  /**
+   * Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionReestablishmentRequest interface to UeManager::RecvRrcConnectionReestablishmentRequest
+   *
+   * \param rnti the RNTI
+   * \param msg the LteRrcSap::RrcConnectionReestablishmentRequest
+   */
   void DoRecvRrcConnectionReestablishmentRequest (uint16_t rnti, LteRrcSap::RrcConnectionReestablishmentRequest msg);
-  /// Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionReestablishmentComplete interface to UeManager::RecvRrcConnectionReestablishmentComplete
+  /**
+   * Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvRrcConnectionReestablishmentComplete interface to UeManager::RecvRrcConnectionReestablishmentComplete
+   *
+   * \param rnti the RNTI
+   * \param msg the LteRrcSap::RrcConnectionReestablishmentComplete
+   */
   void DoRecvRrcConnectionReestablishmentComplete (uint16_t rnti, LteRrcSap::RrcConnectionReestablishmentComplete msg);
-  /// Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvMeasurementReport interface to UeManager::RecvMeasurementReport
+  /**
+   * Part of the RRC protocol. Forwarding LteEnbRrcSapProvider::RecvMeasurementReport interface to UeManager::RecvMeasurementReport
+   *
+   * \param rnti the RNTI
+   * \param msg the LteRrcSap::MeasurementReport
+   */
   void DoRecvMeasurementReport (uint16_t rnti, LteRrcSap::MeasurementReport msg);
 
   // S1 SAP methods
@@ -1082,9 +1156,10 @@ private:
   /**
    * Allocate temporary cell RNTI function
    *
+   * \param componentCarrierId ID of the primary component carrier
    * \return temporary RNTI
    */
-  uint16_t DoAllocateTemporaryCellRnti ();
+  uint16_t DoAllocateTemporaryCellRnti (uint8_t componentCarrierId);
   /**
    * Notify LC config result function
    *
@@ -1165,10 +1240,11 @@ private:
    *   * target cell RNTI allocation upon handover
    *
    * \param state the initial state of the UeManager
+   * \param componentCarrierId primary component carrier ID of the UeManager
    *
    * \return the newly allocated RNTI
    */
-  uint16_t AddUe (UeManager::State state);
+  uint16_t AddUe (UeManager::State state, uint8_t componentCarrierId);
 
   /**
    * remove a UE from the cell
@@ -1303,9 +1379,9 @@ private:
   /// Interface to the handover algorithm instance.
   LteHandoverManagementSapProvider* m_handoverManagementSapProvider;
 
-  /// Receive API calls from the LteEnbComponetCarrierManager instance.
+  /// Receive API calls from the LteEnbComponentCarrierManager instance.
   LteCcmRrcSapUser* m_ccmRrcSapUser;
-  /// Interface to the LteEnbComponetCarrierManager instance.
+  /// Interface to the LteEnbComponentCarrierManager instance.
   LteCcmRrcSapProvider* m_ccmRrcSapProvider;
 
   /// Receive API calls from the ANR instance.
@@ -1338,8 +1414,6 @@ private:
 
   /// True if ConfigureCell() has been completed.
   bool m_configured;
-  /// Cell identifier. Must be unique across the simulation.
-  uint16_t m_cellId;
   /// Downlink E-UTRA Absolute Radio Frequency Channel Number.
   uint32_t m_dlEarfcn;
   /// Uplink E-UTRA Absolute Radio Frequency Channel Number.
@@ -1352,7 +1426,7 @@ private:
   uint16_t m_lastAllocatedRnti;
 
   /// The System Information Block Type 1 that is currently broadcasted over BCH.
-  LteRrcSap::SystemInformationBlockType1 m_sib1;
+  std::vector<LteRrcSap::SystemInformationBlockType1> m_sib1;
 
   /**
    * The `UeMap` attribute. List of UeManager by C-RNTI.
@@ -1505,7 +1579,7 @@ private:
 
   bool m_carriersConfigured; ///< are carriers configured
 
-  std::map<uint8_t, ComponentCarrier> m_componentCarrierPhyConf; ///< component carrier phy configuration
+  std::map<uint8_t, Ptr<ComponentCarrierEnb>> m_componentCarrierPhyConf; ///< component carrier phy configuration
 
 }; // end of `class LteEnbRrc`
 

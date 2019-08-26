@@ -1,6 +1,6 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -95,8 +95,8 @@ DmgCapabilities::DeserializeInformationField (Buffer::Iterator start,
 
   ReadFrom (i, staAddress);
   uint8_t aid = i.ReadU8 ();
-  uint16_t staCapability = i.ReadLsbtohU64 ();
-  uint64_t apCapability = i.ReadLsbtohU16();
+  uint64_t staCapability = i.ReadLsbtohU64 ();
+  uint16_t apCapability = i.ReadLsbtohU16();
 
   SetStaAddress (staAddress);
   SetAID (aid);
@@ -113,7 +113,7 @@ DmgCapabilities::SetStaAddress (Mac48Address address)
 }
 
 Mac48Address
-DmgCapabilities::GetStaAddress () const
+DmgCapabilities::GetStaAddress (void) const
 {
   return m_staAddress;
 }
@@ -125,7 +125,7 @@ DmgCapabilities::SetAID (uint8_t aid)
 }
 
 uint8_t
-DmgCapabilities::GetAID () const
+DmgCapabilities::GetAID (void) const
 {
   return m_aid;
 }
@@ -166,40 +166,40 @@ DmgCapabilities::SetDmgStaCapabilityInfo (uint64_t info)
 }
 
 uint64_t
-DmgCapabilities::GetDmgStaCapabilityInfo () const
+DmgCapabilities::GetDmgStaCapabilityInfo (void) const
 {
   uint64_t val = 0;
 
-  val |= uint64_t(m_reverseDirection & 0x1);
-  val |= uint64_t(m_higherLayerTimerSynchronziation & 0x1) << 1;
-  val |= uint64_t(m_tpc & 0x1) <<  2;
-  val |= uint64_t(m_spsh & 0x1) << 3;
-  val |= uint64_t(m_RxDmgAntennas & 0x3) << 4;
-  val |= uint64_t(m_fastLinkAdaption & 0x1) << 6;
-  val |= uint64_t(m_sectorsNumber & 0x7F) << 7;
-  val |= uint64_t(m_rxssLength & 0x3F) << 14;
-  val |= uint64_t(m_dmgAntennaReciprocity & 0x1) << 20;
+  val |= uint64_t (m_reverseDirection & 0x1);
+  val |= uint64_t (m_higherLayerTimerSynchronziation & 0x1) << 1;
+  val |= uint64_t (m_tpc & 0x1) <<  2;
+  val |= uint64_t (m_spsh & 0x1) << 3;
+  val |= uint64_t (m_RxDmgAntennas & 0x3) << 4;
+  val |= uint64_t (m_fastLinkAdaption & 0x1) << 6;
+  val |= uint64_t (m_sectorsNumber & 0x7F) << 7;
+  val |= uint64_t (m_rxssLength & 0x3F) << 14;
+  val |= uint64_t (m_dmgAntennaReciprocity & 0x1) << 20;
 
-  val |= uint64_t(m_ampduMaximumLength & 0x7) << 21;
-  val |= uint64_t(m_ampduMinimumSpacing & 0x7) << 24;
+  val |= uint64_t (m_ampduMaximumLength & 0x7) << 21;
+  val |= uint64_t (m_ampduMinimumSpacing & 0x7) << 24;
 
-  val |= uint64_t(m_baFlowControl & 0x1) << 27;
+  val |= uint64_t (m_baFlowControl & 0x1) << 27;
 
-  val |= uint64_t(m_maximumScRxMcs & 0x1F) << 28;
-  val |= uint64_t(m_maximumOfdmRxMcs & 0x1F) << 32;
-  val |= uint64_t(m_maximumScTxMcs & 0x1F) << 37;
-  val |= uint64_t(m_maximumOfdmTxMcs & 0x1F) << 42;
-  val |= uint64_t(m_lowPower & 0x1) << 47;
-  val |= uint64_t(m_codeRate13_16 & 0x1) << 48;
+  val |= uint64_t (m_maximumScRxMcs & 0x1F) << 28;
+  val |= uint64_t (m_maximumOfdmRxMcs & 0x1F) << 32;
+  val |= uint64_t (m_maximumScTxMcs & 0x1F) << 37;
+  val |= uint64_t (m_maximumOfdmTxMcs & 0x1F) << 42;
+  val |= uint64_t (m_lowPower & 0x1) << 47;
+  val |= uint64_t (m_codeRate13_16 & 0x1) << 48;
 
-  val |= uint64_t(m_dtpSupported & 0x1) << 52;
-  val |= uint64_t(m_appduSupported & 0x1) << 53;
-  val |= uint64_t(m_heartbeat & 0x1) << 54;
-  val |= uint64_t(m_supportsOtherAid & 0x1) << 55;
-  val |= uint64_t(m_antennaPatternReciprocity & 0x1) << 56;
-  val |= uint64_t(m_heartbeatElapsedIndication & 0x7) << 57;
-  val |= uint64_t(m_GrantAckSupported  & 0x1) << 60;
-  val |= uint64_t(m_RxssTxRateSupported & 0x1) << 61;
+  val |= uint64_t (m_dtpSupported & 0x1) << 52;
+  val |= uint64_t (m_appduSupported & 0x1) << 53;
+  val |= uint64_t (m_heartbeat & 0x1) << 54;
+  val |= uint64_t (m_supportsOtherAid & 0x1) << 55;
+  val |= uint64_t (m_antennaPatternReciprocity & 0x1) << 56;
+  val |= uint64_t (m_heartbeatElapsedIndication & 0x7) << 57;
+  val |= uint64_t (m_GrantAckSupported  & 0x1) << 60;
+  val |= uint64_t (m_RxssTxRateSupported & 0x1) << 61;
 
   return val;
 }
@@ -218,7 +218,7 @@ DmgCapabilities::SetDmgPcpApCapabilityInfo (uint16_t info)
 }
 
 uint16_t
-DmgCapabilities::GetDmgPcpApCapabilityInfo () const
+DmgCapabilities::GetDmgPcpApCapabilityInfo (void) const
 {
   uint16_t val = 0;
 
@@ -281,8 +281,8 @@ DmgCapabilities::SetNumberOfSectors (uint8_t number)
 void
 DmgCapabilities::SetRxssLength (uint8_t length)
 {
-  NS_ASSERT ((2 <= length) && (length <= 128) && (length % 2 == 0));
-  m_rxssLength = length/2 - 1;
+  NS_ASSERT ((0 <= length) && (length <= 63));
+  m_rxssLength = length;
 }
 
 void
@@ -367,157 +367,157 @@ DmgCapabilities::SetRXSSTxRateSupported (bool value)
 }
 
 bool
-DmgCapabilities::GetReverseDirection () const
+DmgCapabilities::GetReverseDirection (void) const
 {
   return m_reverseDirection;
 }
 
 bool
-DmgCapabilities::GetHigherLayerTimerSynchronization () const
+DmgCapabilities::GetHigherLayerTimerSynchronization (void) const
 {
   return m_higherLayerTimerSynchronziation;
 }
 
 bool
-DmgCapabilities::GetTPC () const
+DmgCapabilities::GetTPC (void) const
 {
   return m_tpc;
 }
 
 bool
-DmgCapabilities::GetSPSH () const
+DmgCapabilities::GetSPSH (void) const
 {
   return m_spsh;
 }
 
 uint8_t
-DmgCapabilities::GetNumberOfRxDmgAntennas () const
+DmgCapabilities::GetNumberOfRxDmgAntennas (void) const
 {
   return m_RxDmgAntennas + 1;
 }
 
 bool
-DmgCapabilities::GetFastLinkAdaption () const
+DmgCapabilities::GetFastLinkAdaption (void) const
 {
   return m_fastLinkAdaption;
 }
 
 uint8_t
-DmgCapabilities::GetNumberOfSectors () const
+DmgCapabilities::GetNumberOfSectors (void) const
 {
   return m_sectorsNumber + 1;
 }
 
 uint8_t
-DmgCapabilities::GetRxssLength () const
+DmgCapabilities::GetRxssLength (void) const
 {
-  return (m_rxssLength + 1) * 2;
+  return m_rxssLength;
 }
 
 bool
-DmgCapabilities::GetDmgAntennaReciprocity () const
+DmgCapabilities::GetDmgAntennaReciprocity (void) const
 {
   return m_dmgAntennaReciprocity;
 }
 
 uint8_t
-DmgCapabilities::GetAmpduMaximumLength () const
+DmgCapabilities::GetAmpduMaximumLength (void) const
 {
   return m_ampduMaximumLength;
 }
 
 uint8_t
-DmgCapabilities::GetAmpduMinimumSpacing () const
+DmgCapabilities::GetAmpduMinimumSpacing (void) const
 {
   return m_ampduMinimumSpacing;
 }
 
 bool
-DmgCapabilities::GetBaFlowControl () const
+DmgCapabilities::GetBaFlowControl (void) const
 {
   return m_baFlowControl;
 }
 
 uint8_t
-DmgCapabilities::GetMaximumScRxMcs () const
+DmgCapabilities::GetMaximumScRxMcs (void) const
 {
   return m_maximumScRxMcs;
 }
 
 uint8_t
-DmgCapabilities::GetMaximumOfdmRxMcs () const
+DmgCapabilities::GetMaximumOfdmRxMcs (void) const
 {
   return m_maximumOfdmRxMcs;
 }
 
 uint8_t
-DmgCapabilities::GetMaximumScTxMcs () const
+DmgCapabilities::GetMaximumScTxMcs (void) const
 {
   return m_maximumScTxMcs;
 }
 
 uint8_t
-DmgCapabilities::GetMaximumOfdmTxMcs () const
+DmgCapabilities::GetMaximumOfdmTxMcs (void) const
 {
   return m_maximumOfdmTxMcs;
 }
 
 bool
-DmgCapabilities::GetLowPowerScSupported () const
+DmgCapabilities::GetLowPowerScSupported (void) const
 {
   return m_lowPower;
 }
 
 bool
-DmgCapabilities::GetCodeRate13_16Suppoted () const
+DmgCapabilities::GetCodeRate13_16Suppoted (void) const
 {
   return m_codeRate13_16;
 }
 
 bool
-DmgCapabilities::GetDtpSupported () const
+DmgCapabilities::GetDtpSupported (void) const
 {
   return m_dtpSupported;
 }
 
 bool
-DmgCapabilities::GetAppduSupported () const
+DmgCapabilities::GetAppduSupported (void) const
 {
   return m_appduSupported;
 }
 
 bool
-DmgCapabilities::GetHeartbeat () const
+DmgCapabilities::GetHeartbeat (void) const
 {
   return m_heartbeat;
 }
 
 bool
-DmgCapabilities::GetSupportsOtherAid () const
+DmgCapabilities::GetSupportsOtherAid (void) const
 {
   return m_supportsOtherAid;
 }
 
 bool
-DmgCapabilities::GetAntennaPatternReciprocity () const
+DmgCapabilities::GetAntennaPatternReciprocity (void) const
 {
   return m_antennaPatternReciprocity;
 }
 
 uint8_t
-DmgCapabilities::GetHeartbeatElapsedIndication () const
+DmgCapabilities::GetHeartbeatElapsedIndication (void) const
 {
   return m_heartbeatElapsedIndication;
 }
 
 bool
-DmgCapabilities::GetGrantAckSupported () const
+DmgCapabilities::GetGrantAckSupported (void) const
 {
   return m_GrantAckSupported;
 }
 
 bool
-DmgCapabilities::GetRXSSTxRateSupported () const
+DmgCapabilities::GetRXSSTxRateSupported (void) const
 {
   return m_RxssTxRateSupported;
 }
@@ -572,49 +572,49 @@ DmgCapabilities::SetCentralizedClustering (bool centralized)
 }
 
 bool
-DmgCapabilities::GetTDDTI () const
+DmgCapabilities::GetTDDTI (void) const
 {
   return m_tddti;
 }
 
 bool
-DmgCapabilities::GetPseudoStaticAllocations () const
+DmgCapabilities::GetPseudoStaticAllocations (void) const
 {
   return m_pseudoStaticAllocations;
 }
 
 bool
-DmgCapabilities::GetPcpHandover () const
+DmgCapabilities::GetPcpHandover (void) const
 {
   return m_pcpHandover;
 }
 
 uint8_t
-DmgCapabilities::GetMaxAssociatedStaNumber () const
+DmgCapabilities::GetMaxAssociatedStaNumber (void) const
 {
   return m_maxAssoicatedStaNumber;
 }
 
 bool
-DmgCapabilities::GetPowerSource () const
+DmgCapabilities::GetPowerSource (void) const
 {
   return m_powerSource;
 }
 
 bool
-DmgCapabilities::GetDecentralizedClustering () const
+DmgCapabilities::GetDecentralizedClustering (void) const
 {
   return m_decentralizedClustering;
 }
 
 bool
-DmgCapabilities::GetPcpForwarding () const
+DmgCapabilities::GetPcpForwarding (void) const
 {
   return m_pcpForwarding;
 }
 
 bool
-DmgCapabilities::GetCentralizedClustering () const
+DmgCapabilities::GetCentralizedClustering (void) const
 {
   return m_centralizedClustering;
 }

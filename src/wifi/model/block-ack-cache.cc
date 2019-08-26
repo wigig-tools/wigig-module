@@ -20,8 +20,8 @@
 
 #include "block-ack-cache.h"
 #include "ctrl-headers.h"
-#include "wifi-mac-header.h"
 #include "qos-utils.h"
+#include "wifi-utils.h"
 #include "ns3/log.h"
 
 #define WINSIZE_ASSERT NS_ASSERT ((m_winEnd - m_winStart + 4096) % 4096 == m_winSize - 1)
@@ -43,7 +43,6 @@ BlockAckCache::Init (uint16_t winStart, uint16_t winSize)
 uint16_t
 BlockAckCache::GetWinStart () const
 {
-  NS_LOG_FUNCTION (this << m_winStart);
   return m_winStart;
 }
 
@@ -52,11 +51,9 @@ BlockAckCache::UpdateWithMpdu (const WifiMacHeader *hdr)
 {
   NS_LOG_FUNCTION (this << hdr);
   uint16_t seqNumber = hdr->GetSequenceNumber ();
-  NS_LOG_DEBUG ("seqNumber=" << seqNumber << ", QosUtilsIsOldPacket=" << QosUtilsIsOldPacket (m_winStart, seqNumber));
   if (!QosUtilsIsOldPacket (m_winStart, seqNumber))
     {
-      NS_LOG_DEBUG ("IsInWindow=" << IsInWindow (seqNumber));
-      if (!IsInWindow (seqNumber))
+      if (!IsInWindow (seqNumber, m_winStart, m_winSize))
         {
           uint16_t delta = (seqNumber - m_winEnd + 4096) % 4096;
           if (delta > 1)
@@ -69,8 +66,6 @@ BlockAckCache::UpdateWithMpdu (const WifiMacHeader *hdr)
           WINSIZE_ASSERT;
         }
       m_bitmap[seqNumber] |= (0x0001 << hdr->GetFragmentNumber ());
-      NS_LOG_DEBUG ("bitmap[" << seqNumber << "]=" << m_bitmap[seqNumber]);
-      NS_LOG_DEBUG ("winStart=" << m_winStart << ", winEnd=" << m_winEnd);
     }
 }
 
@@ -80,7 +75,7 @@ BlockAckCache::UpdateWithBlockAckReq (uint16_t startingSeq)
   NS_LOG_FUNCTION (this << startingSeq);
   if (!QosUtilsIsOldPacket (m_winStart, startingSeq))
     {
-      if (IsInWindow (startingSeq))
+      if (IsInWindow (startingSeq, m_winStart, m_winSize))
         {
           if (startingSeq != m_winStart)
             {
@@ -113,13 +108,6 @@ BlockAckCache::ResetPortionOfBitmap (uint16_t start, uint16_t end)
       m_bitmap[i] = 0;
     }
   m_bitmap[i] = 0;
-}
-
-bool
-BlockAckCache::IsInWindow (uint16_t seq) const
-{
-  NS_LOG_FUNCTION (this << seq);
-  return ((seq - m_winStart + 4096) % 4096) < m_winSize;
 }
 
 void

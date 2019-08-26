@@ -86,9 +86,9 @@ HtCapabilities::HtCapabilities ()
     m_reservedASel (0),
     m_htSupported (0)
 {
-  for (uint32_t k = 0; k < MAX_SUPPORTED_MCS; k++)
+  for (uint8_t i = 0; i < MAX_SUPPORTED_MCS; i++)
     {
-      m_rxMcsBitmask[k] = 0;
+      m_rxMcsBitmask[i] = 0;
     }
 }
 
@@ -179,7 +179,7 @@ HtCapabilities::SetTxRxMcsSetUnequal (uint8_t txrxmcssetunequal)
 void
 HtCapabilities::SetTxMaxNSpatialStreams (uint8_t maxtxspatialstreams)
 {
-  m_txMaxNSpatialStreams = maxtxspatialstreams;
+  m_txMaxNSpatialStreams = maxtxspatialstreams - 1; //0 for 1 SS, 1 for 2 SSs, etc
 }
 
 void
@@ -234,6 +234,12 @@ uint8_t
 HtCapabilities::GetMaxAmpduLength (void) const
 {
   return m_maxAmpduLength;
+}
+
+uint8_t
+HtCapabilities::GetMinMpduStartSpace (void) const
+{
+  return m_minMpduStartSpace;
 }
 
 uint8_t*
@@ -292,7 +298,7 @@ HtCapabilities::GetTxRxMcsSetUnequal (void) const
 uint8_t
 HtCapabilities::GetTxMaxNSpatialStreams (void) const
 {
-  return m_txMaxNSpatialStreams;
+  return m_txMaxNSpatialStreams; //0 for 1 SS, 1 for 2 SSs, etc
 }
 
 uint8_t
@@ -592,7 +598,7 @@ ATTRIBUTE_HELPER_CPP (HtCapabilities);
  * output stream output operator
  *
  * \param os output stream
- * \param htcapabilities
+ * \param htcapabilities the HT capabilities
  *
  * \returns output stream
  */
@@ -603,9 +609,9 @@ operator << (std::ostream &os, const HtCapabilities &htcapabilities)
      << "|" << bool (htcapabilities.GetSupportedChannelWidth ())
      << "|" << bool (htcapabilities.GetGreenfield ())
      << "|" << bool (htcapabilities.GetShortGuardInterval20 ()) << "|";
-  for (uint32_t k = 0; k < MAX_SUPPORTED_MCS; k++)
+  for (uint8_t i = 0; i < MAX_SUPPORTED_MCS; i++)
     {
-      os << htcapabilities.IsSupportedMcs (k) << " ";
+      os << htcapabilities.IsSupportedMcs (i) << " ";
     }
   return os;
 }
@@ -614,7 +620,7 @@ operator << (std::ostream &os, const HtCapabilities &htcapabilities)
  * input stream input operator
  *
  * \param is input stream
- * \param htcapabilities
+ * \param htcapabilities the HT capabilities
  *
  * \returns input stream
  */

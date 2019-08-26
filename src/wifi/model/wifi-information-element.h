@@ -42,10 +42,14 @@ namespace ns3 {
  */
 typedef uint8_t WifiInformationElementId;
 
+/**
+ * This type is used to represent an Information Element ID Extension.
+ */
+typedef uint8_t WifiInformationElementIdExtension;
 
 /**
  * Here we have definition of all Information Element IDs in IEEE
- * 802.11-2007. See the comments for WifiInformationElementId - this could
+ * 802.11-2016. See the comments for WifiInformationElementId - this could
  * probably be done in a considerably tidier manner.
  */
 #define IE_SSID                                 ((WifiInformationElementId)0)
@@ -158,7 +162,7 @@ typedef uint8_t WifiInformationElementId;
 #define IE_MCCAOP_SETUP_REQUEST                 ((WifiInformationElementId)121)
 #define IE_MCCAOP_SETUP_REPLY                   ((WifiInformationElementId)122)
 #define IE_MCCAOP_ADVERTISEMENT                 ((WifiInformationElementId)123)
-#define IE_MCCAOP TEARDOWN                      ((WifiInformationElementId)124)
+#define IE_MCCAOP_TEARDOWN                      ((WifiInformationElementId)124)
 #define IE_GANN                                 ((WifiInformationElementId)125)
 #define IE_RANN                                 ((WifiInformationElementId)126)
 // 67 to 126 are reserved
@@ -190,6 +194,7 @@ typedef uint8_t WifiInformationElementId;
 #define IE_VENDOR_SPECIFIC                      ((WifiInformationElementId)221)
 // 222 to 255 are reserved
 #define IE_HE_CAPABILITIES                      ((WifiInformationElementId)255) //todo: not defined yet in the standard!
+#define IE_HE_OPERATION                         ((WifiInformationElementId)255) //todo: not defined yet in the standard!
 
 #define IE_EXTENDED_CAPABILITIES               ((WifiInformationElementId)127)
 // 143 to 190 are 802.11ad in 802.11-2012
@@ -220,10 +225,49 @@ typedef uint8_t WifiInformationElementId;
 #define IE_QUIET_PERIOD_REQUEST                ((WifiInformationElementId)175)
 #define IE_QUIET_PERIOD_RESPONSE               ((WifiInformationElementId)177)
 #define IE_ECPAC_POLICY                        ((WifiInformationElementId)182)
-// 128 to 190 are reserved in 802.11-2007
+// 128 to 190 are reserved in 802.11-2016
 #define IE_VHT_CAPABILITIES                    ((WifiInformationElementId)191)
 #define IE_VENDOR_SPECIFIC                     ((WifiInformationElementId)221)
-// 222 to 255 are reserved in 802.11-2007
+// 222 to 254 are reserved in 802.11-2016
+#define IE_EXTENSION                           ((WifiInformationElementId)255)
+
+/**
+ * Definition of the Element ID Extension field in 802.11ay_D2.0
+ */
+#define IE_EXTENSION_EDMG_CAPABILITIES                    ((WifiInformationElementIdExtension)10)
+#define IE_EXTENSION_EDMG_OPERATION                       ((WifiInformationElementIdExtension)11)
+#define IE_EXTENSION_EDMG_EXTENDED_SCHEDULE               ((WifiInformationElementIdExtension)12)
+#define IE_EXTENSION_EDMG_CHANNEL_MEASUREMENT_FEEDBACK    ((WifiInformationElementIdExtension)13)
+#define IE_EXTENSION_EDMG_GROUP_ID_SET                    ((WifiInformationElementIdExtension)14)
+#define IE_EXTENSION_EDMG_BRP_REQUEST                     ((WifiInformationElementIdExtension)15)
+#define IE_EXTENSION_EDMG_TRAINING_FIELD_SCHEDULE         ((WifiInformationElementIdExtension)16)
+#define IE_EXTENSION_EDMG_PARTIAL_SECTOR_SWEEP            ((WifiInformationElementIdExtension)17)
+#define IE_EXTENSION_MIMO_SETUP_CONTROL                   ((WifiInformationElementIdExtension)18)
+#define IE_EXTENSION_MIMO_POLL_CONTROL                    ((WifiInformationElementIdExtension)19)
+#define IE_EXTENSION_MIMO_FEEDBACK_CONTROL                ((WifiInformationElementIdExtension)20)
+#define IE_EXTENSION_MIMO_SELECTION_CONTROL               ((WifiInformationElementIdExtension)21)
+#define IE_EXTENSION_EDMG_FLOW_CONTROL_EXTENSION          ((WifiInformationElementIdExtension)22)
+#define IE_EXTENSION_QOS_TRIGGERED_UNSCHEDULED            ((WifiInformationElementIdExtension)23)
+#define IE_EXTENSION_UNSLICITED_BLOCK_ACK_EXTENSION       ((WifiInformationElementIdExtension)24)
+#define IE_EXTENSION_SEGMENATION_REASSEMBLY               ((WifiInformationElementIdExtension)25)
+#define IE_EXTENSION_TDD_SLOT_STRUCTURE                   ((WifiInformationElementIdExtension)26)
+#define IE_EXTENSION_TDD_SLOT_SCHEDULE                    ((WifiInformationElementIdExtension)27)
+#define IE_EXTENSION_TDD_ROUTE                            ((WifiInformationElementIdExtension)28)
+#define IE_EXTENSION_DIGITAL_BF_FEEDBACK                  ((WifiInformationElementIdExtension)29)
+#define IE_EXTENSION_TDD_BANDWIDTH_REQUEST                ((WifiInformationElementIdExtension)30)
+#define IE_EXTENSION_TDD_SYNCHRONIZATION                  ((WifiInformationElementIdExtension)31)
+#define IE_EXTENSION_EDMG_WIDE_BANDWIDTH_CHANNEL_SWITCH   ((WifiInformationElementIdExtension)32)
+#define IE_EXTENSION_DMG_DISCOVERY_ASSISTANCE             ((WifiInformationElementIdExtension)33)
+
+/**
+ * Deserialize IE ID, length and Extension ID. The iterator passed in  must be
+ * pointing at the Element ID of an information element.
+ *
+ * \param i an iterator which points to where the IE should be read.
+ *
+ * \return an iterator
+ */
+Buffer::Iterator DeserializeExtensionElementID (Buffer::Iterator i, uint8_t &elementID, uint8_t &length, uint8_t &extElementID);
 
 /**
  * Deserialize IE ID and length. The iterator passed in  must be
@@ -324,8 +368,15 @@ public:
   uint16_t GetSerializedSize () const;
 
   // Each subclass must implement these pure virtual functions:
-  /// Own unique Element ID
+  /**
+   * \returns Own unique Element ID
+   */
   virtual WifiInformationElementId ElementId () const = 0;
+
+  /**
+   * \returns Own unique Element ID extension.
+   */
+  virtual WifiInformationElementId ElementIdExtension () const;
   /**
    * Length of serialized information (i.e., the length of the body
    * of the IE, not including the Element ID and length octets. This
@@ -362,15 +413,6 @@ public:
    * \param os output stream
    */
   virtual void Print (std::ostream &os) const;
-  /**
-   * Compare information elements using Element ID
-   *
-   * \param a another information element to compare with
-   *
-   * \return true if the Element ID is less than the other IE Element ID,
-   *         false otherwise
-   */
-  virtual bool operator< (WifiInformationElement const & a) const;
   /**
    * Compare two IEs for equality by ID & Length, and then through
    * memcmp of serialised version

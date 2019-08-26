@@ -45,7 +45,7 @@ SensitivityModel60GHz::SensitivityModel60GHz ()
 }
 
 double
-SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, double snr, uint32_t nbits) const
+SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, double snr, uint64_t nbits) const
 {
   NS_ASSERT_MSG(mode.GetModulationClass () == WIFI_MOD_CLASS_DMG_CTRL ||
     mode.GetModulationClass() == WIFI_MOD_CLASS_DMG_SC ||
@@ -65,83 +65,83 @@ SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector
 
   /**** Control PHY ****/
   if (modename == "DMG_MCS0")
-      rss_delta = rss - -78;
+    rss_delta = rss - -78;
 
   /**** SC PHY ****/
   else if (modename == "DMG_MCS1")
-      rss_delta = rss - -68;
+    rss_delta = rss - -68;
   else if (modename == "DMG_MCS2")
-      rss_delta = rss - -66;
+    rss_delta = rss - -66;
   else if (modename == "DMG_MCS3")
-      rss_delta = rss - -65;
+    rss_delta = rss - -65;
   else if (modename == "DMG_MCS4")
-      rss_delta = rss - -64;
+    rss_delta = rss - -64;
   else if (modename == "DMG_MCS5")
-      rss_delta = rss - -62;
+    rss_delta = rss - -62;
   else if (modename == "DMG_MCS6")
-      rss_delta = rss - -63;
+    rss_delta = rss - -63;
   else if (modename == "DMG_MCS7")
-      rss_delta = rss - -62;
+    rss_delta = rss - -62;
   else if (modename == "DMG_MCS8")
-      rss_delta = rss - -61;
+    rss_delta = rss - -61;
   else if (modename == "DMG_MCS9")
-      rss_delta = rss - -59;
+    rss_delta = rss - -59;
   else if (modename == "DMG_MCS10")
-      rss_delta = rss - -55;
+    rss_delta = rss - -55;
   else if (modename == "DMG_MCS11")
-      rss_delta = rss - -54;
+    rss_delta = rss - -54;
   else if (modename == "DMG_MCS12")
-      rss_delta = rss - -53;
+    rss_delta = rss - -53;
 
   /**** OFDM PHY ****/
   else if (modename == "DMG_MCS13")
-      rss_delta = rss - -66;
+    rss_delta = rss - -66;
   else if (modename == "DMG_MCS14")
-      rss_delta = rss - -64;
+    rss_delta = rss - -64;
   else if (modename == "DMG_MCS15")
-      rss_delta = rss - -63;
+    rss_delta = rss - -63;
   else if (modename == "DMG_MCS16")
-      rss_delta = rss - -62;
+    rss_delta = rss - -62;
   else if (modename == "DMG_MCS17")
-      rss_delta = rss - -60;
+    rss_delta = rss - -60;
   else if (modename == "DMG_MCS18")
-      rss_delta = rss - -58;
+    rss_delta = rss - -58;
   else if (modename == "DMG_MCS19")
-      rss_delta = rss - -56;
+    rss_delta = rss - -56;
   else if (modename == "DMG_MCS20")
-      rss_delta = rss - -54;
+    rss_delta = rss - -54;
   else if (modename == "DMG_MCS21")
-      rss_delta = rss - -53;
+    rss_delta = rss - -53;
   else if (modename == "DMG_MCS22")
-      rss_delta = rss - -51;
+    rss_delta = rss - -51;
   else if (modename == "DMG_MCS23")
-      rss_delta = rss - -49;
+    rss_delta = rss - -49;
   else if (modename == "DMG_MCS24")
-      rss_delta = rss - -47;
+    rss_delta = rss - -47;
 
   /**** Low power PHY ****/
   else if (modename == "DMG_MCS25")
-      rss_delta = rss - -64;
+    rss_delta = rss - -64;
   else if (modename == "DMG_MCS26")
-      rss_delta = rss - -60;
+    rss_delta = rss - -60;
   else if (modename == "DMG_MCS27")
-      rss_delta = rss - -57;
+    rss_delta = rss - -57;
   else if (modename == "DMG_MCS28")
-      rss_delta = rss - -57;
+    rss_delta = rss - -57;
   else if (modename == "DMG_MCS29")
-      rss_delta = rss - -57;
+    rss_delta = rss - -57;
   else if (modename == "DMG_MCS30")
-      rss_delta = rss - -57;
+    rss_delta = rss - -57;
   else if (modename == "DMG_MCS31")
-      rss_delta = rss - -57;
+    rss_delta = rss - -57;
   else
-      NS_FATAL_ERROR("Unrecognized 60 GHz modulation");
+    NS_FATAL_ERROR("Unrecognized 60 GHz modulation");
 
   /* Compute BER in lookup table */
   if ((rss_delta < -12.0) || (snr < 0))
-      ber = sensitivity_ber (0);
+    ber = sensitivity_ber (0);
   else if (rss_delta > 6.0)
-      ber = sensitivity_ber (180);
+    ber = sensitivity_ber (180);
   else
     ber = sensitivity_ber ((int) std::abs((10 * (rss_delta + 12))));
 

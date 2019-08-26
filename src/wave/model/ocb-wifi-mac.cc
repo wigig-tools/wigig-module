@@ -37,6 +37,7 @@ NS_LOG_COMPONENT_DEFINE ("OcbWifiMac");
 
 NS_OBJECT_ENSURE_REGISTERED (OcbWifiMac);
 
+/// Wildcard BSSID
 const static Mac48Address WILDCARD_BSSID = Mac48Address::GetBroadcast ();
 
 TypeId
@@ -69,7 +70,7 @@ OcbWifiMac::SendVsc (Ptr<Packet> vsc, Mac48Address peer, OrganizationIdentifier 
 {
   NS_LOG_FUNCTION (this << vsc << peer << oi);
   WifiMacHeader hdr;
-  hdr.SetAction ();
+  hdr.SetType (WIFI_MAC_MGT_ACTION);
   hdr.SetAddr1 (peer);
   hdr.SetAddr2 (GetAddress ());
   hdr.SetAddr3 (WILDCARD_BSSID);
@@ -206,7 +207,7 @@ OcbWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to)
     }
   else
     {
-      hdr.SetTypeData ();
+      hdr.SetType (WIFI_MAC_DATA);
     }
 
   if (m_htSupported || m_vhtSupported)

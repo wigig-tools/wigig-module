@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef DMG_ADHOC_WIFI_MAC_H
@@ -34,6 +34,11 @@ public:
   virtual ~DmgAdhocWifiMac ();
 
   /**
+   * Get Association Identifier (AID).
+   * \return The AID of the station.
+   */
+  virtual uint16_t GetAssociationID (void);
+  /**
    * \param address the current address of this MAC layer.
    */
   virtual void SetAddress (Mac48Address address);
@@ -54,8 +59,8 @@ public:
    * \param rxAntennaID The ID of the receive phased antenna array..
    * \param address The MAC address of the peer DMG AD-HOC STA.
    */
-  void AddAntennaConfig (SECTOR_ID txSectorID, ANTENNA_ID txAntennaID,
-                         SECTOR_ID rxSectorID, ANTENNA_ID rxAntennaID,
+  void AddAntennaConfig (SectorID txSectorID, AntennaID txAntennaID,
+                         SectorID rxSectorID, AntennaID rxAntennaID,
                          Mac48Address address);
 
 protected:

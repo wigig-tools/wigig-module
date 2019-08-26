@@ -88,40 +88,38 @@ BasicEnergyUpdateTest::DoRun (void)
   m_energySource.SetTypeId ("ns3::BasicEnergySource");
   m_deviceEnergyModel.SetTypeId ("ns3::WifiRadioEnergyModel");
 
-  uint8_t ret = 0;
-
   // run state switch tests
   if (StateSwitchTest (WifiPhy::IDLE))
     {
-      ret = 1;
+      return 1;
       std::cerr << "Problem with state switch test (WifiPhy idle)." << std::endl;
     }
   if (StateSwitchTest (WifiPhy::CCA_BUSY))
     {
-      ret = 1;
+      return 1;
       std::cerr << "Problem with state switch test (WifiPhy cca busy)." << std::endl;
     }
   if (StateSwitchTest (WifiPhy::TX))
     {
-      ret = 1;
+      return 1;
       std::cerr << "Problem with state switch test (WifiPhy tx)." << std::endl;
     }
   if (StateSwitchTest (WifiPhy::RX))
     {
-      ret = 1;
+      return 1;
       std::cerr << "Problem with state switch test (WifiPhy rx)." << std::endl;
     }
   if (StateSwitchTest (WifiPhy::SWITCHING))
     {
-      ret = 1;
+      return 1;
       std::cerr << "Problem with state switch test (WifiPhy switching)." << std::endl;
     }
   if (StateSwitchTest (WifiPhy::SLEEP))
     {
-      ret = 1;
+      return 1;
       std::cerr << "Problem with state switch test (WifiPhy sleep)." << std::endl;
     }
-  return ret;
+  return 0;
 }
 
 bool
@@ -132,8 +130,10 @@ BasicEnergyUpdateTest::StateSwitchTest (WifiPhy::State state)
 
   // create energy source
   Ptr<BasicEnergySource> source = m_energySource.Create<BasicEnergySource> ();
+  source->SetInitialEnergy (50);
   // aggregate energy source to node
   node->AggregateObject (source);
+  source->SetNode (node);
 
   // create device energy model
   Ptr<WifiRadioEnergyModel> model =
@@ -187,7 +187,6 @@ BasicEnergyUpdateTest::StateSwitchTest (WifiPhy::State state)
   double voltage = source->GetSupplyVoltage ();
   estRemainingEnergy -= devModel->GetIdleCurrentA () * voltage * m_timeS;
 
-
   // calculate new state power consumption
   double current = 0.0;
   switch (state)
@@ -210,11 +209,15 @@ BasicEnergyUpdateTest::StateSwitchTest (WifiPhy::State state)
     case WifiPhy::SLEEP:
       current = devModel->GetSleepCurrentA ();
       break;
+    case WifiPhy::OFF:
+      current = 0;
+      break;
     default:
       NS_FATAL_ERROR ("Undefined radio state: " << state);
       break;
     }
   estRemainingEnergy -= current * voltage * m_timeS;
+  estRemainingEnergy = std::max(0.0, estRemainingEnergy);
 
   // obtain remaining energy from source
   double remainingEnergy = source->GetRemainingEnergy ();
@@ -354,14 +357,14 @@ BasicEnergyDepletionTest::DepletionTestCase (double simTimeS,
   WifiHelper wifi;
   wifi.SetStandard (WIFI_PHY_STANDARD_80211b);
 
-  YansWifiPhyHelper wifiPhy =  YansWifiPhyHelper::Default ();
+  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
   /*
    * This is one parameter that matters when using FixedRssLossModel, set it to
    * zero; otherwise, gain will be added.
    */
   wifiPhy.Set ("RxGain", DoubleValue (0));
   // ns-3 supports RadioTap and Prism tracing extensions for 802.11b
-  wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+  wifiPhy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
 
   YansWifiChannelHelper wifiChannel;
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");

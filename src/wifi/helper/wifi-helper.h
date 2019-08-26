@@ -34,6 +34,15 @@ class WifiNetDevice;
 class Node;
 
 /**
+ * An enumeration of the ASCII trace types.
+ */
+enum SupportedAsciiTraceTypes
+{
+  ASCII_TRACE_LEGACY = 0,
+  ASCII_TRACE_PHY_ACTIVITY = 1,
+};
+
+/**
  * \brief create PHY objects
  *
  * This base class must be implemented by new PHY implementation which wish to integrate
@@ -120,7 +129,23 @@ public:
    *
    * @param dlt The data link type of the pcap file (and packets) to be used
    */
-  void SetPcapDataLinkType (enum SupportedPcapDataLinkTypes dlt);
+  void SetPcapDataLinkType (SupportedPcapDataLinkTypes dlt);
+
+  /**
+   * Set the type of the ascii trace to be printed. This function has to be
+   * called before EnableAscii(), so that the type of the ascii trace file
+   * can be written correctly.
+   *
+   * \param traceType The type of the ascrii trace to be printed.
+   */
+  void SetAsciiTraceType (SupportedAsciiTraceTypes traceType);
+
+  /**
+   * Set the maximum length of packet data stored in the PCAP file.
+   *
+   * \param length The length of the snapshot in bytes.
+   */
+  void SetSnapshotLength (uint32_t length);
 
   /**
    * Get the data link type of PCAP traces to be used.
@@ -130,6 +155,25 @@ public:
    * @returns The data link type of the pcap file (and packets) to be used
    */
   PcapHelper::DataLinkType GetPcapDataLinkType (void) const;
+  /**
+   * Get the maximum length of packet data stored in the PCAP file.
+   *
+   * \return length The length of the snapshot in bytes.
+   */
+  uint32_t GetSnapshotLength (void) const;
+  /**
+   * Enable pcap output for the indicated net device.
+   *
+   * NetDevice-specific implementation mechanism for hooking the trace and
+   * writing to the trace file.
+   *
+   * \param prefix Filename prefix to use for pcap files.
+   * \param nd Net device for which you want to enable tracing.
+   * \param promiscuous If true capture all possible packets available at the device.
+   */
+  void EnableMultiBandPcap (std::string prefix,
+                            Ptr<NetDevice> nd,
+                            Ptr<WifiPhy> phy);
 
 protected:
   /**
@@ -166,6 +210,8 @@ protected:
   ObjectFactory m_phy; ///< PHY object
   ObjectFactory m_errorRateModel; ///< error rate model
   PcapHelper::DataLinkType m_pcapDlt; ///< PCAP data link type
+  SupportedAsciiTraceTypes m_asciiTraceType;  ///< ASCII Trace type.
+  uint32_t m_snaplen; ///< Snapshot length in bytes.
 
 private:
   /**
@@ -226,19 +272,6 @@ public:
   WifiHelper ();
 
   /**
-   * \returns a new WifiHelper in a default state
-   *
-   * The default state is defined as being an Adhoc MAC layer with an ARF rate control algorithm
-   * and both objects using their default attribute values. By default, configure MAC and PHY
-   * for 802.11a.
-   *
-   * \deprecated This method will go away in future versions of ns-3.
-   * The constructor of the class is now performing the same job, which makes this function useless.
-   */
-  NS_DEPRECATED
-  static WifiHelper Default (void);
-
-  /**
    * \param type the type of ns3::WifiRemoteStationManager to create.
    * \param n0 the name of the attribute to set
    * \param v0 the value of the attribute to set
@@ -277,8 +310,8 @@ public:
    * \returns a device container which contains all the devices created by this method.
    */
   NetDeviceContainer
-  virtual Install (const WifiPhyHelper &phyHelper,
-                       const WifiMacHelper &macHelper,
+  virtual Install (const WifiPhyHelper &phy,
+                       const WifiMacHelper &mac,
                        NodeContainer::Iterator first,
                        NodeContainer::Iterator last) const;
   /**
@@ -329,7 +362,7 @@ public:
    * \sa WifiMac::ConfigureStandard
    * \sa Config::Set
    */
-  virtual void SetStandard (enum WifiPhyStandard standard);
+  virtual void SetStandard (WifiPhyStandard standard);
 
   /**
    * Helper to enable all WifiNetDevice log components with one statement
@@ -355,7 +388,7 @@ public:
 
 protected:
   ObjectFactory m_stationManager; ///< station manager
-  enum WifiPhyStandard m_standard; ///< wifi standard
+  WifiPhyStandard m_standard; ///< wifi standard
 };
 
 } //namespace ns3

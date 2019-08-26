@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -12,7 +12,7 @@
 
 /**
  * Simulation Objective:
- * This script is used to evaluate allocation of Static Beamforming Service Periods in IEEE 802.11ad.
+ * This script is used to evaluate allocation of Beamforming Service Periods in IEEE 802.11ad.
  *
  * Network Topology:
  * The scenario consists of 2 DMG STAs (West + East) and one PCP/AP as following:
@@ -32,16 +32,15 @@
  *
  * Running the Simulation:
  * To run the script with the default parameters:
- * ./waf --run "evaluate_service_period_udp"
+ * ./waf --run "evaluate_beamforming_sp"
  *
  * Simulation Output:
  * The simulation generates the following traces:
- * 1. PCAP traces for each station. From the PCAP files, we can see that data transmission takes place
- * during its SP. In addition, we can notice in the announcement of the two Static Allocation Periods
- * inside each DMG Beacon.
+ * 1. PCAP traces for each station. From the PCAP files, we can see the allocation of beamforming service periods.
+ * 2. SNR Dump for each sector.
  */
 
-NS_LOG_COMPONENT_DEFINE ("EvaluateServicePeriod");
+NS_LOG_COMPONENT_DEFINE ("BeamformingSP");
 
 using namespace ns3;
 using namespace std;
@@ -66,10 +65,10 @@ bool scheduledStaticPeriods = false;      /* Flag to indicate whether we schedul
 uint8_t beamformedLinks = 0;              /* Number of beamformed links */
 
 void
-StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
+StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t aid)
 {
   std::cout << "DMG STA " << staWifiMac->GetAddress () << " associated with DMG AP " << address << std::endl;
-  std::cout << "Association ID (AID) = " << staWifiMac->GetAssociationID () << std::endl;
+  std::cout << "Association ID (AID) = " << aid << std::endl;
   assoicatedStations++;
   /* Map AID to MAC Addresses in each node instead of requesting information */
   Ptr<DmgStaWifiMac> dmgStaMac;
@@ -86,6 +85,14 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
   if (assoicatedStations == 2)
     {
       std::cout << "All stations got associated with " << address << std::endl;
+      /* Add manually DMG Capabilities */
+      westWifiMac->StorePeerDmgCapabilities (eastWifiMac);
+      westWifiMac->StorePeerDmgCapabilities (apWifiMac);
+      eastWifiMac->StorePeerDmgCapabilities (westWifiMac);
+      eastWifiMac->StorePeerDmgCapabilities (apWifiMac);
+      apWifiMac->StorePeerDmgCapabilities (eastWifiMac);
+      apWifiMac->StorePeerDmgCapabilities (westWifiMac);
+
       /*** Schedule Beamforming Training SPs ***/
       uint32_t startTime =0;
       /* SP1: DMG West STA -----> DMG East STA (SP Length = 3.2ms) */
@@ -99,13 +106,26 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
 }
 
 void
-SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
-  if (accessPeriod == CHANNEL_ACCESS_DTI)
+  if (accessPeriod == CHANNEL_ACCESS_BHI)
+    {
+      if (wifiMac == apWifiMac)
+        {
+          std::cout << "DMG AP " << apWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
+        }
+      else
+        {
+          std::cout << "DMG STA " << wifiMac->GetAddress () << " completed SLS phase with DMG AP " << address << std::endl;
+        }
+      std::cout << "Best Tx Antenna Configuration: SectorID=" << uint (sectorId) << ", AntennaID=" << uint (antennaId) << std::endl;
+    }
+  else if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
       beamformedLinks++;
-      std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
+      std::cout << "DMG STA " << wifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
       std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
                 << ", AntennaID=" << uint32_t (antennaId) << std::endl;
       if (beamformedLinks == 6)
@@ -126,7 +146,7 @@ main (int argc, char *argv[])
 
   /* Command line argument parser setup. */
   CommandLine cmd;
-  cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
+  cmd.AddValue ("verbose", "Turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
   cmd.Parse (argc, argv);
@@ -135,8 +155,8 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
 
-  /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  /**** DmgWifiHelper is a meta-helper ****/
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -145,40 +165,32 @@ main (int argc, char *argv[])
   if (verbose)
     {
       wifi.EnableLogComponents ();
-      LogComponentEnable ("EvaluateServicePeriod", LOG_LEVEL_ALL);
+      LogComponentEnable ("BeamformingSP", LOG_LEVEL_ALL);
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup physical layer ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue ("DMG_MCS12"),
                                                                 "DataMode", StringValue ("DMG_MCS12"));
-  /* Give all nodes directional antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -197,8 +209,13 @@ main (int argc, char *argv[])
                    "BE_MaxAmpduSize", UintegerValue (0),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                    "ATIPresent", BooleanValue (false));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (8));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);

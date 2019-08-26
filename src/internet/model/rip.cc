@@ -144,9 +144,9 @@ void Rip::DoInitialize ()
               Ptr<Node> theNode = GetObject<Node> ();
               Ptr<Socket> socket = Socket::CreateSocket (theNode, tid);
               InetSocketAddress local = InetSocketAddress (address.GetLocal (), RIP_PORT);
+              socket->BindToNetDevice (m_ipv4->GetNetDevice (i));
               int ret = socket->Bind (local);
               NS_ASSERT_MSG (ret == 0, "Bind unsuccessful");
-              socket->BindToNetDevice (m_ipv4->GetNetDevice (i));
               socket->SetIpRecvTtl (true);
               m_sendSocketList[socket] = i;
             }
@@ -343,8 +343,8 @@ void Rip::NotifyInterfaceUp (uint32_t i)
           Ptr<Node> theNode = GetObject<Node> ();
           Ptr<Socket> socket = Socket::CreateSocket (theNode, tid);
           InetSocketAddress local = InetSocketAddress (address.GetLocal (), RIP_PORT);
-          socket->Bind (local);
           socket->BindToNetDevice (m_ipv4->GetNetDevice (i));
+          socket->Bind (local);
           socket->SetIpRecvTtl (true);
           m_sendSocketList[socket] = i;
         }
@@ -784,15 +784,15 @@ void Rip::HandleRequests (RipHeader requestHdr, Ipv4Address senderAddress, uint1
             {
               // we use one of the sending sockets, as they're bound to the right interface
               // and the local address might be used on different interfaces.
-              Ptr<Socket> sendingSoket;
+              Ptr<Socket> sendingSocket;
               for (SocketListI iter = m_sendSocketList.begin (); iter != m_sendSocketList.end (); iter++ )
                 {
                   if (iter->second == incomingInterface)
                     {
-                      sendingSoket = iter->first;
+                      sendingSocket = iter->first;
                     }
                 }
-              NS_ASSERT_MSG (sendingSoket, "HandleRequest - Impossible to find a socket to send the reply");
+              NS_ASSERT_MSG (sendingSocket, "HandleRequest - Impossible to find a socket to send the reply");
 
               uint16_t mtu = m_ipv4->GetMtu (incomingInterface);
               uint16_t maxRte = (mtu - Ipv4Header ().GetSerializedSize () - UdpHeader ().GetSerializedSize () - RipHeader ().GetSerializedSize ()) / RipRte ().GetSerializedSize ();
@@ -849,7 +849,7 @@ void Rip::HandleRequests (RipHeader requestHdr, Ipv4Address senderAddress, uint1
                     {
                       p->AddHeader (hdr);
                       NS_LOG_DEBUG ("SendTo: " << *p);
-                      sendingSoket->SendTo (p, 0, InetSocketAddress (senderAddress, RIP_PORT));
+                      sendingSocket->SendTo (p, 0, InetSocketAddress (senderAddress, RIP_PORT));
                       p->RemoveHeader (hdr);
                       hdr.ClearRtes ();
                     }
@@ -858,7 +858,7 @@ void Rip::HandleRequests (RipHeader requestHdr, Ipv4Address senderAddress, uint1
                 {
                   p->AddHeader (hdr);
                   NS_LOG_DEBUG ("SendTo: " << *p);
-                  sendingSoket->SendTo (p, 0, InetSocketAddress (senderAddress, RIP_PORT));
+                  sendingSocket->SendTo (p, 0, InetSocketAddress (senderAddress, RIP_PORT));
                 }
             }
         }

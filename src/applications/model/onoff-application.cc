@@ -41,6 +41,7 @@
 #include "ns3/udp-socket-factory.h"
 #include "ns3/string.h"
 #include "ns3/pointer.h"
+#include "ns3/seq-ts-header.h"
 
 namespace ns3 {
 
@@ -137,6 +138,12 @@ uint64_t
 OnOffApplication::GetTotalTxPackets (void) const
 {
   return m_txPackets;
+}
+
+uint64_t
+OnOffApplication::GetTotalTxBytes (void) const
+{
+  return m_totBytes;
 }
 
 int64_t 
@@ -293,6 +300,16 @@ void OnOffApplication::SendPacket ()
   NS_LOG_FUNCTION (this);
 
   NS_ASSERT (m_sendEvent.IsExpired ());
+
+//  static uint32_t m_seq = 0;
+//  SeqTsHeader header;
+//  header.SetSeq (m_seq++);
+//  NS_ABORT_IF (m_pktSize < header.GetSerializedSize ());
+//  Ptr<Packet> packet = Create<Packet> (m_pktSize - header.GetSerializedSize ());
+//  packet->AddHeader (header);
+//  NS_ABORT_IF (packet->GetSize () != m_pktSize);
+//  NS_LOG_UNCOND ("TRX: " << header.GetSeq () << " " << header.GetTs ().GetSeconds ());
+
   Ptr<Packet> packet = Create<Packet> (m_pktSize);
   m_txTrace (packet);
   m_socket->Send (packet);

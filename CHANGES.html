@@ -51,19 +51,193 @@ to this file based on your experience, please contribute a patch or drop
 us a note on ns-developers mailing list.</p>
 
 <hr>
-<h1>Changes from ns-3.26 to ns-3.27</h1>
+<h1>Changes from ns-3.27 to ns-3-dev</h1>
 <h2>New API:</h2>
 <ul>
+  <li> When deserializing Packet contents, <b>Header::Deserialize (Buffer::Iterator start)</b> and <b>Trailer::Deserialize (Buffer::Iterator start)</b> can not successfully deserialize variable-length headers and trailers.  New variants of these methods that also include an 'end' parameter are now provided.</li>
+  <li> Ipv[4,6]AddressGenerator can now check if an address is allocated (<b>Ipv[4,6]AddressGenerator::IsAddressAllocated</b>) or a network has some allocated address (<b>Ipv[4,6]AddressGenerator::IsNetworkAllocated</b>).</li>
+  <li> LTE UEs can now use IPv6 to send and receive traffic.
 </ul>
 <h2>Changes to existing API:</h2>
 <ul>
+  <li> Class <b>LrWpanMac</b> now supports extended addressing mode. Both <b>McpsDataRequest</b> and <b>PdDataIndication</b> methods will now use extended addressing if <b>McpsDataRequestParams::m_srcAddrMode</b> or <b>McpsDataRequestParams::m_dstAddrMode</b> are set to <b>EXT_ADDR</b>.</li>
+  <li> Class <b>LteUeNetDevice</b> MAC address is now a 64-bit address and it's set during construction.</li>
 </ul>
 <h2>Changes to build system:</h2>
 <ul>
 </ul>
 <h2>Changed behavior:</h2>
-This section is for behavioral changes to the models that were not due to a bug fix.
 <ul>
+</ul>
+
+<hr>
+<h1>Changes from ns-3.26 to ns-3.27</h1>
+<h2>New API:</h2>
+<ul>
+<li>Added <code>Vector{2,3}D.GetLength ()</code>.</li>
+<li>Overloaded <code>operator+</code> and <code>operator-</code> for <code>Vector{2,3}D</code>.</li>
+<li>Added iterator version of WifiHelper::Install() to install Wi-Fi devices on range of nodes.</li>
+<li>Added a new attribute in TcpSocketBase to track the advertised window.</li>
+<li>Included the model of <b>TCP Ledbat</b>.</li>
+<li>Included the TCP SACK-based loss recovery algorithm outlined in RFC 6675.</li>
+<li>Added <b>TCP SACK</b> and the <b>SACK emulation</b>. Added an Attribute to TcpSocketBase class,
+    called "Sack", to enable or disable the SACK option usage.</li>
+<li>In 'src/wifi', several changes were made to enable partial <b>802.11ax</b> High Effiency (HE) support:
+    <ul>
+      <li>A new standard value has been added that enables the new 11ax data rates.</li>
+      <li>A new 11ax preamble has been added.</li>
+      <li>A new attribute was added to configure the guard interval duration for High Efficiency (HE) PHY entities. This attribute can be set using the YansWifiPhyHelper.</li>
+      <li>A new information element has been added:  HeCapabilities. This information element is added to the MAC frame header if the node is a HE node. This HeCapabilites information element is used to advertise the HE capabilites of the node to other nodes in the network.</li>
+    </ul>
+</li>
+<li> A new class were added for the RRPAA WiFi rate control mechanism.</li>
+<li>Included carrier aggregation feature in LTE module</li>
+    <ul>
+      <li>LTE model is extended to support carrier aggregation feature according to 3GPP Release 10, for up to 5 component 
+      carriers. </li>
+      <li>InstallSingleEnbDevice and InstalSingeUeDevice functions of LteHelper are now constructing LteEnbDevice and LteUeDevice 
+      according to CA architecture. Each device, UE and eNodeB contains an instance of component carrier manager, and may 
+      have several component carrier instances.</li>
+      <li>SAP interfaces are extended to include CA message exchange funtionality.</li>
+      <li>RRC connection procedure is extended to allow RRC connection reconfiguration for the configuration of the secondary carriers.</li>
+      <li>RRC measurement reporting is extended to allow measurement reporting from the secondary carriers.</li>
+      <li>LTE traces are extended to include component carrier id.</li>
+    </ul>
+</li>
+<li>Function <b>PrintRoutingTable</b> has been extended to add an optional Time::Units
+    parameter to specify the time units used on the report.  The new parameter is
+    optional and if not specified defaults to the previous behavior (Time::S).
+</li>
+<li><b>TxopTrace</b>: new trace source exported by EdcaTxopN.</li>
+<li>A <b>GetDscpCounts</b> method is added to <b>Ipv4FlowClassifier</b> and <b>Ipv6FlowClassifier</b>
+    which returns a vector of pairs (dscp,count), each of which indicates how many packets with the
+    associated dscp value have been classified for a given flow.
+</li>
+<li>MqQueueDisc, a multi-queue aware queue disc modelled after the mq qdisc in Linux, has been introduced.
+</li>
+<li>Two new methods, <b>QueueDisc::DropBeforeEnqueue()</b> and <b>QueueDisc::DropAfterDequeue()</b> have
+    been introduced to replace <b>QueueDisc::Drop()</b>. These new methods require the caller to specify the
+    reason why a packet was dropped. Correspondingly, two new trace sources ("DropBeforeEnqueue" and
+    "DropAfterDequeue") have been added to the QueueDisc class, providing both the items that were dropped
+    and the reason why they were dropped. 
+</li>
+<li>Added <b>QueueDisc::GetStats()</b> which returns detailed statistics about the operations of
+    a queue disc. Statistics can be accessed through the member variables of the returned object and
+    by calling the <b>GetNDroppedPackets()</b>, <b>GetNDroppedBytes()</b>, <b>GetNMarkedPackets()</b> and <b>GetNMarkedBytes()</b> methods on the returned object. Such methods return the number of packets/bytes
+    dropped/marked for the specified reason (passed as argument). Consequently:
+    <ul>
+      <li>A number of methods of the QueueDisc class have been removed: <b>GetTotalReceivedPackets()</b>,
+      <b>GetTotalReceivedBytes()</b>, <b>GetTotalDroppedPackets()</b>, <b>GetTotalDroppedBytes()</b>,
+      <b>GetTotalRequeuedPackets()</b>, <b>GetTotalRequeuedBytes()</b>.</li>
+      <li>The <b>Stats</b> struct and the <b>GetStats()</b> method of <b>RedQueueDisc</b> and <b>PieQueueDisc</b> have been removed and replaced by those of the QueueDisc base class.</li>
+      <li>The <b>GetDropOverLimit</b> and <b>GetDropCount</b> methods of <b>CoDelQueueDisc</b> have been removed.
+      The values they returned can be obtained by calling, respectively,
+      GetStats ().GetNDroppedPackets (CoDelQueueDisc::OVERLIMIT_DROP) and
+      GetStats ().GetNDroppedPackets (CoDelQueueDisc::TARGET_EXCEEDED_DROP). The "DropCount" trace of
+      <b>CoDelQueueDisc</b> has been removed as well. Packets dropped because the target is exceeded can
+      be obtained through the new "DropAfterDequeue" trace of the QueueDisc class.</li>
+    </ul>
+</li>
+<li> The new <b>QueueDisc::Mark()</b> method has been introduced to allow subclasses to request to mark a packet.
+     The  caller must specify the reason why the packet must be marked. Correspondingly, a new trace source ("Mark")
+     has been added to the QueueDisc class, providing both the items that were marked and the reason why they
+     were marked.
+</li>
+<li>A new trace source, <b>SojournTime</b>, is exported by the QueueDisc base class to provide the
+    sojourn time of every packet dequeued from a queue disc. This has been made possible by adding a
+    timestamp to QueueDiscItem objects, which can be set/get through the new <b>GetTimeStamp()</b> and
+    <b>SetTimeStamp()</b> methods of the QueueDiscItem class. The <b>CoDel</b> queue disc now makes use of such feature of the base class, hence its Sojourn trace source and the CoDelTimestampTag class
+    have been removed.
+</li>
+</ul>
+<h2>Changes to existing API:</h2>
+<ul>
+<li><b>ParetoRandomVariable</b> "Mean" attribute has been deprecated, 
+    the "Scale" Attribute have to be used instead.
+    Changing the Mean attribute has no more an effect on the distribution.
+    See the documentation for the relationship between Mean, Scale and Shape. 
+</li>
+<li>The default logging timestamp precision has been changed from 6 digits
+    to 9 digits, with a fixed format to ensure that 9 digits to the right of
+    the decimal point are always printed.  Previously, default C++ iostream
+    precision and formatting was used.
+</li>
+<li>Abstract base class <b>WifiChannel</b> has been removed. As a result, a Channel type instead of a WifiChannel type
+is now exported by WifiNetDevice.</li>
+<li> The <b>GetPacketSize</b> method of <b>QueueItem</b> has been renamed <b>GetSize</b>
+</li>
+<li> The <b>DequeueAll</b> method of <b>Queue</b> has been renamed <b>Flush</b>
+</li>
+<li>The attributes <b>WifiPhy::TxAntennas</b> and <b>WifiPhy::RxAntennas</b>,
+    and the related accessor methods, were replaced by <b>WifiPhy::MaxSupportedTxSpatialStreams</b>
+    and <b>WifiPhy::MaxSupportedRxSpatialStreams</b>. A new attribute <b>WifiPhy::Antennas</b>
+    was added to allow users to define the number of physical antennas on the device.
+</li>
+<li>Sockets do not receive anymore broadcast packets, unless they are bound to an "Any" address (0.0.0.0)
+    or to a subnet-directed broadcast packet (e.g., x.y.z.0 for a /24 noterok).
+    As in Linux, the following rules are now enforced:
+    <ul>
+    <li> A socket bound to 0.0.0.0 will receive everything.</li>
+    <li> A socket bound to x.y.z.0/24 will receive subnet-directed broadcast (x.y.z.255) and unicast packets.</li>
+    <li> A socket bound to x.y.z.w will only receive unicast packets.</li>
+    </ul> 
+    <b>Previously, a socket bound to an unicast address received also subnet-directed broadcast packets. 
+    This is not anymore possible</b>.
+</li>
+<li>You can now Bind as many socket as you want to an address/port, provided that they are bound to different NetDevices.
+    Moreover, BindToNetDevice does not anymore call Bind. In other terms, Bind and BindToNetDevice can be called
+    in any order.
+    However, it is suggested to use BindToNetDevice <i>before</i> Bind in order to avoid conflicts.
+</li>
+</ul>
+<h2>Changes to build system:</h2>
+<ul>
+<li> The API scanning process for Python bindings now relies on CastXML, and only 64-bit scans are presently supported (Linux 64-bit systems).  Generation of 32-bit scans is documented in the Python chapter of the ns-3 manual.
+</li>
+<li> Modules can now be located in the 'contrib/' directory in addition to 'src/'
+</li>
+<li> Behavior for running Python programs was aligned with that of C++ programs; the list of modules built is no longer printed out.
+</li>
+</ul>
+<h2>Changed behavior:</h2>
+<ul>
+<li><b>MultiModelSpectrumChannel</b> does not call StartRx for receivers that
+    operate on subbands orthogonal to transmitter subbands. Models that depend
+    on receiving signals with zero power spectral density from orthogonal bands
+    may change their behavior.
+    See <a href=https://www.nsnam.org/bugzilla/show_bug.cgi?id=2467>bug 2467</a>
+    for discussion.
+</li>
+<li><b>Packet Tag objects</b> are no longer constrained to fit within 21 
+    bytes; a maximum size is no longer enforced.
+</li>
+  <li> The default value of the <b>TxGain</b> and <b>RxGain</b> attributes in WifiPhy was changed from 1 dB to 0 dB.
+  </li>
+  <li> The reported SNR by WifiPhy::MonitorSnifferRx did not include the RxNoiseFigure, but now does; see <a href=https://www.nsnam.org/bugzilla/show_bug.cgi?id=2783>bug 2783</a> for discussion.
+  </li>
+<li><b>Queue</b> has been redesigned as a template class object, where the type parameter
+    specifies the type of items to be stored in the queue. As a consequence:
+    <ul>
+      <li>Being a subclass of Queue, <b>DropTailQueue</b> is a template class as well.
+      <li>Network devices such as SimpleNetDevice, PointToPointNetDevice and CsmaNetDevice
+      use a queue of type Queue&lt;Packet&gt; to store the packets to transmit. The SetQueue
+      method of their helpers, however, can still be invoked as, e.g.,
+      SetQueue ("ns3::DropTailQueue") instead of, e.g., SetQueue
+      ("ns3::DropTailQueue&lt;Packet&gt;").</li>
+      <li>The attributes <b>Mode</b>, <b>MaxPackets</b> and <b>MaxBytes</b> are now
+      defined by the QueueBase class (which Queue is derived from).</li>
+    </ul>
+</li>
+<li>Queue discs that can operate both in packet mode and byte mode (Red, CoDel, Pie) define their own
+    enum QueueDiscMode instead of using QueueBase::QueueMode.
+</li>
+<li>The CoDel, PIE and RED queue discs require that the size of the internal queue is the same as
+    the queue disc limit (previously, it was allowed to be greater than or equal).
+</li>
+  <li> The default value of the <b>EnableBeaconJitter</b> attribute in ApWifiMac was changed from false to true.
+  </li>
+  <li> The NormalClose() callback of a TcpSocket object used to fire upon leaving TIME_WAIT state (2*MSL after FINs have been exchanged).  It now fires upon entering TIME_WAIT state.  Timing of the callback for the other path to state CLOSED (through LAST_ACK) has not been changed.
+  </li>
 </ul>
 
 <hr>
@@ -705,8 +879,8 @@ failure.  </li>
       tutorial has been extended to illustrate basic functionality. </li>
   <li>In 'src/wifi', several changes were made to enable partial 802.11n support:
     <ul>
-      <li>A new helper (HtWifiMacHelper) was added to set up a high throughput (HT) MAC entity</li>
-      <li>New attributes were added to help the user setup a high throughpt (HT) PHY entity. These attributes can be set using the YansWifiPhyHelper</li>
+      <li>A new helper (HtWifiMacHelper) was added to set up a High Throughput (HT) MAC entity</li>
+      <li>New attributes were added to help the user setup a High Throughput (HT) PHY entity. These attributes can be set using the YansWifiPhyHelper</li>
       <li>A new standard value has been added that enables the new 11n data rates.</li>
       <li>New 11n preambles has been added (Mixed format and greenfield). To be able to change Tx duration according to the preamble used, a new class TxVector has been added to carry the transmission parameters (mode, preamble, stbc,..).  Several functions have been updated to allow the passage of TxVector instead of WifiMode in MacLow, WifiRemoteStationManager, WifiPhy, YansWifiPhy,.. </li>
       <li>A new information element has been added:  HTCapabilities. This information element is added to the MAC frame header if the node is an HT node. This HTCapabilites information element is used to advertise the HT capabilites of the node to other nodes in the network</li>

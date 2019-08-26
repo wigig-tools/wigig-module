@@ -17,16 +17,15 @@
  *
  * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
- *          Hany Assasa <hany.assasa@gmail.com>
  */
 
-#include "yans-wifi-helper.h"
+#include "ns3/log.h"
+#include "ns3/names.h"
 #include "ns3/propagation-loss-model.h"
 #include "ns3/propagation-delay-model.h"
+#include "ns3/error-rate-model.h"
 #include "ns3/yans-wifi-phy.h"
-#include "ns3/names.h"
-#include "ns3/log.h"
-#include "ns3/multi-band-net-device.h"
+#include "yans-wifi-helper.h"
 
 namespace ns3 {
 
@@ -93,28 +92,6 @@ YansWifiChannelHelper::SetPropagationDelay (std::string type,
   m_propagationDelay = factory;
 }
 
-void YansWifiPhyHelper::SetAntenna (std::string name,
-				    std::string n0, const AttributeValue &v0,
-				    std::string n1, const AttributeValue &v1,
-				    std::string n2, const AttributeValue &v2,
-				    std::string n3, const AttributeValue &v3,
-				    std::string n4, const AttributeValue &v4,
-				    std::string n5, const AttributeValue &v5,
-				    std::string n6, const AttributeValue &v6,
-				    std::string n7, const AttributeValue &v7)
-{
-  m_antenna = ObjectFactory ();
-  m_antenna.SetTypeId (name);
-  m_antenna.Set (n0, v0);
-  m_antenna.Set (n1, v1);
-  m_antenna.Set (n2, v2);
-  m_antenna.Set (n3, v3);
-  m_antenna.Set (n4, v4);
-  m_antenna.Set (n5, v5);
-  m_antenna.Set (n6, v6);
-  m_antenna.Set (n7, v7);
-}
-
 Ptr<YansWifiChannel>
 YansWifiChannelHelper::Create (void) const
 {
@@ -145,8 +122,7 @@ YansWifiChannelHelper::AssignStreams (Ptr<YansWifiChannel> c, int64_t stream)
 }
 
 YansWifiPhyHelper::YansWifiPhyHelper ()
-  : m_channel (0),
-    m_enableAntenna (false)
+  : m_channel (0)
 {
   m_phy.SetTypeId ("ns3::YansWifiPhy");
 }
@@ -172,60 +148,15 @@ YansWifiPhyHelper::SetChannel (std::string channelName)
   m_channel = channel;
 }
 
-void
-YansWifiPhyHelper::EnableAntenna (bool value, bool directional)
-{
-  m_enableAntenna = value;
-  m_directionalAntenna = directional;
-}
-
 Ptr<WifiPhy>
 YansWifiPhyHelper::Create (Ptr<Node> node, Ptr<NetDevice> device) const
 {
   Ptr<YansWifiPhy> phy = m_phy.Create<YansWifiPhy> ();
   Ptr<ErrorRateModel> error = m_errorRateModel.Create<ErrorRateModel> ();
-  if (m_enableAntenna)
-    {
-      if (m_directionalAntenna)
-        {
-          Ptr<DirectionalAntenna> antenna = m_antenna.Create<DirectionalAntenna> ();
-          phy->SetDirectionalAntenna (antenna);
-        }
-      else
-        {
-          Ptr<AbstractAntenna> antenna = m_antenna.Create<AbstractAntenna> ();
-          phy->SetAntenna (antenna);
-        }
-    }
   phy->SetErrorRateModel (error);
   phy->SetChannel (m_channel);
   phy->SetDevice (device);
   return phy;
-}
-
-void
-YansWifiPhyHelper::EnableMultiBandPcap (std::string prefix, Ptr<NetDevice> nd, Ptr<WifiPhy> phy)
-{
-  //All of the Pcap enable functions vector through here including the ones
-  //that are wandering through all of devices on perhaps all of the nodes in
-  //the system. We can only deal with devices of type WifiNetDevice.
-  Ptr<MultiBandNetDevice> device = nd->GetObject<MultiBandNetDevice> ();
-  if (device == 0)
-    {
-      NS_LOG_INFO ("YansWifiHelper::EnablePcapInternal(): Device " << &device << " not of type ns3::WifiNetDevice");
-      return;
-    }
-  NS_ABORT_MSG_IF (phy == 0, "YansWifiPhyHelper::EnablePcapInternal(): Phy layer in MultiBandNetDevice must be set");
-
-  PcapHelper pcapHelper;
-
-  std::string filename;
-  filename = pcapHelper.GetFilenameFromDevice (prefix, device);
-
-  Ptr<PcapFileWrapper> file = pcapHelper.CreateFile (filename, std::ios::out, m_pcapDlt);
-
-  phy->TraceConnectWithoutContext ("MonitorSnifferTx", MakeBoundCallback (&YansWifiPhyHelper::PcapSniffTxEvent, file));
-  phy->TraceConnectWithoutContext ("MonitorSnifferRx", MakeBoundCallback (&YansWifiPhyHelper::PcapSniffRxEvent, file));
 }
 
 } //namespace ns3

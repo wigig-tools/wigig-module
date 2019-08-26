@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -29,6 +29,7 @@ namespace ns3 {
 
 NS_OBJECT_ENSURE_REGISTERED (WifiMacHeader);
 
+/// type enumeration
 enum
 {
   TYPE_MGT = 0,
@@ -129,94 +130,14 @@ WifiMacHeader::SetAddr4 (Mac48Address address)
 }
 
 void
-WifiMacHeader::SetAssocReq (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 0;
-}
-
-void
-WifiMacHeader::SetAssocResp (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 1;
-}
-
-void
-WifiMacHeader::SetProbeReq (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 4;
-}
-
-void
-WifiMacHeader::SetProbeResp (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 5;
-}
-
-void
-WifiMacHeader::SetBeacon (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 8;
-}
-
-void
-WifiMacHeader::SetDMGBeacon (void)
-{
-  m_ctrlType = TYPE_Extension;
-  m_ctrlSubtype = 0;
-}
-
-void
-WifiMacHeader::SetBlockAckReq (void)
-{
-  m_ctrlType = TYPE_CTL;
-  m_ctrlSubtype = 8;
-}
-
-void
-WifiMacHeader::SetBlockAck (void)
-{
-  m_ctrlType = TYPE_CTL;
-  m_ctrlSubtype = 9;
-}
-
-void
-WifiMacHeader::SetTypeData (void)
-{
-  m_ctrlType = TYPE_DATA;
-  m_ctrlSubtype = 0;
-}
-
-void
-WifiMacHeader::SetAction (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 0x0D;
-}
-
-void
-WifiMacHeader::SetActionNoAck (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 0x0E;
-}
-
-void
-WifiMacHeader::SetMultihopAction (void)
-{
-  m_ctrlType = TYPE_MGT;
-  m_ctrlSubtype = 0x0F;
-}
-
-void
 WifiMacHeader::SetType (WifiMacType type)
 {
   switch (type)
     {
+    case WIFI_MAC_CTL_CTLWRAPPER:
+      m_ctrlType = TYPE_CTL;
+      m_ctrlSubtype = SUBTYPE_CTL_CTLWRAPPER;
+      break;
     case WIFI_MAC_CTL_BACKREQ:
       m_ctrlType = TYPE_CTL;
       m_ctrlSubtype = SUBTYPE_CTL_BACKREQ;
@@ -236,10 +157,6 @@ WifiMacHeader::SetType (WifiMacType type)
     case WIFI_MAC_CTL_ACK:
       m_ctrlType = TYPE_CTL;
       m_ctrlSubtype = SUBTYPE_CTL_ACK;
-      break;
-    case WIFI_MAC_CTL_CTLWRAPPER: 
-      m_ctrlType = TYPE_CTL;
-      m_ctrlSubtype = SUBTYPE_CTL_CTLWRAPPER;
       break;
     case WIFI_MAC_CTL_DMG_POLL:
       m_ctrlType = TYPE_CTL;
@@ -416,7 +333,7 @@ WifiMacHeader::SetRawDuration (uint16_t duration)
 void
 WifiMacHeader::SetDuration (Time duration)
 {
-  int64_t duration_us = ceil ((double) duration.GetNanoSeconds () / 1000);
+  int64_t duration_us = ceil (static_cast<double> (duration.GetNanoSeconds ()) / 1000);
   NS_ASSERT (duration_us >= 0 && duration_us <= 0x7fff);
   m_duration = static_cast<uint16_t> (duration_us);
 }
@@ -965,7 +882,7 @@ WifiMacHeader::GetSequenceNumber (void) const
   return m_seqSeq;
 }
 
-uint16_t
+uint8_t
 WifiMacHeader::GetFragmentNumber (void) const
 {
   return m_seqFrag;
@@ -1225,12 +1142,19 @@ void
 WifiMacHeader::SetAsDmgPpdu (void)
 {
   m_dmgPpdu = true;
+  m_ctrlOrder = 0;
+}
+
+bool
+WifiMacHeader::IsDmgPpdu (void) const
+{
+  return m_dmgPpdu;
 }
 
 void
-WifiMacHeader::SetQosAmsduType (uint8_t type)
+WifiMacHeader::SetQosAmsduType (AMSDU_Type type)
 {
-  m_qosAmsduType = type;
+  m_qosAmsduType = static_cast<uint8_t> (type);
 }
 
 void WifiMacHeader::SetQosRdGrant (bool value)
@@ -1244,11 +1168,11 @@ WifiMacHeader::SetQosAcConstraint (bool value)
   m_qosAcConstraint = value;
 }
 
-bool
+AMSDU_Type
 WifiMacHeader::GetQosAmsduType (void) const
 {
   NS_ASSERT (m_dmgPpdu && IsQosData ());
-  return m_qosAmsduType;
+  return static_cast<AMSDU_Type> (m_qosAmsduType);
 }
 
 bool
@@ -1371,9 +1295,7 @@ WifiMacHeader::Print (std::ostream &os) const
          << ", RA=" << m_addr1;
       break;
     case WIFI_MAC_CTL_BACKREQ:
-      break;
     case WIFI_MAC_CTL_BACKRESP:
-      break;
     case WIFI_MAC_CTL_CTLWRAPPER:
       break;
     case WIFI_MAC_MGT_BEACON:

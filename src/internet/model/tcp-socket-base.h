@@ -33,6 +33,8 @@
 #include "ns3/ipv6-header.h"
 #include "ns3/ipv6-interface.h"
 #include "ns3/event-id.h"
+#include "ns3/data-rate.h"
+#include "ns3/timer.h"
 #include "tcp-tx-buffer.h"
 #include "tcp-rx-buffer.h"
 #include "rtt-estimator.h"
@@ -135,6 +137,19 @@ public:
     CA_LAST_STATE /**< Used only in debug messages */
   } TcpCongState_t;
 
+  // Note: "not triggered" events are currently not triggered by the code.
+  typedef enum
+  {
+    CA_EVENT_TX_START,     /**< first transmit when no packets in flight */
+    CA_EVENT_CWND_RESTART, /**< congestion window restart. Not triggered */
+    CA_EVENT_COMPLETE_CWR, /**< end of congestion recovery */
+    CA_EVENT_LOSS,         /**< loss timeout */
+    CA_EVENT_ECN_NO_CE,    /**< ECT set, but not CE marked. Not triggered */
+    CA_EVENT_ECN_IS_CE,    /**< received CE marked IP packet. Not triggered */
+    CA_EVENT_DELAYED_ACK,  /**< Delayed ack is sent */
+    CA_EVENT_NON_DELAYED_ACK, /**< Non-delayed ack is sent */
+  } TcpCAEvent_t;
+
   /**
    * \ingroup tcp
    * TracedValue Callback signature for TcpCongState_t
@@ -166,6 +181,12 @@ public:
 
   uint32_t               m_rcvTimestampValue;     //!< Receiver Timestamp value 
   uint32_t               m_rcvTimestampEchoReply; //!< Sender Timestamp echoed by the receiver
+
+  // Pacing related variables
+  bool                   m_pacing;                //!< Pacing status
+  DataRate               m_maxPacingRate;         //!< Max Pacing rate
+  DataRate               m_currentPacingRate;     //!< Current Pacing rate
+  Time                   m_minRtt;                //!< Minimum RTT observed throughout the connection
 
   /**
    * \brief Get cwnd in segments rather than bytes
@@ -484,8 +505,8 @@ public:
    * TracedCallback signature for tcp packet transmission or reception events.
    *
    * \param [in] packet The packet.
-   * \param [in] ipv4
-   * \param [in] interface
+   * \param [in] header The TcpHeader
+   * \param [in] socket This socket
    */
   typedef void (* TcpTxRxTracedCallback)(const Ptr<const Packet> packet, const TcpHeader& header,
                                          const Ptr<const TcpSocketBase> socket);
@@ -1071,6 +1092,11 @@ protected:
    */
   static uint32_t SafeSubtraction (uint32_t a, uint32_t b);
 
+  /**
+   * \brief Notify Pacing
+   */
+  void NotifyPacingPerformed (void);
+
 protected:
   // Counters and events
   EventId           m_retxEvent;       //!< Retransmission event
@@ -1158,6 +1184,9 @@ protected:
 
   TracedCallback<Ptr<const Packet>, const TcpHeader&,
                  Ptr<const TcpSocketBase> > m_rxTrace; //!< Trace of received packets
+
+  // Pacing related variable
+  Timer                 m_pacingTimer;    //!< Pacing Event
 };
 
 /**

@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006, 2009 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -91,6 +91,12 @@ enum WifiMacType
   WIFI_MAC_EXTENSION_DMG_BEACON,
 };
 
+enum AMSDU_Type
+{
+  AMSDU_TYPE_BASIC = 0,
+  AMSDU_TYPE_SHORT = 1,
+};
+
 /**
  * \ingroup wifi
  *
@@ -135,55 +141,6 @@ public:
   void Serialize (Buffer::Iterator start) const;
   uint32_t Deserialize (Buffer::Iterator start);
 
-  /**
-   * Set Type/Subtype values for an association request header.
-   */
-  void SetAssocReq (void);
-  /**
-   * Set Type/Subtype values for an association response header.
-   */
-  void SetAssocResp (void);
-  /**
-   * Set Type/Subtype values for a probe request header.
-   */
-  void SetProbeReq (void);
-  /**
-   * Set Type/Subtype values for a probe response header.
-   */
-  void SetProbeResp (void);
-  /**
-   * Set Type/Subtype values for a beacon header.
-   */
-  void SetBeacon (void);
-  /**
-   * Set Type/Subtype values for a DMG beacon header.
-   */
-  void SetDMGBeacon (void);
-  /**
-   * Set Type/Subtype values for a data packet with
-   * no subtype equal to 0.
-   */
-  void SetTypeData (void);
-  /**
-   * Set Type/Subtype values for an action header.
-   */
-  void SetAction ();
-  /**
-   * Set Type/Subtype values for an action no ack header.
-   */
-  void SetActionNoAck (void);
-  /**
-   * Set Type/Subtype values for a Block Ack Request header.
-   */
-  void SetBlockAckReq (void);
-  /**
-   * Set Type/Subtype values for a Block Ack header.
-   */
-  void SetBlockAck (void);
-  /**
-   * Set Type/Subtype values for a multihop action header.
-   */
-  void SetMultihopAction ();
   /**
    * Set the From DS bit in the Frame Control field.
    */
@@ -345,10 +302,14 @@ public:
    */
   void SetAsDmgPpdu (void);
   /**
-   * Get the type of A-MSDU>
-   * \return
+   * Check whether the curent PPDU is DMG
+   * \return True if the frame is DMG PPDU, otherwise false.
    */
-  void SetQosAmsduType (uint8_t type);
+  bool IsDmgPpdu (void) const;
+  /**
+   * Set the type of A-MSDU.
+   */
+  void SetQosAmsduType (AMSDU_Type type);
   /**
    * The RDG/More PPDU subfield of the HT Control field is interpreted differently depending on whether it is
    * transmitted by an RD initiator or an RD responder, as defined in Table 8-13.
@@ -639,7 +600,7 @@ public:
    *
    * \return the fragment number of the header
    */
-  uint16_t GetFragmentNumber (void) const;
+  uint8_t GetFragmentNumber (void) const;
   /**
    * Return if the Retry bit is set.
    *
@@ -712,7 +673,7 @@ public:
    *
    * \return the type of A-MSDU
    */
-  bool GetQosAmsduType (void) const;
+  AMSDU_Type GetQosAmsduType (void) const;
   /**
    * Check if it is RD Grant.
    *
@@ -730,7 +691,6 @@ public:
    * \return the size of the WifiMacHeader in octets
    */
   uint32_t GetSize (void) const;
-
   /**
    * Return a string corresponds to the header type.
    *
@@ -845,7 +805,7 @@ private:
   uint8_t m_qosEosp; ///< QOS EOSP
   uint8_t m_qosAckPolicy; ///< QOS ack policy
   uint8_t m_amsduPresent; ///< AMSDU present
-  uint16_t m_qosStuff; ///< QOS stuff
+  uint8_t m_qosStuff; ///< QOS stuff
   /* DMG QoS Control Field */
   bool m_dmgPpdu;
   uint8_t m_qosAmsduType;

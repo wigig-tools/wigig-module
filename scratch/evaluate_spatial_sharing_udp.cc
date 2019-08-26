@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -13,7 +13,7 @@
 /**
  *
  * Simulation Objective:
- * This script is used to evaluate spatial sharing and interference assessment in IEEE 802.11ad.
+ * This script is used to evaluate spatial sharing and interference assessment as defined in IEEE 802.11ad.
  *
  * Network Topology:
  * The scenario consists of 4 DMG STAs and one PCP/AP as following:
@@ -151,8 +151,9 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
 }
 
 void
-SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
@@ -320,7 +321,7 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -333,36 +334,28 @@ main (int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup physical layer ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-70));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-70 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes directional antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -384,8 +377,13 @@ main (int argc, char *argv[])
                    "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                    "ATIDuration", TimeValue (MicroSeconds (1000)));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (8));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);
@@ -401,7 +399,7 @@ main (int argc, char *argv[])
   /* Setting mobility model */
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0.0, 0.0, 0.0));        /* PCP/AP */
+  positionAlloc->Add (Vector (0.0, 0.0, 0.0));        /* DMG PCP/AP */
   positionAlloc->Add (Vector (-2.0, +2.0, 0.0));      /* West DMG STA */
   positionAlloc->Add (Vector (+2.0, +2.0, 0.0));      /* North DMG STA */
   positionAlloc->Add (Vector (-2.0, -2.0, 0.0));      /* South DMG STA */
@@ -465,7 +463,7 @@ main (int argc, char *argv[])
   /* Enable Traces */
   if (pcapTracing)
     {
-      wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+      wifiPhy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
       wifiPhy.EnablePcap ("Traces/AccessPoint", apDevice, false);
       wifiPhy.EnablePcap ("Traces/West_STA", staDevices.Get (0), false);
       wifiPhy.EnablePcap ("Traces/North_STA", staDevices.Get (1), false);

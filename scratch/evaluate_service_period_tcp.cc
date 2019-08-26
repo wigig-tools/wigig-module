@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
+#include "ns3/flow-monitor-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
@@ -17,7 +18,7 @@
  * Network Topology:
  * The scenario consists of 2 DMG STAs (West + East) and one PCP/AP as following:
  *
- *                         DMG AP (0,1)
+ *                         DMG PCP/AP (0,1)
  *
  *
  * West DMG STA (-1,0)                      East DMG STA (1,0)
@@ -27,8 +28,8 @@
  * to perform TxSS between all the stations. Once West DMG STA has completed TxSS phase with East DMG.
  * The PCP/AP allocates two static service periods for communication as following:
  *
- * SP1: DMG West STA -----> DMG East STA (SP Length = 3.2ms)
- * SP2: DMG East STA -----> DMG West STA (SP Length = 3.2ms)
+ * SP1: DMG West STA -----> DMG East STA (SP Length = 3.2 ms)
+ * SP2: DMG East STA -----> DMG West STA (SP Length = 3.2 ms)
  *
  * Running the Simulation:
  * To run the script with the default parameters:
@@ -82,29 +83,20 @@ CalculateThroughput (Ptr<PacketSink> sink, uint64_t lastTotalRx, double averageT
 }
 
 void
-StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
+StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t aid)
 {
   std::cout << "DMG STA " << staWifiMac->GetAddress () << " associated with DMG AP " << address << std::endl;
-  std::cout << "Association ID (AID) = " << staWifiMac->GetAssociationID () << std::endl;
+  std::cout << "Association ID (AID) = " << aid << std::endl;
   assoicatedStations++;
-  /* Check if all stations have assoicated with the AP */
+  /* Check if all stations have assoicated with the DMG PCP/AP */
   if (assoicatedStations == 2)
     {
       std::cout << "All stations got associated with " << address << std::endl;
-      /* Map AID to MAC Addresses in each node instead of requesting information */
-      Ptr<DmgStaWifiMac> srcMac, dstMac;
-      for (NetDeviceContainer::Iterator i = staDevices.Begin (); i != staDevices.End (); ++i)
-        {
-          srcMac = StaticCast<DmgStaWifiMac> (StaticCast<WifiNetDevice> (*i)->GetMac ());
-          for (NetDeviceContainer::Iterator j = staDevices.Begin (); j != staDevices.End (); ++j)
-            {
-              dstMac = StaticCast<DmgStaWifiMac> (StaticCast<WifiNetDevice> (*j)->GetMac ());
-              if (srcMac != dstMac)
-                {
-                  srcMac->MapAidToMacAddress (dstMac->GetAssociationID (), dstMac->GetAddress ());
-                }
-            }
-        }
+
+      /* For simplicity we assume that each station is aware of the capabilities of the peer station */
+      /* Otherwise, we have to request the capabilities of the peer station. */
+      westWifiMac->StorePeerDmgCapabilities (eastWifiMac);
+      eastWifiMac->StorePeerDmgCapabilities (westWifiMac);
 
       /* Schedule Beamforming Training SP */
       apWifiMac->AllocateBeamformingServicePeriod (westWifiMac->GetAssociationID (), eastWifiMac->GetAssociationID (), 0, true);
@@ -112,8 +104,9 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
 }
 
 void
-SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
@@ -143,7 +136,7 @@ SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
 int
 main (int argc, char *argv[])
 {
-  uint32_t payloadSize = 1448;                  /* Transport Layer Payload size in bytes. */
+  uint32_t packetSize = 1448;                   /* Transport Layer Payload size in bytes. */
   string dataRate = "300Mbps";                  /* Application Layer Data Rate. */
   string tcpVariant = "ns3::TcpNewReno";        /* TCP Variant Type. */
   uint32_t bufferSize = 131072;                 /* TCP Send/Receive Buffer Size. */
@@ -156,7 +149,7 @@ main (int argc, char *argv[])
 
   /* Command line argument parser setup. */
   CommandLine cmd;
-  cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
+  cmd.AddValue ("packetSize", "Payload size in bytes", packetSize);
   cmd.AddValue ("dataRate", "Data rate for OnOff Application", dataRate);
   cmd.AddValue ("tcpVariant", "Transport protocol to use: TcpTahoe, TcpReno, TcpNewReno, TcpWestwood, TcpWestwoodPlus ", tcpVariant);
   cmd.AddValue ("bufferSize", "TCP Buffer Size (Send/Receive)", bufferSize);
@@ -180,12 +173,12 @@ main (int argc, char *argv[])
   TypeId tid = TypeId::LookupByName (tcpVariant);
   Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (tid));
   /* Configure TCP Segment Size */
-  Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (payloadSize));
+  Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (packetSize));
   Config::SetDefault ("ns3::TcpSocket::SndBufSize", UintegerValue (bufferSize));
   Config::SetDefault ("ns3::TcpSocket::RcvBufSize", UintegerValue (bufferSize));
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -198,36 +191,28 @@ main (int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup physical layer ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes directional antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -247,8 +232,13 @@ main (int argc, char *argv[])
                    "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                    "ATIPresent", BooleanValue (false));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (8));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);
@@ -293,22 +283,28 @@ main (int argc, char *argv[])
 
   /* Install Simple UDP Server on east Node */
   PacketSinkHelper sinkHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), 9999));
-  ApplicationContainer sinks = sinkHelper.Install (NodeContainer (westNode, eastNode));
+  ApplicationContainer sinks = sinkHelper.Install (eastNode);
+  Ptr<PacketSink> packetSink = StaticCast<PacketSink> (sinks.Get (0));
 
   /** East Node Variables **/
   uint64_t eastNodeLastTotalRx = 0;
   double eastNodeAverageThroughput = 0;
 
-  /* Install Simple UDP Transmiter on the West Node (Transmit to the East Node) */
+  /* Install Simple TCP Transmiter on the West Node (Transmit to the East Node) */
   ApplicationContainer container;
+  Ptr<BulkSendApplication> bulk;
   BulkSendHelper bulkApp ("ns3::TcpSocketFactory", InetSocketAddress (staInterfaces.GetAddress (1), 9999));
-  bulkApp.SetAttribute ("SendSize", UintegerValue (payloadSize));
+  bulkApp.SetAttribute ("SendSize", UintegerValue (packetSize));
   container = bulkApp.Install (westNode);
-  container.Start (Seconds (3.0));
+  bulk = StaticCast<BulkSendApplication> (container.Get (0));
+
+  /* Schedule Applications */
+  container.Start (Seconds (1.0));
+  container.Stop (Seconds (simulationTime));
+  sinks.Start (Seconds (1.0));
 
   /* Schedule Throughput Calulcations */
-  Simulator::Schedule (Seconds (3.1), &CalculateThroughput, StaticCast<PacketSink> (sinks.Get (1)),
-                       eastNodeLastTotalRx, eastNodeAverageThroughput);
+  Simulator::Schedule (Seconds (1.1), &CalculateThroughput, packetSink, eastNodeLastTotalRx, eastNodeAverageThroughput);
 
   /* Set Maximum number of packets in WifiMacQueue */
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/DcaTxop/Queue/MaxPackets", UintegerValue (queueSize));
@@ -318,11 +314,16 @@ main (int argc, char *argv[])
   /* Enable Traces */
   if (pcapTracing)
     {
-      wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+      wifiPhy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
+      wifiPhy.SetSnapshotLength (120);
       wifiPhy.EnablePcap ("Traces/AccessPoint", apDevice, false);
       wifiPhy.EnablePcap ("Traces/WestNode", staDevices.Get (0), false);
       wifiPhy.EnablePcap ("Traces/EastNode", staDevices.Get (1), false);
     }
+
+  /* Install FlowMonitor on all nodes */
+  FlowMonitorHelper flowmon;
+  Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
 
   /* Stations */
   apWifiNetDevice = StaticCast<WifiNetDevice> (apDevice.Get (0));
@@ -339,9 +340,33 @@ main (int argc, char *argv[])
   westWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, westWifiMac));
   eastWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, eastWifiMac));
 
-  Simulator::Stop (Seconds (simulationTime));
+  Simulator::Stop (Seconds (simulationTime + 0.101));
   Simulator::Run ();
   Simulator::Destroy ();
+
+  /* Print per flow statistics */
+  monitor->CheckForLostPackets ();
+  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
+    {
+      Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+      std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")" << std::endl;;
+      std::cout << "  Tx Packets: " << i->second.txPackets << std::endl;
+      std::cout << "  Tx Bytes:   " << i->second.txBytes << std::endl;
+      std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
+      std::cout << "  Rx Packets: " << i->second.rxPackets << std::endl;;
+      std::cout << "  Rx Bytes:   " << i->second.rxBytes << std::endl;
+      std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
+    }
+
+  /* Print Application Layer Results Summary */
+  std::cout << "\nApplication Layer Statistics:" << std::endl;;
+  std::cout << "  Tx Packets: " << bulk->GetTotalTxPackets () << std::endl;
+  std::cout << "  Tx Bytes:   " << bulk->GetTotalTxBytes () << std::endl;
+  std::cout << "  Rx Packets: " << packetSink->GetTotalReceivedPackets () << std::endl;
+  std::cout << "  Rx Bytes:   " << packetSink->GetTotalRx () << std::endl;
+  std::cout << "  Throughput: " << packetSink->GetTotalRx () * 8.0 / ((simulationTime - 1) * 1e6) << " Mbps" << std::endl;
 
   return 0;
 }

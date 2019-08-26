@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -11,7 +11,10 @@
 #include "common-functions.h"
 
 /**
+ * Simulation Objective:
  * This script is used to evaluate beamformed link maintenance procedure for allocated Service Periods.
+ *
+ * Network Topology:
  * The scenario consists of 2 DMG STAs (West + East) and one PCP/AP as following:
  *
  *                         DMG AP (0,1)
@@ -20,12 +23,14 @@
  * West DMG STA (-1,0)                      East DMG STA (1,0)
  *
  *
+ * Simulation Description:
  * Once all the stations have assoicated successfully with the PCP/AP. The PCP/AP allocates a Service Period
  * to perform TxSS between the two stations. Once West DMG STA has completed TxSS phase with East DMG, the PCP/AP
  * allocates one static service periods for communication as following:
  *
  * SP: DMG West STA -----> DMG East STA (SP Length = 3.2ms)
  *
+ * Output:
  * From the PCAP files, we can see that data transmission takes place during the SPs. In addition, we can
  * notice in the announcement of the two Static Allocation Periods inside each DMG Beacon.
  */
@@ -46,9 +51,9 @@ Ptr<DmgApWifiMac> apWifiMac;
 Ptr<DmgStaWifiMac> westWifiMac;
 Ptr<DmgStaWifiMac> eastWifiMac;
 
-Ptr<YansWifiChannel> mmWaveChannel;
-Ptr<YansWifiPhy> westWifiPhy;
-Ptr<YansWifiPhy> eastWifiPhy;
+Ptr<DmgWifiChannel> mmWaveChannel;
+Ptr<DmgWifiPhy> westWifiPhy;
+Ptr<DmgWifiPhy> eastWifiPhy;
 
 /*** Access Point Variables ***/
 uint8_t assoicatedStations = 0;           /* Total number of assoicated stations with the AP */
@@ -96,8 +101,9 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
 }
 
 void
-SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
-              ChannelAccessPeriod accessPeriod, SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
+              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
+              SECTOR_ID sectorId, ANTENNA_ID antennaId)
 {
   if (accessPeriod == CHANNEL_ACCESS_DTI)
     {
@@ -118,8 +124,7 @@ SLSCompleted (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address,
 void
 StartBeamformingServicePeriod (Time btDuration)
 {
-  westWifiMac->StartBeamformingServicePeriod (eastWifiMac->GetAssociationID (), eastWifiMac->GetAddress (),
-                                              true, true, btDuration);
+  westWifiMac->StartBeamformingTraining (eastWifiMac->GetAssociationID (), eastWifiMac->GetAddress (), true, true, true, btDuration);
 }
 
 void
@@ -128,24 +133,24 @@ BeamLinkMaintenanceTimerExpired (Ptr<DmgStaWifiMac> wifiMac, uint8_t aid, Mac48A
   std::cout << "BeamLink Maintenance Timer Expired for " << wifiMac->GetAddress () << std::endl;
   std::cout << "Time left in the allocated service period = " << timeLeft.GetMicroSeconds () << " MicroSeconds" << std::endl;
   /* Take decision whether to use the rest of the service period for Beamforming training */
-  Time btDuration = wifiMac->CalculateBeamformingTrainingDuration (eastWifiMac->GetNumberOfSectors ());
-  Time txEndTime = westWifiPhy->GetLastTxDuration () + MicroSeconds (10); /* 10 US as a protection period */
-  timeLeft -= txEndTime;
-  if (timeLeft < btDuration)
-    {
-      uint32_t startTime = 0;
-      std::cout << "We do not have enough time in the current SP, so schedule new SP for beamforming training" << std::endl;
-      startTime = apWifiMac->AllocateBeamformingServicePeriod (wifiMac->GetAssociationID (), aid, startTime, true);
-      apWifiMac->ModifyAllocation (1, wifiMac->GetAssociationID (), aid, startTime, spDuration);
-    }
-  else
-    {
-      std::cout << "We have enough time in the remaining period of the current SP allocation" << std::endl;
-      /* Terminate current Service Period */
-      wifiMac->EndServicePeriod ();
-      eastWifiMac->EndServicePeriod ();
-      Simulator::Schedule (txEndTime, &StartBeamformingServicePeriod, btDuration);
-    }
+//  Time btDuration = wifiMac->CalculateBeamformingTrainingDuration (wifiMac->GetNumberOfSectors (), eastWifiMac->GetNumberOfSectors ());
+//  Time txEndTime = westWifiPhy->GetLastTxDuration () + MicroSeconds (10); /* 10 US as a protection period */
+//  timeLeft -= txEndTime;
+//  if (timeLeft < btDuration)
+//    {
+//      uint32_t startTime = 0;
+//      std::cout << "We do not have enough time in the current SP, so schedule new SP for beamforming training" << std::endl;
+//      startTime = apWifiMac->AllocateBeamformingServicePeriod (wifiMac->GetAssociationID (), aid, startTime, true);
+//      apWifiMac->ModifyAllocation (1, wifiMac->GetAssociationID (), aid, startTime, spDuration);
+//    }
+//  else
+//    {
+//      std::cout << "We have enough time in the remaining period of the current SP allocation" << std::endl;
+//      /* Terminate current Service Period */
+//      wifiMac->EndServicePeriod ();
+//      eastWifiMac->EndServicePeriod ();
+//      Simulator::Schedule (txEndTime, &StartBeamformingServicePeriod, btDuration);
+//    }
 }
 
 /************* Functions related to inducing packet dropper *********************/
@@ -170,7 +175,7 @@ DoInsertBlockage ()
  * \param dstWifiPhy The destination WifiPhy.
  */
 void
-BlockLink (Ptr<YansWifiChannel> channel, Ptr<YansWifiPhy> srcWifiPhy, Ptr<YansWifiPhy> dstWifiPhy)
+BlockLink (Ptr<DmgWifiChannel> channel, Ptr<DmgWifiPhy> srcWifiPhy, Ptr<DmgWifiPhy> dstWifiPhy)
 {
   std::cout << "Blockage Inserted at " << Simulator::Now () << std::endl;
   induceBlockage = true;
@@ -241,7 +246,7 @@ main (int argc, char *argv[])
   Config::SetDefault ("ns3::WifiMacQueue::MaxPacketNumber", UintegerValue (queueSize));
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
-  WifiHelper wifi;
+  DmgWifiHelper wifi;
 
   /* Basic setup */
   wifi.SetStandard (WIFI_PHY_STANDARD_80211ad);
@@ -254,36 +259,28 @@ main (int argc, char *argv[])
     }
 
   /**** Set up Channel ****/
-  YansWifiChannelHelper wifiChannel ;
+  DmgWifiChannelHelper wifiChannel ;
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
-  wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (56.16e9));
+  wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** Setup physical layer ****/
-  YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
+  DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
   wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  wifiPhy.Set ("TxGain", DoubleValue (0));
-  wifiPhy.Set ("RxGain", DoubleValue (0));
+  /* Set operating channel */
+  wifiPhy.Set ("ChannelNumber", UintegerValue (2));
   /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10));
   wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
   wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
-  /* Set the phy layer error model */
-  wifiPhy.SetErrorRateModel ("ns3::SensitivityModel60GHz");
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));
-  /* Give all nodes directional antenna */
-  wifiPhy.EnableAntenna (true, true);
-  wifiPhy.SetAntenna ("ns3::Directional60GhzAntenna",
-                      "Sectors", UintegerValue (8),
-                      "Antennas", UintegerValue (1));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -303,8 +300,13 @@ main (int argc, char *argv[])
                    "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "BeaconTransmissionInterval", TimeValue (MicroSeconds (600)),
                    "ATIDuration", TimeValue (MicroSeconds (1000)));
+
+  /* Set Analytical Codebook for the DMG Devices */
+  wifi.SetCodebook ("ns3::CodebookAnalytical",
+                    "CodebookType", EnumValue (SIMPLE_CODEBOOK),
+                    "Antennas", UintegerValue (1),
+                    "Sectors", UintegerValue (8));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apNode);
@@ -390,9 +392,9 @@ main (int argc, char *argv[])
   westWifiMac = StaticCast<DmgStaWifiMac> (westWifiNetDevice->GetMac ());
   eastWifiMac = StaticCast<DmgStaWifiMac> (eastWifiNetDevice->GetMac ());
 
-  mmWaveChannel = StaticCast<YansWifiChannel> (westWifiNetDevice->GetChannel ());
-  westWifiPhy = StaticCast<YansWifiPhy> (westWifiNetDevice->GetPhy ());
-  eastWifiPhy = StaticCast<YansWifiPhy> (eastWifiNetDevice->GetPhy ());
+  mmWaveChannel = StaticCast<DmgWifiChannel> (westWifiNetDevice->GetChannel ());
+  westWifiPhy = StaticCast<DmgWifiPhy> (westWifiNetDevice->GetPhy ());
+  eastWifiPhy = StaticCast<DmgWifiPhy> (eastWifiNetDevice->GetPhy ());
 
   /** Connect Traces **/
   westWifiMac->TraceConnectWithoutContext ("Assoc", MakeBoundCallback (&StationAssoicated, westWifiMac));

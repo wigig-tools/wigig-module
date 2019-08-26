@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -264,6 +264,7 @@ MgtProbeResponseHeader::Deserialize (Buffer::Iterator start)
   return i.GetDistanceFrom (start);
 }
 
+
 /***********************************************************
  *          Beacons
  ***********************************************************/
@@ -409,8 +410,146 @@ MgtAssocRequestHeader::Deserialize (Buffer::Iterator start)
   return i.GetDistanceFrom (start);
 }
 
+
 /***********************************************************
- *          Assoc Response
+ *          Ressoc Request
+ ***********************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (MgtReassocRequestHeader);
+
+MgtReassocRequestHeader::MgtReassocRequestHeader ()
+  : m_currentApAddr (Mac48Address ())
+{
+}
+
+MgtReassocRequestHeader::~MgtReassocRequestHeader ()
+{
+}
+
+void
+MgtReassocRequestHeader::SetSsid (Ssid ssid)
+{
+  m_ssid = ssid;
+}
+
+void
+MgtReassocRequestHeader::SetSupportedRates (SupportedRates rates)
+{
+  m_rates = rates;
+}
+
+void
+MgtReassocRequestHeader::SetListenInterval (uint16_t interval)
+{
+  m_listenInterval = interval;
+}
+
+void
+MgtReassocRequestHeader::SetCapabilities (CapabilityInformation capabilities)
+{
+  m_capability = capabilities;
+}
+
+CapabilityInformation
+MgtReassocRequestHeader::GetCapabilities (void) const
+{
+  return m_capability;
+}
+
+Ssid
+MgtReassocRequestHeader::GetSsid (void) const
+{
+  return m_ssid;
+}
+
+SupportedRates
+MgtReassocRequestHeader::GetSupportedRates (void) const
+{
+  return m_rates;
+}
+
+uint16_t
+MgtReassocRequestHeader::GetListenInterval (void) const
+{
+  return m_listenInterval;
+}
+
+void
+MgtReassocRequestHeader::SetCurrentApAddress (Mac48Address currentApAddr)
+{
+  m_currentApAddr = currentApAddr;
+}
+
+TypeId
+MgtReassocRequestHeader::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::MgtReassocRequestHeader")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<MgtReassocRequestHeader> ()
+  ;
+  return tid;
+}
+
+TypeId
+MgtReassocRequestHeader::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+uint32_t
+MgtReassocRequestHeader::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += m_capability.GetSerializedSize ();
+  size += 2; //listen interval
+  size += 6; //current AP address
+  size += m_ssid.GetSerializedSize ();
+  size += m_rates.GetSerializedSize ();
+  size += m_rates.extended.GetSerializedSize ();
+  size += GetInformationElementsSerializedSize ();
+  return size;
+}
+
+void
+MgtReassocRequestHeader::Print (std::ostream &os) const
+{
+  os << "current AP address=" << m_currentApAddr << ", "
+     << "ssid=" << m_ssid << ", "
+     << "rates=" << m_rates;
+  PrintInformationElements (os);
+}
+
+void
+MgtReassocRequestHeader::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i = m_capability.Serialize (i);
+  i.WriteHtolsbU16 (m_listenInterval);
+  WriteTo (i, m_currentApAddr);
+  i = m_ssid.Serialize (i);
+  i = m_rates.Serialize (i);
+  i = m_rates.extended.Serialize (i);
+  i = SerializeInformationElements (i);
+}
+
+uint32_t
+MgtReassocRequestHeader::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  i = m_capability.Deserialize (i);
+  m_listenInterval = i.ReadLsbtohU16 ();
+  ReadFrom (i, m_currentApAddr);
+  i = m_ssid.Deserialize (i);
+  i = m_rates.Deserialize (i);
+  i = m_rates.extended.DeserializeIfPresent (i);
+  i = DeserializeInformationElements (i);
+  return i.GetDistanceFrom (start);
+}
+
+
+/***********************************************************
+ *          Assoc/Reassoc Response
  ***********************************************************/
 
 NS_OBJECT_ENSURE_REGISTERED (MgtAssocResponseHeader);
@@ -443,7 +582,7 @@ MgtAssocResponseHeader::SetStatusCode (StatusCode code)
 }
 
 void
-MgtAssocResponseHeader::SetAid (uint16_t aid)
+MgtAssocResponseHeader::SetAssociationId (uint16_t aid)
 {
   m_aid = aid;
 }
@@ -917,9 +1056,68 @@ WifiActionHeader::GetInstanceTypeId () const
   return GetTypeId ();
 }
 
+std::string
+WifiActionHeader::CategoryValueToString (CategoryValue value) const
+{
+  if (value == BLOCK_ACK)
+    {
+      return "BlockAck";
+    }
+  else if (value == MESH)
+    {
+      return "Mesh";
+    }
+  else if (value == SELF_PROTECTED)
+    {
+      return "SelfProtected";
+    }
+  else if (value == VENDOR_SPECIFIC_ACTION)
+    {
+      return "VendorSpecificAction";
+    }
+  else
+    {
+      std::ostringstream convert;
+      convert << value;
+      return convert.str ();
+    }
+}
+std::string
+WifiActionHeader::SelfProtectedActionValueToString (SelfProtectedActionValue value) const
+{
+  if (value == PEER_LINK_OPEN)
+    {
+      return "PeerLinkOpen";
+    }
+  else if (value == PEER_LINK_CONFIRM)
+    {
+      return "PeerLinkConfirm";
+    }
+  else if (value == PEER_LINK_CLOSE)
+    {
+      return "PeerLinkClose";
+    }
+  else if (value == GROUP_KEY_INFORM)
+    {
+      return "GroupKeyInform";
+    }
+  else if (value == GROUP_KEY_ACK)
+    {
+      return "GroupKeyAck";
+    }
+  else
+    {
+      std::ostringstream convert;
+      convert << value;
+      return convert.str ();
+    }
+}
+
 void
 WifiActionHeader::Print (std::ostream &os) const
 {
+  os << "category=" << CategoryValueToString ((CategoryValue) m_category)
+     << ", value=" << SelfProtectedActionValueToString ((SelfProtectedActionValue) m_actionValue);
 }
 
 uint32_t
@@ -1331,6 +1529,12 @@ MgtAddBaRequestHeader::SetStartingSequence (uint16_t seq)
 }
 
 void
+MgtAddBaRequestHeader::SetStartingSequenceControl (uint16_t seqControl)
+{
+  m_startingSeq = (seqControl >> 4) & 0x0fff;
+}
+
+void
 MgtAddBaRequestHeader::SetAmsduSupport (bool supported)
 {
   m_amsduSupport = supported;
@@ -1376,12 +1580,6 @@ uint16_t
 MgtAddBaRequestHeader::GetStartingSequenceControl (void) const
 {
   return (m_startingSeq << 4) & 0xfff0;
-}
-
-void
-MgtAddBaRequestHeader::SetStartingSequenceControl (uint16_t seqControl)
-{
-  m_startingSeq = (seqControl >> 4) & 0x0fff;
 }
 
 uint16_t
@@ -4447,7 +4645,7 @@ ExtBrpFrame::GetSerializedSize (void) const
   uint32_t size = 0;
   size += 1; //Dialog Token
   size += m_brpRequestField.GetSerializedSize ();
-  size += m_element.GetSerializedSize ();
+  size += m_beamRefinementElement.GetSerializedSize ();
   for (ChannelMeasurementFeedbackElementList::const_iterator iter = m_list.begin (); iter != m_list.end (); iter++)
     {
       size += (*iter)->GetSerializedSize ();
@@ -4461,7 +4659,7 @@ ExtBrpFrame::Serialize (Buffer::Iterator start) const
   Buffer::Iterator i = start;
   i.WriteU8 (m_dialogToken);
   i = m_brpRequestField.Serialize (i);
-  i = m_element.Serialize (i);
+  i = m_beamRefinementElement.Serialize (i);
   for (ChannelMeasurementFeedbackElementList::const_iterator iter = m_list.begin (); iter != m_list.end (); iter++)
     {
       i = (*iter)->Serialize (i);
@@ -4477,9 +4675,9 @@ ExtBrpFrame::Deserialize (Buffer::Iterator start)
 
   m_dialogToken = i.ReadU8 ();
   i = m_brpRequestField.Deserialize (i);
-  i = m_element.Deserialize (i);
+  i = m_beamRefinementElement.Deserialize (i);
 
-  /* Deserialize Infomration Elements */
+  /* Deserialize Information Elements */
   if (!i.IsEnd ())
     {
 //      WifiInformationElement *element;
@@ -4510,7 +4708,7 @@ ExtBrpFrame::SetBrpRequestField (BRP_Request_Field &field)
 void
 ExtBrpFrame::SetBeamRefinementElement (BeamRefinementElement &element)
 {
-  m_element = element;
+  m_beamRefinementElement = element;
 }
 
 void
@@ -4534,13 +4732,433 @@ ExtBrpFrame::GetBrpRequestField (void) const
 BeamRefinementElement
 ExtBrpFrame::GetBeamRefinementElement (void) const
 {
-  return m_element;
+  return m_beamRefinementElement;
 }
 
 ChannelMeasurementFeedbackElementList
 ExtBrpFrame::GetChannelMeasurementFeedbackList (void) const
 {
   return m_list;
+}
+
+/***************************************************
+*          MIMO BF Setup frame (9.6.21.4)
+****************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (ExtMimoBfSetupFrame);
+
+ExtMimoBfSetupFrame::ExtMimoBfSetupFrame ()
+{
+}
+
+TypeId
+ExtMimoBfSetupFrame::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::ExtMimoBfSetupFrame")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<ExtMimoBfSetupFrame> ()
+  ;
+  return tid;
+}
+
+TypeId
+ExtMimoBfSetupFrame::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+ExtMimoBfSetupFrame::Print (std::ostream &os) const
+{
+  os << "Dialog Token = " << m_dialogToken;
+}
+
+uint32_t
+ExtMimoBfSetupFrame::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 1; //Dialog Token
+  size += m_mimoSetupControl.GetSerializedSize ();
+  return size;
+}
+
+void
+ExtMimoBfSetupFrame::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  i = m_mimoSetupControl.Serialize (i);
+}
+
+uint32_t
+ExtMimoBfSetupFrame::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  m_dialogToken = i.ReadU8 ();
+  i = m_mimoSetupControl.Deserialize (i);
+  return i.GetDistanceFrom (start);
+}
+
+void
+ExtMimoBfSetupFrame::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+ExtMimoBfSetupFrame::SetMimoSetupControlElement (MimoSetupControlElement element)
+{
+  m_mimoSetupControl = element;
+}
+
+uint8_t
+ExtMimoBfSetupFrame::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+MimoSetupControlElement
+ExtMimoBfSetupFrame::GetMimoSetupControlElement (void) const
+{
+  return m_mimoSetupControl;
+}
+
+/***************************************************
+*          MIMO BF Poll frame (9.6.21.5)
+****************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (ExtMimoBfPollFrame);
+
+ExtMimoBfPollFrame::ExtMimoBfPollFrame ()
+{
+}
+
+TypeId
+ExtMimoBfPollFrame::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::ExtMimoBfPollFrame")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<ExtMimoBfPollFrame> ()
+  ;
+  return tid;
+}
+
+TypeId
+ExtMimoBfPollFrame::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+ExtMimoBfPollFrame::Print (std::ostream &os) const
+{
+  os << "Dialog Token = " << m_dialogToken;
+}
+
+uint32_t
+ExtMimoBfPollFrame::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 1; //Dialog Token
+  size += m_mimoPollControl.GetSerializedSize ();
+  return size;
+}
+
+void
+ExtMimoBfPollFrame::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  i = m_mimoPollControl.Serialize (i);
+}
+
+uint32_t
+ExtMimoBfPollFrame::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  m_dialogToken = i.ReadU8 ();
+  i = m_mimoPollControl.Deserialize (i);
+  return i.GetDistanceFrom (start);
+}
+
+void
+ExtMimoBfPollFrame::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+ExtMimoBfPollFrame::SetMimoPollControlElement (MimoPollControlElement element)
+{
+  m_mimoPollControl = element;
+}
+
+uint8_t
+ExtMimoBfPollFrame::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+MimoPollControlElement
+ExtMimoBfPollFrame::GetMimoSetupControlElement (void) const
+{
+  return m_mimoPollControl;
+}
+
+/***************************************************
+*          MIMO BF Feedback frame (9.6.21.6)
+****************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (ExtMimoBfFeedbackFrame);
+
+ExtMimoBfFeedbackFrame::ExtMimoBfFeedbackFrame ()
+{
+}
+
+TypeId
+ExtMimoBfFeedbackFrame::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::ExtMimoBfFeedbackFrame")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<ExtMimoBfFeedbackFrame> ()
+  ;
+  return tid;
+}
+
+TypeId
+ExtMimoBfFeedbackFrame::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+ExtMimoBfFeedbackFrame::Print (std::ostream &os) const
+{
+  os << "Dialog Token = " << m_dialogToken;
+}
+
+uint32_t
+ExtMimoBfFeedbackFrame::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 1; //Dialog Token
+  size += m_mimoFeedbackControl.GetSerializedSize ();
+  for (ChannelMeasurementFeedbackElementListCI it = m_channelMeasurementFeedbackList.begin ();
+       it != m_channelMeasurementFeedbackList.end (); it++)
+    {
+      size += (*it)->GetSerializedSize ();
+    }
+  for (EDMGChannelMeasurementFeedbackElementListCI it = m_edmgChannelMeasurementFeedbackList.begin ();
+       it != m_edmgChannelMeasurementFeedbackList.end (); it++)
+    {
+      size += (*it)->GetSerializedSize ();
+    }
+  for (DigitalBFFeedbackElementListCI it = m_digitalBFFeedbackElementList.begin ();
+       it != m_digitalBFFeedbackElementList.end (); it++)
+    {
+      size += (*it)->GetSerializedSize ();
+    }
+  return size;
+}
+
+void
+ExtMimoBfFeedbackFrame::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  /* Serialize MIMO Feedback Control element */
+  i = m_mimoFeedbackControl.Serialize (i);
+
+  /* Serialize Channel Measurement Feedback elements */
+  for (ChannelMeasurementFeedbackElementListCI it = m_channelMeasurementFeedbackList.begin ();
+       it != m_channelMeasurementFeedbackList.end (); it++)
+    {
+      i = (*it)->Serialize (i);
+    }
+
+  /* Serialize EDMG Channel Measurement Feedback elements */
+  for (EDMGChannelMeasurementFeedbackElementListCI it = m_edmgChannelMeasurementFeedbackList.begin ();
+       it != m_edmgChannelMeasurementFeedbackList.end (); it++)
+    {
+      i = (*it)->Serialize (i);
+    }
+
+  /* Serialize Digital BF Feedback elements */
+  for (DigitalBFFeedbackElementListCI it = m_digitalBFFeedbackElementList.begin ();
+       it != m_digitalBFFeedbackElementList.end (); it++)
+    {
+      i = (*it)->Serialize (i);
+    }
+}
+
+uint32_t
+ExtMimoBfFeedbackFrame::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  m_dialogToken = i.ReadU8 ();
+  i = m_mimoFeedbackControl.Deserialize (i);
+  return i.GetDistanceFrom (start);
+}
+
+void
+ExtMimoBfFeedbackFrame::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+ExtMimoBfFeedbackFrame::SetMimoFeedbackControlElement (MIMOFeedbackControl &element)
+{
+  m_mimoFeedbackControl = element;
+}
+
+void
+ExtMimoBfFeedbackFrame::AddChannelMeasurementFeedbackElement (Ptr<ChannelMeasurementFeedbackElement> element)
+{
+  m_channelMeasurementFeedbackList.push_back (element);
+}
+
+void
+ExtMimoBfFeedbackFrame::AddEdmgChannelMeasurementFeedbackElement (Ptr<EDMGChannelMeasurementFeedbackElement> element)
+{
+  m_edmgChannelMeasurementFeedbackList.push_back (element);
+}
+
+void
+ExtMimoBfFeedbackFrame::AddDigitalBfFeedbackElement (Ptr<DigitalBFFeedbackElement> element)
+{
+  m_digitalBFFeedbackElementList.push_back (element);
+}
+
+uint8_t
+ExtMimoBfFeedbackFrame::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+MIMOFeedbackControl
+ExtMimoBfFeedbackFrame::GetMimoFeedbackControlElement (void) const
+{
+  return m_mimoFeedbackControl;
+}
+
+ChannelMeasurementFeedbackElementList
+ExtMimoBfFeedbackFrame::GetListOfChannelMeasurementFeedback (void) const
+{
+  return m_channelMeasurementFeedbackList;
+}
+
+EDMGChannelMeasurementFeedbackElementList
+ExtMimoBfFeedbackFrame::GetListOfEDMGChannelMeasurementFeedback (void) const
+{
+  return m_edmgChannelMeasurementFeedbackList;
+}
+
+DigitalBFFeedbackElementList
+ExtMimoBfFeedbackFrame::GetListOfDigitalBFFeedbackElement (void) const
+{
+  return m_digitalBFFeedbackElementList;
+}
+
+/***************************************************
+*          MIMO BF Poll frame (9.6.21.7)
+****************************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (ExtMimoBFSelectionFrame);
+
+ExtMimoBFSelectionFrame::ExtMimoBFSelectionFrame ()
+{
+}
+
+TypeId
+ExtMimoBFSelectionFrame::GetTypeId (void)
+{
+  static TypeId tid = TypeId ("ns3::ExtMimoBFSelectionFrame")
+    .SetParent<Header> ()
+    .SetGroupName ("Wifi")
+    .AddConstructor<ExtMimoBFSelectionFrame> ()
+  ;
+  return tid;
+}
+
+TypeId
+ExtMimoBFSelectionFrame::GetInstanceTypeId (void) const
+{
+  return GetTypeId ();
+}
+
+void
+ExtMimoBFSelectionFrame::Print (std::ostream &os) const
+{
+  os << "Dialog Token = " << m_dialogToken;
+}
+
+uint32_t
+ExtMimoBFSelectionFrame::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 1; //Dialog Token
+  size += m_mimoSelectionControlElement.GetSerializedSize ();
+  size += m_edmgGroupIDSetElement.GetSerializedSize ();
+  return size;
+}
+
+void
+ExtMimoBFSelectionFrame::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  i.WriteU8 (m_dialogToken);
+  i = m_mimoSelectionControlElement.Serialize (i);
+  i = m_edmgGroupIDSetElement.Serialize (i);
+}
+
+uint32_t
+ExtMimoBFSelectionFrame::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  m_dialogToken = i.ReadU8 ();
+  i = m_mimoSelectionControlElement.Deserialize (i);
+  i = m_edmgGroupIDSetElement.Deserialize (i);
+  return i.GetDistanceFrom (start);
+}
+
+void
+ExtMimoBFSelectionFrame::SetDialogToken (uint8_t token)
+{
+  m_dialogToken = token;
+}
+
+void
+ExtMimoBFSelectionFrame::SetMIMOSelectionControlElement (MIMOSelectionControlElement &element)
+{
+  m_mimoSelectionControlElement = element;
+}
+
+void
+ExtMimoBFSelectionFrame::SetEDMGGroupIDSetElement (EDMGGroupIDSetElement &element)
+{
+  m_edmgGroupIDSetElement = element;
+}
+
+uint8_t
+ExtMimoBFSelectionFrame::GetDialogToken (void) const
+{
+  return m_dialogToken;
+}
+
+MIMOSelectionControlElement
+ExtMimoBFSelectionFrame::GetMIMOSelectionControlElement (void) const
+{
+  return m_mimoSelectionControlElement;
+}
+
+EDMGGroupIDSetElement
+ExtMimoBFSelectionFrame::GetEDMGGroupIDSetElement (void) const
+{
+  return m_edmgGroupIDSetElement;
 }
 
 } //namespace ns3

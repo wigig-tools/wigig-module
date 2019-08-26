@@ -43,13 +43,6 @@ public:
    * \param s SSID in string
    */
   Ssid (std::string s);
-  /**
-   * Create SSID from a given array of char and given length.
-   *
-   * \param ssid
-   * \param length
-   */
-  Ssid (char const ssid[32], uint8_t length);
 
   /**
    * Check if the two SSIDs are equal.
@@ -75,9 +68,34 @@ public:
    */
   char* PeekString (void) const;
 
+  /**
+   * Get the ElementID.
+   *
+   * \returns the element ID
+   */
   WifiInformationElementId ElementId () const;
+
+  /**
+   * Get the information field size.
+   *
+   * \returns the information field size
+   */
   uint8_t GetInformationFieldSize () const;
+
+  /**
+   * Get the information field size.
+   *
+   * \param start the information field iterator
+   */
   void SerializeInformationField (Buffer::Iterator start) const;
+
+  /**
+   * Get the information field size.
+   *
+   * \param start the information field iterator
+   * \param length the size of the information field
+   * \returns the size of the field read
+   */
   uint8_t DeserializeInformationField (Buffer::Iterator start,
                                        uint8_t length);
 

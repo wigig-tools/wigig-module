@@ -1689,26 +1689,26 @@ LteRlcAm::ExpirePollRetransmitTimer (void)
       || (m_vtS == m_vtMs))
     {
       NS_LOG_INFO ("txonBuffer and retxBuffer empty. Move PDUs up to = " << m_vtS.GetValue () - 1 << " to retxBuffer");
-      uint16_t sn = 0;
-      for ( sn = m_vtA.GetValue(); sn < m_vtS.GetValue (); sn++ )
+      for (SequenceNumber10 sn = m_vtA; sn < m_vtS; sn++)
         {
-          bool pduAvailable = m_txedBuffer.at (sn).m_pdu != 0;
+          bool pduAvailable = m_txedBuffer.at (sn.GetValue ()).m_pdu != 0;
 
            if ( pduAvailable )
              {
+               uint16_t snValue = sn.GetValue ();
                NS_LOG_INFO ("Move PDU " << sn << " from txedBuffer to retxBuffer");
-               m_retxBuffer.at (sn).m_pdu = m_txedBuffer.at (sn).m_pdu->Copy ();
-               m_retxBuffer.at (sn).m_retxCount = m_txedBuffer.at (sn).m_retxCount;
-               m_retxBufferSize += m_retxBuffer.at (sn).m_pdu->GetSize ();
+               m_retxBuffer.at (snValue).m_pdu = m_txedBuffer.at (snValue).m_pdu->Copy ();
+               m_retxBuffer.at (snValue).m_retxCount = m_txedBuffer.at (snValue).m_retxCount;
+               m_retxBufferSize += m_retxBuffer.at (snValue).m_pdu->GetSize ();
 
-               m_txedBufferSize -= m_txedBuffer.at (sn).m_pdu->GetSize ();
-               m_txedBuffer.at (sn).m_pdu = 0;
-               m_txedBuffer.at (sn).m_retxCount = 0;
+               m_txedBufferSize -= m_txedBuffer.at (snValue).m_pdu->GetSize ();
+               m_txedBuffer.at (snValue).m_pdu = 0;
+               m_txedBuffer.at (snValue).m_retxCount = 0;
              }
         }
     }
 
-  DoReportBufferStatus ();  
+  DoReportBufferStatus ();
 }
 
 

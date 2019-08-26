@@ -1,7 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015,2016 IMDEA Networks Institute
- * Author: Hany Assasa <hany.assasa@hotmail.com>
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef DMG_BEACON_DCA_H
 #define DMG_BEACON_DCA_H
@@ -27,23 +27,26 @@ public:
   ~DmgBeaconDca ();
 
   /**
-   * Initiate new BTI access period. This enforcces DMG Beacon DCA Class to sense the channel before
-   * the first DMG Beacon transmission.
-   */
-  void InitiateBTI (void);
-  /**
+   * Transmit single DMG Beacon..
    * \param beacon The DMG Beacon Body.
    * \param hdr header of packet to send.
-   *
-   * Start channel access procedure to transmit one DMG Beacon.
+   * \param BTIRemainingTime The remaining time in BTI access period.
    */
-  void TransmitDmgBeacon (const ExtDMGBeacon &beacon, const WifiMacHeader &hdr);
+  void TransmitDmgBeacon (const ExtDMGBeacon &beacon, const WifiMacHeader &hdr, Time BTIRemainingTime);
   /**
-   * Set the upper layer MAC this DcaTxop is associated to.
-   *
-   * \return WifiMac
+   * Perform Clear Channel Assessment Procedure.
    */
-  void SetWifiMac (Ptr<WifiMac> mac);
+  void PerformCCA (void);
+  /**
+   * typedef for a callback to invoke when a
+   * packet transmission was completed successfully.
+   */
+  typedef Callback <void> AccessGranted;
+  /**
+   * CCA procedure is completed and access is granted.
+   * \param callback the callback to invoke when access is granted
+   */
+  void SetAccessGrantedCallback (AccessGranted callback);
 
 private:
   DmgBeaconDca &operator = (const DmgBeaconDca &);
@@ -80,11 +83,9 @@ private:
 
   virtual void DoDispose (void);
 
-  Ptr<WifiMac> m_wifiMac;
-  ExtDMGBeacon m_currentBeacon;
-  WifiMacHeader m_currentHdr;
-  bool m_transmittingBeacon;
-  bool m_senseChannel;
+private:
+  AccessGranted m_accessGrantedCallback;
+
 };
 
 } //namespace ns3

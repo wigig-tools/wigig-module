@@ -43,6 +43,7 @@
 #include <ns3/lte-anr.h>
 #include <ns3/lte-ffr-algorithm.h>
 #include <ns3/ipv4-l3-protocol.h>
+#include <ns3/ipv6-l3-protocol.h>
 #include <ns3/abort.h>
 #include <ns3/log.h>
 #include <ns3/lte-enb-component-carrier-manager.h>
@@ -225,6 +226,19 @@ LteEnbNetDevice::GetCellId () const
   return m_cellId;
 }
 
+bool
+LteEnbNetDevice::HasCellId (uint16_t cellId) const
+{
+  for (auto &it: m_ccMap)
+    {
+      if (it.second->GetCellId () == cellId)
+        {
+          return true;
+        }
+    }
+  return false;
+}
+
 uint8_t 
 LteEnbNetDevice::GetUlBandwidth () const
 {
@@ -342,6 +356,7 @@ LteEnbNetDevice::GetCcMap ()
 void
 LteEnbNetDevice::SetCcMap (std::map< uint8_t, Ptr<ComponentCarrierEnb> > ccm)
 {
+  NS_ASSERT_MSG (!m_isConfigured, "attempt to set CC map after configuration");
   m_ccMap = ccm;
 }
 
@@ -373,7 +388,7 @@ bool
 LteEnbNetDevice::Send (Ptr<Packet> packet, const Address& dest, uint16_t protocolNumber)
 {
   NS_LOG_FUNCTION (this << packet   << dest << protocolNumber);
-  NS_ASSERT_MSG (protocolNumber == Ipv4L3Protocol::PROT_NUMBER, "unsupported protocol " << protocolNumber << ", only IPv4 is supported");
+  NS_ASSERT_MSG (protocolNumber == Ipv4L3Protocol::PROT_NUMBER || protocolNumber == Ipv6L3Protocol::PROT_NUMBER, "unsupported protocol " << protocolNumber << ", only IPv4/IPv6 is supported");
   return m_rrc->SendData (packet);
 }
 
@@ -389,7 +404,8 @@ LteEnbNetDevice::UpdateConfig (void)
         {
           NS_LOG_LOGIC (this << " Configure cell " << m_cellId);
           // we have to make sure that this function is called only once
-          m_rrc->ConfigureCell (m_cellId);
+          NS_ASSERT (!m_ccMap.empty ());
+          m_rrc->ConfigureCell (m_ccMap);
           m_isConfigured = true;
         }
 

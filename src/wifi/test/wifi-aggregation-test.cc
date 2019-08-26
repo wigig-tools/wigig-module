@@ -27,8 +27,8 @@
 #include "ns3/yans-wifi-phy.h"
 #include "ns3/mac-tx-middle.h"
 #include "ns3/dcf-manager.h"
-#include "ns3/msdu-standard-aggregator.h"
-#include "ns3/mpdu-standard-aggregator.h"
+#include "ns3/msdu-aggregator.h"
+#include "ns3/mpdu-aggregator.h"
 
 using namespace ns3;
 
@@ -48,11 +48,11 @@ private:
   Ptr<MacLow> m_low; ///< MacLow
   Ptr<YansWifiPhy> m_phy; ///< Phy
   Ptr<EdcaTxopN> m_edca; ///< EDCA
-  MacTxMiddle *m_txMiddle; ///< MacTxMiddle
+  Ptr<MacTxMiddle> m_txMiddle; ///< MacTxMiddle
   Ptr<WifiRemoteStationManager> m_manager; ///< remote station manager
   ObjectFactory m_factory; ///< factory
   Ptr<MpduAggregator> m_mpduAggregator; ///< A-MPDU aggregrator
-  DcfManager *m_dcfManager; ///< DCF manager
+  Ptr<DcfManager> m_dcfManager; ///< DCF manager
 };
 
 AmpduAggregationTest::AmpduAggregationTest ()
@@ -87,7 +87,7 @@ AmpduAggregationTest::DoRun (void)
   m_low->SetWifiRemoteStationManager (m_manager);
   m_low->SetAddress (Mac48Address ("00:00:00:00:00:01"));
 
-  m_dcfManager = new DcfManager ();
+  m_dcfManager = CreateObject<DcfManager> ();
   m_dcfManager->SetupLow (m_low);
   m_dcfManager->SetupPhyListener (m_phy);
   m_dcfManager->SetSlot (MicroSeconds (9));
@@ -98,7 +98,7 @@ AmpduAggregationTest::DoRun (void)
   m_edca->SetWifiRemoteStationManager (m_manager);
   m_edca->SetManager (m_dcfManager);
 
-  m_txMiddle = new MacTxMiddle ();
+  m_txMiddle = Create<MacTxMiddle> ();
   m_edca->SetTxMiddle (m_txMiddle);
   m_edca->CompleteConfig ();
 
@@ -106,9 +106,9 @@ AmpduAggregationTest::DoRun (void)
    * Configure MPDU aggregation.
    */
   m_factory = ObjectFactory ();
-  m_factory.SetTypeId ("ns3::MpduStandardAggregator");
-  m_factory.Set ("MaxAmpduSize", UintegerValue (65535));
+  m_factory.SetTypeId ("ns3::MpduAggregator");
   m_mpduAggregator = m_factory.Create<MpduAggregator> ();
+  m_mpduAggregator->SetMaxAmpduSize (65535);
   m_edca->SetMpduAggregator (m_mpduAggregator);
 
   /*
@@ -238,7 +238,7 @@ AmpduAggregationTest::DoRun (void)
 
   Simulator::Destroy ();
 
-  delete m_txMiddle;
+  m_txMiddle = 0;
 
   m_low->Dispose ();
   m_low = 0;
@@ -246,7 +246,8 @@ AmpduAggregationTest::DoRun (void)
   m_edca->Dispose ();
   m_edca = 0;
 
-  delete m_dcfManager;
+  m_dcfManager->Dispose ();
+  m_dcfManager = 0;
 }
 
 /**
@@ -310,8 +311,8 @@ TwoLevelAggregationTest::DoRun (void)
   /*
    * Configure aggregation.
    */
-  m_msduAggregator = CreateObject<MsduStandardAggregator> ();
-  m_mpduAggregator = CreateObject<MpduStandardAggregator> ();
+  m_msduAggregator = CreateObject<MsduAggregator> ();
+  m_mpduAggregator = CreateObject<MpduAggregator> ();
 
   m_msduAggregator->SetMaxAmsduSize (4095);
   m_mpduAggregator->SetMaxAmpduSize (65535);
@@ -367,9 +368,9 @@ TwoLevelAggregationTest::DoRun (void)
    * This test is needed to ensure that no packets are removed from the queue in MacLow::PerformMsduAggregation, since aggregation will no occur in MacLow::AggregateToAmpdu.
    */
   m_factory = ObjectFactory ();
-  m_factory.SetTypeId ("ns3::MpduStandardAggregator");
-  m_factory.Set ("MaxAmpduSize", UintegerValue (0));
+  m_factory.SetTypeId ("ns3::MpduAggregator");
   m_mpduAggregator = m_factory.Create<MpduAggregator> ();
+  m_mpduAggregator->SetMaxAmpduSize (65535);
   m_edca->SetMpduAggregator (m_mpduAggregator);
 
   m_edca->GetQueue ()->Enqueue (Create<WifiMacQueueItem> (pkt, hdr));

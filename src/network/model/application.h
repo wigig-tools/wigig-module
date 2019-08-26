@@ -103,8 +103,6 @@ public:
    * \param node the node to which this Application object is attached.
    */
   void SetNode (Ptr<Node> node);
-
-private:
   /**
    * \brief Application specific startup code
    *
@@ -113,7 +111,6 @@ private:
    * subclasses.
    */
   virtual void StartApplication (void);
-
   /**
    * \brief Application specific shutdown code
    *
@@ -122,6 +119,7 @@ private:
    * subclasses.
    */
   virtual void StopApplication (void);
+
 protected:
   virtual void DoDispose (void);
   virtual void DoInitialize (void);

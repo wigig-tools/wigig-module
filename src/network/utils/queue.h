@@ -210,7 +210,7 @@ public:
   // a buffer with the date of arrival of past received packets
   // which are within the average window
   // so, it is quite costly to do it all the time.
-  // Hence, it is disabled by default and must be explicitely
+  // Hence, it is disabled by default and must be explicitly
   // enabled with this method which specifies the size
   // of the average window in time units.
   void EnableRunningAverage (Time averageWindow);
@@ -230,15 +230,6 @@ public:
 #endif
 
 protected:
-  /**
-   * \brief Actually pass messages to the ns-3 logging system
-   *
-   * \param level the log level
-   * \param str the message to log
-   */
-  void DoNsLog (const enum LogLevel level, std::string str) const;
-
-protected:
   TracedValue<uint32_t> m_nBytes;               //!< Number of bytes in the queue
   TracedValue<uint32_t> m_nPackets;             //!< Number of packets in the queue
 
@@ -256,6 +247,7 @@ private:
   uint32_t m_maxBytes;                //!< max bytes in the queue
   QueueMode m_mode;                   //!< queue mode (packets or bytes)
 
+  /// Friend class
   template <typename Item>
   friend class Queue;
 };
@@ -331,6 +323,8 @@ public:
   void Flush (void);
 
 protected:
+
+  /// Const iterator.
   typedef typename std::list<Ptr<Item> >::const_iterator ConstIterator;
 
   /**
@@ -416,8 +410,8 @@ protected:
 
 protected:
   std::list<Ptr<Item> > m_packets;          //!< the items in the queue
-
 private:
+  NS_LOG_TEMPLATE_DECLARE;                  //!< the log component
 
   /// Traced callback: fired when a packet is enqueued
   TracedCallback<Ptr<const Item> > m_traceEnqueue;
@@ -430,14 +424,6 @@ private:
   /// Traced callback: fired when a packet is dropped after dequeue
   TracedCallback<Ptr<const Item> > m_traceDropAfterDequeue;
 };
-
-
-#define QUEUE_LOG(level,params)              \
-  {                                          \
-    std::stringstream ss;                    \
-    ss << params;                            \
-    QueueBase::DoNsLog (level, ss.str ());   \
-  }
 
 
 /**
@@ -473,6 +459,7 @@ Queue<Item>::GetTypeId (void)
 
 template <typename Item>
 Queue<Item>::Queue ()
+  : NS_LOG_TEMPLATE_DEFINE ("Queue")
 {
 }
 
@@ -485,18 +472,18 @@ template <typename Item>
 bool
 Queue<Item>::DoEnqueue (ConstIterator pos, Ptr<Item> item)
 {
-  QUEUE_LOG (LOG_LOGIC, "Queue:DoEnqueue(" << this << ", " << item << ")");
+  NS_LOG_FUNCTION (this << item);
 
   if (m_mode == QUEUE_MODE_PACKETS && (m_nPackets.Get () >= m_maxPackets))
     {
-      QUEUE_LOG (LOG_LOGIC, "Queue full (at max packets) -- dropping pkt");
+      NS_LOG_LOGIC ("Queue full (at max packets) -- dropping pkt");
       DropBeforeEnqueue (item);
       return false;
     }
 
   if (m_mode == QUEUE_MODE_BYTES && (m_nBytes.Get () + item->GetSize () > m_maxBytes))
     {
-      QUEUE_LOG (LOG_LOGIC, "Queue full (packet would exceed max bytes) -- dropping pkt");
+      NS_LOG_LOGIC ("Queue full (packet would exceed max bytes) -- dropping pkt");
       DropBeforeEnqueue (item);
       return false;
     }
@@ -510,7 +497,7 @@ Queue<Item>::DoEnqueue (ConstIterator pos, Ptr<Item> item)
   m_nPackets++;
   m_nTotalReceivedPackets++;
 
-  QUEUE_LOG (LOG_LOGIC, "m_traceEnqueue (p)");
+  NS_LOG_LOGIC ("m_traceEnqueue (p)");
   m_traceEnqueue (item);
 
   return true;
@@ -520,11 +507,11 @@ template <typename Item>
 Ptr<Item>
 Queue<Item>::DoDequeue (ConstIterator pos)
 {
-  QUEUE_LOG (LOG_LOGIC, "Queue:DoDequeue(" << this << ")");
+  NS_LOG_FUNCTION (this);
 
   if (m_nPackets.Get () == 0)
     {
-      QUEUE_LOG (LOG_LOGIC, "Queue empty");
+      NS_LOG_LOGIC ("Queue empty");
       return 0;
     }
 
@@ -539,7 +526,7 @@ Queue<Item>::DoDequeue (ConstIterator pos)
       m_nBytes -= item->GetSize ();
       m_nPackets--;
 
-      QUEUE_LOG (LOG_LOGIC, "m_traceDequeue (p)");
+      NS_LOG_LOGIC ("m_traceDequeue (p)");
       m_traceDequeue (item);
     }
   return item;
@@ -549,11 +536,11 @@ template <typename Item>
 Ptr<Item>
 Queue<Item>::DoRemove (ConstIterator pos)
 {
-  QUEUE_LOG (LOG_LOGIC, "Queue:DoRemove(" << this << ")");
+  NS_LOG_FUNCTION (this);
 
   if (m_nPackets.Get () == 0)
     {
-      QUEUE_LOG (LOG_LOGIC, "Queue empty");
+      NS_LOG_LOGIC ("Queue empty");
       return 0;
     }
 
@@ -567,6 +554,10 @@ Queue<Item>::DoRemove (ConstIterator pos)
 
       m_nBytes -= item->GetSize ();
       m_nPackets--;
+
+      // packets are first dequeued and then dropped
+      NS_LOG_LOGIC ("m_traceDequeue (p)");
+      m_traceDequeue (item);
 
       DropAfterDequeue (item);
     }
@@ -577,7 +568,7 @@ template <typename Item>
 void
 Queue<Item>::Flush (void)
 {
-  QUEUE_LOG (LOG_LOGIC, "Queue:Flush(" << this << ")");
+  NS_LOG_FUNCTION (this);
   while (!IsEmpty ())
     {
       Remove ();
@@ -588,11 +579,11 @@ template <typename Item>
 Ptr<const Item>
 Queue<Item>::DoPeek (ConstIterator pos) const
 {
-  QUEUE_LOG (LOG_LOGIC, "Queue:DoPeek(" << this << ")");
+  NS_LOG_FUNCTION (this);
 
   if (m_nPackets.Get () == 0)
     {
-      QUEUE_LOG (LOG_LOGIC, "Queue empty");
+      NS_LOG_LOGIC ("Queue empty");
       return 0;
     }
 
@@ -615,14 +606,14 @@ template <typename Item>
 void
 Queue<Item>::DropBeforeEnqueue (Ptr<Item> item)
 {
-  QUEUE_LOG (LOG_LOGIC, "Queue:DropBeforeEnqueue(" << this << ", " << item << ")");
+  NS_LOG_FUNCTION (this << item);
 
   m_nTotalDroppedPackets++;
   m_nTotalDroppedPacketsBeforeEnqueue++;
   m_nTotalDroppedBytes += item->GetSize ();
   m_nTotalDroppedBytesBeforeEnqueue += item->GetSize ();
 
-  QUEUE_LOG (LOG_LOGIC, "m_traceDropBeforeEnqueue (p)");
+  NS_LOG_LOGIC ("m_traceDropBeforeEnqueue (p)");
   m_traceDrop (item);
   m_traceDropBeforeEnqueue (item);
 }
@@ -631,14 +622,14 @@ template <typename Item>
 void
 Queue<Item>::DropAfterDequeue (Ptr<Item> item)
 {
-  QUEUE_LOG (LOG_LOGIC, "Queue:DropAfterDequeue(" << this << ", " << item << ")");
+  NS_LOG_FUNCTION (this << item);
 
   m_nTotalDroppedPackets++;
   m_nTotalDroppedPacketsAfterDequeue++;
   m_nTotalDroppedBytes += item->GetSize ();
   m_nTotalDroppedBytesAfterDequeue += item->GetSize ();
 
-  QUEUE_LOG (LOG_LOGIC, "m_traceDropAfterDequeue (p)");
+  NS_LOG_LOGIC ("m_traceDropAfterDequeue (p)");
   m_traceDrop (item);
   m_traceDropAfterDequeue (item);
 }

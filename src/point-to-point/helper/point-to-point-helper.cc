@@ -44,6 +44,7 @@ PointToPointHelper::PointToPointHelper ()
   m_deviceFactory.SetTypeId ("ns3::PointToPointNetDevice");
   m_channelFactory.SetTypeId ("ns3::PointToPointChannel");
   m_remoteChannelFactory.SetTypeId ("ns3::PointToPointRemoteChannel");
+  m_snaplen = std::numeric_limits<uint32_t>::max ();
 }
 
 void 
@@ -75,6 +76,18 @@ PointToPointHelper::SetChannelAttribute (std::string n1, const AttributeValue &v
   m_remoteChannelFactory.Set (n1, v1);
 }
 
+void
+PointToPointHelper::SetSnapshotLength (uint32_t length)
+{
+  m_snaplen = length;
+}
+
+uint32_t
+PointToPointHelper::GetSnapshotLength (void) const
+{
+  return m_snaplen;
+}
+
 void 
 PointToPointHelper::EnablePcapInternal (std::string prefix, Ptr<NetDevice> nd, bool promiscuous, bool explicitFilename)
 {
@@ -103,7 +116,7 @@ PointToPointHelper::EnablePcapInternal (std::string prefix, Ptr<NetDevice> nd, b
     }
 
   Ptr<PcapFileWrapper> file = pcapHelper.CreateFile (filename, std::ios::out, 
-                                                     PcapHelper::DLT_PPP);
+                                                     PcapHelper::DLT_PPP, m_snaplen);
   pcapHelper.HookDefaultSink<PointToPointNetDevice> (device, "PromiscSniffer", file);
 }
 

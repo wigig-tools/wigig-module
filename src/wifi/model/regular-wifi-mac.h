@@ -58,6 +58,9 @@ enum MacState
   WAIT_PROBE_RESP,
   WAIT_ASSOC_RESP,
   BEACON_MISSED,
+  WAIT_BEACON,
+  UNASSOCIATED,
+  SCANNING,
   REFUSED
 };
 
@@ -259,7 +262,7 @@ public:
   /**
    * \param phy the physical layer attached to this MAC.
    */
-  void SetWifiPhy (Ptr<WifiPhy> phy);
+  void SetWifiPhy (const Ptr<WifiPhy> phy);
   /**
    * \return the physical layer attached to this MAC.
    */
@@ -271,7 +274,7 @@ public:
   /**
    * \param stationManager the station manager attached to this MAC.
    */
-  virtual void SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> stationManager);
+  virtual void SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> stationManager);
   /**
    * \return the station manager attached to this MAC.
    */
@@ -357,10 +360,10 @@ protected:
   virtual void DoInitialize ();
   virtual void DoDispose ();
 
-  MacRxMiddle *m_rxMiddle;  //!< RX middle (de-fragmentation etc.)
-  MacTxMiddle *m_txMiddle;  //!< TX middle (aggregation etc.)
+  Ptr<MacRxMiddle> m_rxMiddle;  //!< RX middle (de-fragmentation etc.)
+  Ptr<MacTxMiddle> m_txMiddle;  //!< TX middle (aggregation etc.)
   Ptr<MacLow> m_low;        //!< MacLow (RTS, CTS, DATA, ACK etc.)
-  DcfManager *m_dcfManager; //!< DCF manager (access to channel)
+  Ptr<DcfManager> m_dcfManager; //!< DCF manager (access to channel)
   Ptr<WifiPhy> m_phy;       //!< Wifi PHY
 
   Ptr<WifiRemoteStationManager> m_stationManager; //!< Remote station manager (rate control, RTS/CTS/fragmentation thresholds etc.)
@@ -413,8 +416,8 @@ protected:
   uint32_t m_fstId;               //!< Fast session transfer ID.
   FstSessionMap m_fstSessionMap;
 
-  Ssid m_ssid; //!< Service Set ID (SSID)
-  enum MacState m_state;
+  Ssid m_ssid;      //!< Service Set ID (SSID)
+  MacState m_state; //!< The state of the MAC layer.
 
   /** This holds a pointer to the DCF instance for this WifiMac - used
   for transmission of frames to non-QoS peers. */
@@ -476,7 +479,8 @@ protected:
    * The packet we sent was successfully received by the receiver
    * (i.e. we received an ACK from the receiver).
    *
-   * \param hdr the header of the packet that we successfully sent
+   * \param packet the packet that has been transmitted.
+   * \param hdr the header of the packet that we successfully sent.
    */
   virtual void TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr);
   /**
@@ -680,8 +684,13 @@ protected:
 private:
   /// type conversion operator
   RegularWifiMac (const RegularWifiMac &);
-  /// assignment operator
-  RegularWifiMac & operator= (const RegularWifiMac &);
+  /**
+   * assignment operator
+   *
+   * \param mac the RegularWifiMac to assign
+   * \returns the assigned value
+   */
+  RegularWifiMac & operator= (const RegularWifiMac & mac);
 
   /**
    * This method is a private utility invoked to configure the channel

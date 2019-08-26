@@ -91,7 +91,7 @@ public:
    *
    * \param maxBytes the upper bound of bytes to send
    */
-  void SetMaxBytes (uint32_t maxBytes);
+  void SetMaxBytes (uint64_t maxBytes);
 
   /**
    * \brief Get the socket this application is attached to.
@@ -99,13 +99,23 @@ public:
    */
   Ptr<Socket> GetSocket (void) const;
 
+  /**
+   * \return the total packets transmitted
+   */
+  uint64_t GetTotalTxPackets (void) const;
+  /**
+   * \return the total bytes transmitted
+   */
+  uint64_t GetTotalTxBytes (void) const;
+
+  // inherited from Application base class.
+  virtual void StartApplication (void);    // Called at time specified by Start
+  // inherited from Application base class.
+  virtual void StopApplication (void);     // Called at time specified by Stop
+
 protected:
   virtual void DoDispose (void);
 private:
-  // inherited from Application base class.
-  virtual void StartApplication (void);    // Called at time specified by Start
-  virtual void StopApplication (void);     // Called at time specified by Stop
-
   /**
    * \brief Send data until the L4 transmission buffer is full.
    */
@@ -115,9 +125,10 @@ private:
   Address         m_peer;         //!< Peer address
   bool            m_connected;    //!< True if connected
   uint32_t        m_sendSize;     //!< Size of data to send each time
-  uint32_t        m_maxBytes;     //!< Limit total number of bytes sent
-  uint32_t        m_totBytes;     //!< Total bytes sent so far
+  uint64_t        m_maxBytes;     //!< Limit total number of bytes sent
+  uint64_t        m_totBytes;     //!< Total bytes sent so far
   TypeId          m_tid;          //!< The type of protocol to use.
+  uint64_t        m_txPackets;    //!< Total packets sent so far
 
   /// Traced Callback: sent packets
   TracedCallback<Ptr<const Packet> > m_txTrace;

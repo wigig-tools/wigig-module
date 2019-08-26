@@ -1,6 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2009 MIRKO BANCHI
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -15,7 +16,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Author: Mirko Banchi <mk.banchi@gmail.com>
+ * Authors: Mirko Banchi <mk.banchi@gmail.com>
+ *          Hany Assasa <hany.assasa@gmail.com>
  */
 
 #ifndef CTRL_HEADERS_H
@@ -409,8 +411,8 @@ private:
 
   union
   {
-    uint16_t m_bitmap[64];
-    uint64_t m_compressedBitmap;
+    uint16_t m_bitmap[64]; ///< the block ack bitmap
+    uint64_t m_compressedBitmap; ///< the compressed block ack bitmap
   } bitmap; ///< bitmap union type
 };
 

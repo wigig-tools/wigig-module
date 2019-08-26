@@ -448,7 +448,7 @@ ArpCache::Entry::MarkWaitReply (Ptr<Packet> waiting)
   m_arp->StartWaitReplyTimer ();
 }
 
-void
+void 
 ArpCache::Entry::MarkWaitReply (Ipv4PayloadHeaderPair waiting)
 {
   NS_LOG_FUNCTION (this << waiting.first);

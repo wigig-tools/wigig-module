@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015, 2016 IMDEA NEtworks Institute
+ * Copyright (c) 2015-2017 IMDEA NEtworks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -112,11 +112,11 @@ public:
    * \return The TypeId.
    */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
 private:
   CapabilityInformation m_capability;       //!< Capability information.
@@ -125,6 +125,93 @@ private:
   SupportedRates m_rates;                   //!< List of supported rates
 
 };
+
+
+/**
+ * \ingroup wifi
+ * Implement the header for management frames of type reassociation request.
+ */
+class MgtReassocRequestHeader : public Header, public MgtFrame
+{
+public:
+  MgtReassocRequestHeader ();
+  ~MgtReassocRequestHeader ();
+
+  /**
+   * Set the Service Set Identifier (SSID).
+   *
+   * \param ssid SSID
+   */
+  void SetSsid (Ssid ssid);
+  /**
+   * Set the supported rates.
+   *
+   * \param rates the supported rates
+   */
+  void SetSupportedRates (SupportedRates rates);
+  /**
+   * Set the listen interval.
+   *
+   * \param interval the listen interval
+   */
+  void SetListenInterval (uint16_t interval);
+  /**
+   * Set the Capability information.
+   *
+   * \param capabilities Capability information
+   */
+  void SetCapabilities (CapabilityInformation capabilities);
+  /**
+   * Return the Capability information.
+   *
+   * \return Capability information
+   */
+  CapabilityInformation GetCapabilities (void) const;
+  /**
+   * Return the Service Set Identifier (SSID).
+   *
+   * \return SSID
+   */
+  Ssid GetSsid (void) const;
+  /**
+   * Return the supported rates.
+   *
+   * \return the supported rates
+   */
+  SupportedRates GetSupportedRates (void) const;
+  /**
+   * Return the listen interval.
+   *
+   * \return the listen interval
+   */
+  uint16_t GetListenInterval (void) const;
+  /**
+   * Set the address of the current access point.
+   *
+   * \param currentApAddr address of the current access point
+   */
+  void SetCurrentApAddress (Mac48Address currentApAddr);
+
+  /**
+   * Register this type.
+   * \return The TypeId.
+   */
+  static TypeId GetTypeId (void);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
+
+
+private:
+  Mac48Address m_currentApAddr;       //!< Address of the current access point
+  Ssid m_ssid;                        //!< Service Set ID (SSID)
+  SupportedRates m_rates;             //!< List of supported rates
+  CapabilityInformation m_capability; //!< Capability information
+  uint16_t m_listenInterval;          //!< listen interval
+};
+
 
 /**
  * \ingroup wifi
@@ -153,14 +240,13 @@ public:
    *
    * \param the association identifier.
    */
-  void SetAid (uint16_t aid);
+  void SetAssociationId (uint16_t aid);
   /**
    * Set the supported rates.
    *
    * \param rates the supported rates
    */
   void SetSupportedRates (SupportedRates rates);
-
   /**
    * Return the Capability information.
    *
@@ -191,11 +277,11 @@ public:
    * \return The TypeId.
    */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
 private:
   CapabilityInformation m_capability;       //!< Capability information
@@ -204,6 +290,7 @@ private:
   SupportedRates m_rates;                   //!< List of supported rates
 
 };
+
 
 /**
  * \ingroup wifi
@@ -244,11 +331,11 @@ public:
    * \return The TypeId.
    */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
 private:
   Ssid m_ssid;                            //!< Service Set ID (SSID)
@@ -327,11 +414,11 @@ public:
    * \return The TypeId.
    */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
 private:
   uint64_t m_timestamp;                     //!< Timestamp
@@ -380,6 +467,7 @@ public:
    * Category values - see 802.11-2012 Table 8-38
    */
 
+  ///CategoryValue enumeration
   enum CategoryValue //table 8-38 staring from IEEE 802.11, Part11, (Year 2012)
   {
     QOS = 1,
@@ -395,6 +483,23 @@ public:
     //Since vendor specific action has no stationary Action value,the parse process is not here.
     //Refer to vendor-specific-action in wave module.
     VENDOR_SPECIFIC_ACTION = 127,
+  };
+
+  ///SelfProtectedActionValue enumeration
+  enum SelfProtectedActionValue //Category: 15 (Self Protected)
+  {
+    PEER_LINK_OPEN = 1,         //Mesh Peering Open
+    PEER_LINK_CONFIRM = 2,      //Mesh Peering Confirm
+    PEER_LINK_CLOSE = 3,        //Mesh Peering Close
+    GROUP_KEY_INFORM = 4,       //Mesh Group Key Inform
+    GROUP_KEY_ACK = 5,          //Mesh Group Key Acknowledge
+  };
+
+  ///MultihopActionValue enumeration
+  enum MultihopActionValue
+  {
+    PROXY_UPDATE = 0,                   //not used so far
+    PROXY_UPDATE_CONFIRMATION = 1,      //not used so far
   };
 
   enum QosActionValue
@@ -433,6 +538,7 @@ public:
     NEIGHBOR_REPORT_RESPONSE = 5
   };
 
+  ///MeshActionValue enumeration
   enum MeshActionValue
   {
     LINK_METRIC_REPORT = 0,               //Action Value:0 in Category 13: Mesh
@@ -446,21 +552,6 @@ public:
     MDAOP_SET_TEARDOWN = 8,               //Action Value:8 in Category 13: Mesh (not used so far)
     TBTT_ADJUSTMENT_REQUEST = 9,          //Action Value:9 in Category 13: Mesh (not used so far)
     TBTT_ADJUSTMENT_RESPONSE = 10,        //Action Value:10 in Category 13: Mesh (not used so far)
-  };
-
-  enum SelfProtectedActionValue //Category: 15 (Self Protected)
-  {
-    PEER_LINK_OPEN = 1,         //Mesh Peering Open
-    PEER_LINK_CONFIRM = 2,      //Mesh Peering Confirm
-    PEER_LINK_CLOSE = 3,        //Mesh Peering Close
-    GROUP_KEY_INFORM = 4,       //Mesh Group Key Inform
-    GROUP_KEY_ACK = 5,          //Mesh Group Key Acknowledge
-  };
-
-  enum MultihopActionValue
-  {
-    PROXY_UPDATE = 0,                   //not used so far
-    PROXY_UPDATE_CONFIRMATION = 1,      //not used so far
   };
 
   /**
@@ -516,6 +607,10 @@ public:
   {
     UNPROTECTED_DMG_ANNOUNCE = 0,
     UNPROTECTED_DMG_BRP = 1,
+    UNPROTECTED_MIMO_BF_SETUP = 2,
+    UNPROTECTED_MIMO_BF_POLL = 3,
+    UNPROTECTED_MIMO_BF_FEEDBACK = 4,
+    UNPROTECTED_MIMO_BF_SELECTION = 5,
   };
 
   /**
@@ -523,16 +618,16 @@ public:
    */
   typedef union
   {
-    enum QosActionValue qos;
-    enum BlockAckActionValue blockAck;
-    enum RadioMeasurementActionValue radioMeasurementAction;
-    enum PublicActionValue publicAction;
-    enum SelfProtectedActionValue selfProtectedAction;
-    enum MultihopActionValue multihopAction;
-    enum MeshActionValue meshAction;
-    enum DmgActionValue dmgAction;
-    enum FstActionValue fstAction;
-    enum UnprotectedDmgValue unprotectedAction;
+    QosActionValue qos;
+    BlockAckActionValue blockAck;
+    RadioMeasurementActionValue radioMeasurementAction;
+    PublicActionValue publicAction;
+    SelfProtectedActionValue selfProtectedAction;
+    MultihopActionValue multihopAction;
+    MeshActionValue meshAction;
+    DmgActionValue dmgAction;
+    FstActionValue fstAction;
+    UnprotectedDmgValue unprotectedAction;
   } ActionValue;
   /**
    * Set action for this Action header.
@@ -540,7 +635,7 @@ public:
    * \param type category
    * \param action action
    */
-  void SetAction (enum CategoryValue type, ActionValue action);
+  void SetAction (CategoryValue type, ActionValue action);
 
   /**
    * Return the category value.
@@ -560,14 +655,25 @@ public:
    * \return The TypeId.
    */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId () const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize () const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId () const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize () const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
+
 
 private:
+  /**
+   * Category value to string function
+   * \param value the category value
+   * \returns the categoty value string
+   */
   std::string CategoryValueToString (CategoryValue value) const;
+  /**
+   * Self protected action value to string function
+   * \param value the protected action value
+   * \returns the self protected action value string
+   */
   std::string SelfProtectedActionValueToString (SelfProtectedActionValue value) const;
   uint8_t m_category; //!< Category of the action
   uint8_t m_actionValue; //!< Action value
@@ -698,11 +804,11 @@ public:
    * \return The TypeId.
    */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
   /**
    * Enable delayed Block ACK.
@@ -806,7 +912,7 @@ private:
    */
   void SetStartingSequenceControl (uint16_t seqControl);
 
-  uint8_t m_dialogToken;   /* Not used for now */
+  uint8_t m_dialogToken;   //!< Not used for now
   uint8_t m_amsduSupport;  //!< Flag if A-MSDU is supported
   uint8_t m_policy;        //!< Block ACK policy
   uint8_t m_tid;           //!< Traffic ID
@@ -830,11 +936,11 @@ public:
    * \return The TypeId.
    */
   static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
   /**
    * Enable delayed Block ACK.
@@ -927,7 +1033,7 @@ private:
    */
   void SetParameterSet (uint16_t params);
 
-  uint8_t m_dialogToken;   /* Not used for now */
+  uint8_t m_dialogToken;   //!< Not used for now
   StatusCode m_code;       //!< Status code
   uint8_t m_amsduSupport;  //!< Flag if A-MSDU is supported
   uint8_t m_policy;        //!< Block ACK policy
@@ -952,11 +1058,11 @@ public:
    */
   static TypeId GetTypeId (void);
   // Inherited
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
+  TypeId GetInstanceTypeId (void) const;
+  void Print (std::ostream &os) const;
+  uint32_t GetSerializedSize (void) const;
+  void Serialize (Buffer::Iterator start) const;
+  uint32_t Deserialize (Buffer::Iterator start);
 
   /**
    * Check if the initiator bit in the DELBA is setted.
@@ -976,7 +1082,7 @@ public:
    *
    * \param tid traffic ID
    */
-  void SetTid (uint8_t);
+  void SetTid (uint8_t tid);
   /**
    * Set the initiator bit in the DELBA.
    */
@@ -985,6 +1091,7 @@ public:
    * Un-set the initiator bit in the DELBA.
    */
   void SetByRecipient (void);
+
 
 private:
   /**
@@ -1000,9 +1107,9 @@ private:
    */
   void SetParameterSet (uint16_t params);
 
-  uint16_t m_initiator;
+  uint16_t m_initiator; //!< initiator
   uint16_t m_tid; //!< Traffic ID
-  uint16_t m_reasonCode; /* Not used for now. Always set to 1: "Unspecified reason" */
+  uint16_t m_reasonCode; //!< Not used for now. Always set to 1: "Unspecified reason"
 };
 
 /**
@@ -1339,7 +1446,7 @@ public:
   void SetSubjectAddress (Mac48Address address);
   /**
    * Set the request element which contains a list of requested information IDs.
-   * @param elem the Request Element.
+   * \param elem the Request Element.
    */
   void SetRequestInformationElement (Ptr<RequestElement> elem);
   /**
@@ -1531,6 +1638,8 @@ private:
 };
 
 typedef std::map<uint16_t, RelayCapabilitiesInfo> RelayCapableStaList;
+typedef RelayCapableStaList::const_iterator RelayCapableStaListCI;
+typedef RelayCapableStaList::iterator RelayCapableStaListI;
 
 /**
  * \ingroup wifi
@@ -2274,8 +2383,189 @@ public:
 private:
   uint8_t m_dialogToken;
   BRP_Request_Field m_brpRequestField;
-  BeamRefinementElement m_element;
+  BeamRefinementElement m_beamRefinementElement;
   ChannelMeasurementFeedbackElementList m_list;
+
+};
+
+/**
+ * \ingroup wifi
+ */
+class ExtMimoBfSetupFrame : public Header
+{
+public:
+  ExtMimoBfSetupFrame ();
+
+  /**
+  * Register this type.
+  * \return The TypeId.
+  */
+  static TypeId GetTypeId (void);
+  // Inherited
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  void SetDialogToken (uint8_t token);
+  void SetMimoSetupControlElement (MimoSetupControlElement element);
+
+  uint8_t GetDialogToken (void) const;
+  MimoSetupControlElement GetMimoSetupControlElement (void) const;
+
+protected:
+  uint8_t m_dialogToken;
+  MimoSetupControlElement m_mimoSetupControl;
+
+};
+
+/**
+ * \ingroup wifi
+ */
+class ExtMimoBfPollFrame : public Header
+{
+public:
+  ExtMimoBfPollFrame ();
+
+  /**
+  * Register this type.
+  * \return The TypeId.
+  */
+  static TypeId GetTypeId (void);
+  // Inherited
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  void SetDialogToken (uint8_t token);
+  void SetMimoPollControlElement (MimoPollControlElement element);
+
+  uint8_t GetDialogToken (void) const;
+  MimoPollControlElement GetMimoSetupControlElement (void) const;
+
+protected:
+  uint8_t m_dialogToken;
+  MimoPollControlElement m_mimoPollControl;
+
+};
+
+/**
+ * \ingroup wifi
+ *
+ * The MIMO BF Feedback frame is an Action No Ack frame. The format of a MIMO BF Feedback frame
+ * Action field is shown in Table 34.
+ *
+ * NOTE— The length of a MIMO BF Feedback frame can limit the choice of channel measurement parameters
+ * such as the number of measurements and the number of taps.
+ */
+class ExtMimoBfFeedbackFrame : public Header
+{
+public:
+  ExtMimoBfFeedbackFrame ();
+
+  /**
+  * Register this type.
+  * \return The TypeId.
+  */
+  static TypeId GetTypeId (void);
+  // Inherited
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  /**
+   * The Dialog Token field is set to a value chosen by the STA sending the frame to uniquely identify
+   * the transaction.
+   * \param token
+   */
+  void SetDialogToken (uint8_t token);
+  void SetMimoFeedbackControlElement (MIMOFeedbackControl &element);
+  /**
+   * The MIMO BF Feedback frame contains more than one Channel Measurement Feedback element if the
+   * measurement information exceeds 255 octets. The content of each Channel Measurement Feedback
+   * element that follows the first one in a single MIMO BF Feedback frame is a continuation of the content in
+   * the previous element. The SNR, Channel Measurement, Additional SNR and Additional Channel
+   * Measurement subfields can be split between several elements. Each Channel Measurement Feedback
+   * element that is not the last Channel Measurement Feedback element in the frame is 257 octets long.
+   * Channel measurement information for a single channel measurement is always contained within a single
+   * MIMO BF Feedback frame.
+   * \param element
+   */
+  void AddChannelMeasurementFeedbackElement (Ptr<ChannelMeasurementFeedbackElement> element);
+  /**
+   * The MIMO BF Feedback frame contains more than one EDMG Channel Measurement Feedback element if
+   * the measurement information exceeds 254 octets. The content of each EDMG Channel Measurement
+   * Feedback element that follows the first one in a single MIMO BF Feedback frame is a continuation of the
+   * content in the previous element. The EDMG Sector ID Order, BRP CDOWN, Tap Delay, Additional
+   * EDMG Sector ID Order, Additional BRP CDOWN and Additional Tap Delay subfields can be split
+   * between several elements. Each EDMG Channel Measurement Feedback element that is not the last EDMG
+   * Channel Measurement Feedback element in the frame is 257 octets long. Channel measurement
+   * information for a single channel measurement is always contained within a single MIMO BF Feedback frame.
+   * \param element
+   */
+  void AddEdmgChannelMeasurementFeedbackElement (Ptr<EDMGChannelMeasurementFeedbackElement> element);
+  void AddDigitalBfFeedbackElement (Ptr<DigitalBFFeedbackElement> element);
+
+  uint8_t GetDialogToken (void) const;
+  MIMOFeedbackControl GetMimoFeedbackControlElement (void) const;
+  ChannelMeasurementFeedbackElementList GetListOfChannelMeasurementFeedback (void) const;
+  EDMGChannelMeasurementFeedbackElementList GetListOfEDMGChannelMeasurementFeedback (void) const;
+  DigitalBFFeedbackElementList GetListOfDigitalBFFeedbackElement (void) const;
+
+protected:
+  uint8_t m_dialogToken;
+  MIMOFeedbackControl m_mimoFeedbackControl;
+  ChannelMeasurementFeedbackElementList m_channelMeasurementFeedbackList;
+  EDMGChannelMeasurementFeedbackElementList m_edmgChannelMeasurementFeedbackList;
+  DigitalBFFeedbackElementList m_digitalBFFeedbackElementList;
+
+};
+
+/**
+ * \ingroup wifi
+ *
+ * The MIMO BF Selection frame is an Action No Ack frame. The format of a MIMO BF Selection frame
+ * Action field is shown in Table 35.
+ */
+class ExtMimoBFSelectionFrame : public Header
+{
+public:
+  ExtMimoBFSelectionFrame ();
+
+  /**
+  * Register this type.
+  * \return The TypeId.
+  */
+  static TypeId GetTypeId (void);
+  // Inherited
+  virtual TypeId GetInstanceTypeId (void) const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
+
+  void SetDialogToken (uint8_t token);
+  void SetMIMOSelectionControlElement (MIMOSelectionControlElement &element);
+  /**
+   * The EDMG Group ID Set element is defined in 9.4.2.254. The element contains the updated
+   * list of MU groups following completion of the MU MIMO beamforming training.
+   * \param element
+   */
+  void SetEDMGGroupIDSetElement (EDMGGroupIDSetElement &element);
+
+  uint8_t GetDialogToken (void) const;
+  MIMOSelectionControlElement GetMIMOSelectionControlElement (void) const;
+  EDMGGroupIDSetElement GetEDMGGroupIDSetElement (void) const;
+
+protected:
+  uint8_t m_dialogToken;
+  MIMOSelectionControlElement m_mimoSelectionControlElement;
+  EDMGGroupIDSetElement m_edmgGroupIDSetElement;
 
 };
 

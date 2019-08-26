@@ -342,6 +342,88 @@ Adding logging to your code is very simple:
 
 2. Add logging statements (macro calls) to your functions and function bodies.
 
+In case you want to add logging statements to the methods of your template class
+(which are defined in an header file):
+
+1. Invoke the ``NS_LOG_TEMPLATE_DECLARE;`` macro in the private section of
+   your class declaration. For instance:
+
+  ::
+
+    template <typename Item>
+    class Queue : public QueueBase
+    {
+    ...
+    private:
+      std::list<Ptr<Item> > m_packets;          //!< the items in the queue
+      NS_LOG_TEMPLATE_DECLARE;                  //!< the log component
+    };
+
+  This requires you to perform these steps for all the subclasses of your class.
+
+2. Invoke the ``NS_LOG_TEMPLATE_DEFINE (...);`` macro in the constructor of
+   your class by providing the name of a log component registered by calling
+   the ``NS_LOG_COMPONENT_DEFINE (...);`` macro in some module. For instance:
+
+  ::
+
+    template <typename Item>
+    Queue<Item>::Queue ()
+      : NS_LOG_TEMPLATE_DEFINE ("Queue")
+    {
+    }
+
+3. Add logging statements (macro calls) to the methods of your class.
+
+In case you want to add logging statements to a static member template
+(which is defined in an header file):
+
+1. Invoke the ``NS_LOG_STATIC_TEMPLATE_DEFINE (...);`` macro in your static
+   method by providing the name of a log component registered by calling
+   the ``NS_LOG_COMPONENT_DEFINE (...);`` macro in some module. For instance:
+
+  ::
+
+    template <typename Item>
+    void
+    NetDeviceQueue::PacketEnqueued (Ptr<Queue<Item> > queue,
+                                    Ptr<NetDeviceQueueInterface> ndqi,
+                                    uint8_t txq, Ptr<const Item> item)
+    {
+
+      NS_LOG_STATIC_TEMPLATE_DEFINE ("NetDeviceQueueInterface");
+    ...
+
+2. Add logging statements (macro calls) to your static method.
+
+Controlling timestamp precision
+*******************************
+
+Timestamps are printed out in units of seconds.  When used with the default
+|ns3| time resolution of nanoseconds, the default timestamp precision is 9 
+digits, with fixed format, to allow for 9 digits to be consistently printed 
+to the right of the decimal point.  Example:
+
+::
+
+  +0.000123456s RandomVariableStream:SetAntithetic(0x805040, 0)
+
+When the |ns3| simulation uses higher time resolution such as picoseconds
+or femtoseconds, the precision is expanded accordingly; e.g. for picosecond:
+
+::
+
+  +0.000123456789s RandomVariableStream:SetAntithetic(0x805040, 0)
+
+When the |ns3| simulation uses a time resolution lower than microseconds,
+the default C++ precision is used.
+ 
+An example program at ``src\core\examples\sample-log-time-format.cc``
+demonstrates how to change the timestamp formatting.
+
+The maximum useful precision is 20 decimal digits, since Time is signed 64 
+bits.
+
 Logging Macros
 ==============
 

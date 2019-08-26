@@ -1,7 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2008 INRIA
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,8 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
- *          Hany Assasa <hany.assasa@gmail.com>
+ * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
 #include "wifi-mac.h"
@@ -211,7 +209,7 @@ WifiMac::GetTypeId (void)
                      MakeTraceSourceAccessor (&WifiMac::m_macTxTrace),
                      "ns3::Packet::TracedCallback")
     .AddTraceSource ("MacTxDrop",
-                     "A packet has been dropped in the MAC layer before being queued for transmission.",
+                     "A packet has been dropped in the MAC layer before transmission.",
                      MakeTraceSourceAccessor (&WifiMac::m_macTxDropTrace),
                      "ns3::Packet::TracedCallback")
     .AddTraceSource ("MacPromiscRx",
@@ -455,7 +453,7 @@ WifiMac::Configure80211ax_5Ghz (void)
 }
 
 /*
- * Physical Layer Characteristics for 802.11ad.
+ * Physical Layer Characteristics for IEEE 802.11ad.
  */
 void
 WifiMac::Configure80211ad (void)
@@ -465,10 +463,13 @@ WifiMac::Configure80211ad (void)
   SetSlot (MicroSeconds (5));	/* aSlotTime in Table 21-31 */
   SetMaxPropagationDelay (NanoSeconds (100));	/* aAirPropagationTime << 0.1usec in Table 21-31 */
   SetPifs(GetSifs() + GetSlot());	/* 802.11-2007 9.2.10 */
-  SetEifsNoDifs (GetSifs () + NanoSeconds (3062));
-  /* ACK is sent using SC-MCS1, ACK/CTS Size = 14Bytes, PayloadDuration = 619ns, TotalTx = 3062*/
-  SetCtsTimeout (GetSifs () + NanoSeconds (3062) + GetSlot () + GetMaxPropagationDelay () * 2);
-  SetAckTimeout (GetSifs () + NanoSeconds (3062) + GetSlot () + GetMaxPropagationDelay () * 2);
+  SetEifsNoDifs (GetSifs () + NanoSeconds (3091));
+  /* DMG CTS is sent using Control-MCS0, DMG CTS Size = 20 Bytes, PayloadDuration = 619 ns, TotalTx = 3062 */
+  SetCtsTimeout (GetSifs () + NanoSeconds (14036) + GetSlot () + GetMaxPropagationDelay () * 2);
+  /* ACK is sent using SC-MCS1, ACK Size = 14 Bytes, PayloadDuration = 618 ns, TotalTx = 3091 */
+//  SetAckTimeout (GetSifs () + NanoSeconds (3091) + GetSlot () + GetMaxPropagationDelay () * 2);
+  /* We need to distinguish between two ACK MCS */
+  SetAckTimeout (GetSifs () + NanoSeconds (26836) + GetSlot () + GetMaxPropagationDelay () * 2);
   /* BlockAck is sent using SC-MCS1/4, we assume MCS1 in our calculation */
   /* BasicBlockAck Size = 152Bytes */
   SetBasicBlockAckTimeout (GetSifs () + GetSlot () + NanoSeconds (4255) + GetDefaultMaxPropagationDelay () * 2);

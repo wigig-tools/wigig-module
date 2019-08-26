@@ -45,9 +45,9 @@ class HtCapabilities : public WifiInformationElement
 public:
   HtCapabilities ();
   /**
-   * Set the HT Supported field in the HT Supported information element.
+   * Set the HT supported field.
    *
-   * \param htsupported the HT Supported Info field in the HT Supported information element
+   * \param htsupported the HT supported field
    */
   void SetHtSupported (uint8_t htsupported);
 
@@ -268,6 +268,12 @@ public:
    * \return the maximum AMPDU length
    */
   uint8_t GetMaxAmpduLength (void) const;
+  /**
+   * Return the minimum MPDU start space.
+   *
+   * \return the minimum MPDU start space
+   */
+  uint8_t GetMinMpduStartSpace (void) const;
 
   /**
    * Return the receive MCS bitmask.

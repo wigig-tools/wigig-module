@@ -28,6 +28,7 @@
 #include "ns3/socket-factory.h"
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
+#include "ns3/boolean.h"
 #include "ns3/string.h"
 #include "seq-ts-header.h"
 #include "udp-trace-client.h"
@@ -84,6 +85,11 @@ UdpTraceClient::GetTypeId (void)
                    StringValue (""),
                    MakeStringAccessor (&UdpTraceClient::SetTraceFile),
                    MakeStringChecker ())
+    .AddAttribute ("TraceLoop",
+                   "Loops through the trace file, starting again once it is over.",
+                   BooleanValue (true),
+                   MakeBooleanAccessor (&UdpTraceClient::SetTraceLoop),
+                   MakeBooleanChecker ())
 
   ;
   return tid;
@@ -131,21 +137,11 @@ UdpTraceClient::SetRemote (Address ip, uint16_t port)
 }
 
 void
-UdpTraceClient::SetRemote (Ipv4Address ip, uint16_t port)
+UdpTraceClient::SetRemote (Address addr)
 {
-  NS_LOG_FUNCTION (this << ip << port);
+  NS_LOG_FUNCTION (this << addr);
   m_entries.clear ();
-  m_peerAddress = Address (ip);
-  m_peerPort = port;
-}
-
-void
-UdpTraceClient::SetRemote (Ipv6Address ip, uint16_t port)
-{
-  NS_LOG_FUNCTION (this << ip << port);
-  m_entries.clear ();
-  m_peerAddress = Address (ip);
-  m_peerPort = port;
+  m_peerAddress = addr;
 }
 
 void
@@ -188,7 +184,11 @@ void
 UdpTraceClient::LoadTrace (std::string filename)
 {
   NS_LOG_FUNCTION (this << filename);
-  uint32_t time, index, size, prevTime = 0;
+  uint32_t time = 0;
+  uint32_t index = 0;
+  uint32_t oldIndex = 0;
+  uint32_t size = 0;
+  uint32_t prevTime = 0;
   char frameType;
   TraceEntry entry;
   std::ifstream ifTraceFile;
@@ -201,6 +201,10 @@ UdpTraceClient::LoadTrace (std::string filename)
   while (ifTraceFile.good ())
     {
       ifTraceFile >> index >> frameType >> time >> size;
+      if (index == oldIndex)
+        {
+          continue;
+        }
       if (frameType == 'B')
         {
           entry.timeToSend = 0;
@@ -213,8 +217,10 @@ UdpTraceClient::LoadTrace (std::string filename)
       entry.packetSize = size;
       entry.frameType = frameType;
       m_entries.push_back (entry);
+      oldIndex = index;
     }
   ifTraceFile.close ();
+  NS_ASSERT_MSG (prevTime != 0, "A trace file can not contain B frames only.");
   m_currentEntry = 0;
 }
 
@@ -252,13 +258,39 @@ UdpTraceClient::StartApplication (void)
       m_socket = Socket::CreateSocket (GetNode (), tid);
       if (Ipv4Address::IsMatchingType(m_peerAddress) == true)
         {
-          m_socket->Bind ();
+          if (m_socket->Bind () == -1)
+            {
+              NS_FATAL_ERROR ("Failed to bind socket");
+            }
           m_socket->Connect (InetSocketAddress (Ipv4Address::ConvertFrom (m_peerAddress), m_peerPort));
         }
       else if (Ipv6Address::IsMatchingType(m_peerAddress) == true)
         {
-          m_socket->Bind6 ();
+          if (m_socket->Bind6 () == -1)
+            {
+              NS_FATAL_ERROR ("Failed to bind socket");
+            }
           m_socket->Connect (Inet6SocketAddress (Ipv6Address::ConvertFrom (m_peerAddress), m_peerPort));
+        }
+      else if (InetSocketAddress::IsMatchingType (m_peerAddress) == true)
+        {
+          if (m_socket->Bind () == -1)
+            {
+              NS_FATAL_ERROR ("Failed to bind socket");
+            }
+          m_socket->Connect (m_peerAddress);
+        }
+      else if (Inet6SocketAddress::IsMatchingType (m_peerAddress) == true)
+        {
+          if (m_socket->Bind6 () == -1)
+            {
+              NS_FATAL_ERROR ("Failed to bind socket");
+            }
+          m_socket->Connect (m_peerAddress);
+        }
+      else
+        {
+          NS_ASSERT_MSG (false, "Incompatible address type: " << m_peerAddress);
         }
     }
   m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
@@ -325,6 +357,8 @@ UdpTraceClient::Send (void)
   NS_LOG_FUNCTION (this);
 
   NS_ASSERT (m_sendEvent.IsExpired ());
+
+  bool cycled = false;
   Ptr<Packet> p;
   struct TraceEntry *entry = &m_entries[m_currentEntry];
   do
@@ -338,11 +372,25 @@ UdpTraceClient::Send (void)
       SendPacket (sizetosend);
 
       m_currentEntry++;
-      m_currentEntry %= m_entries.size ();
+      if (m_currentEntry >= m_entries.size ())
+        {
+          m_currentEntry = 0;
+          cycled = true;
+        }
       entry = &m_entries[m_currentEntry];
     }
   while (entry->timeToSend == 0);
-  m_sendEvent = Simulator::Schedule (MilliSeconds (entry->timeToSend), &UdpTraceClient::Send, this);
+
+  if (!cycled || m_traceLoop)
+    {
+      m_sendEvent = Simulator::Schedule (MilliSeconds (entry->timeToSend), &UdpTraceClient::Send, this);
+    }
+}
+
+void
+UdpTraceClient::SetTraceLoop (bool traceLoop)
+{
+  m_traceLoop = traceLoop;
 }
 
 } // Namespace ns3

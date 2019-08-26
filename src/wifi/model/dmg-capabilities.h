@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015, 2016 IMDEA Networks Institute
+ * Copyright (c) 2015-2019 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -366,9 +366,11 @@ private:
 std::ostream &operator << (std::ostream &os, const DmgCapabilities &dmgcapabilities);
 std::istream &operator >> (std::istream &is, DmgCapabilities &dmgcapabilities);
 
-ATTRIBUTE_HELPER_HEADER (DmgCapabilities)
+ATTRIBUTE_HELPER_HEADER (DmgCapabilities);
 
 typedef std::vector<Ptr<DmgCapabilities> > DmgCapabilitiesList;
+typedef DmgCapabilitiesList::const_iterator DmgCapabilitiesListCI;
+typedef DmgCapabilitiesList::iterator DmgCapabilitiesListI;
 
 } //namespace ns3
 
