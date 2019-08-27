@@ -93,7 +93,7 @@ typedef CommunicationPairList::const_iterator CommunicationPairList_CI;
 
 /** Simulation Arguments **/
 string applicationType = "onoff";             /* Type of the Tx application */
-string socketType = "ns3::UdpSocketFactory";  /* Socket Type (TCP/UDP) */
+string socketType = "ns3::TcpSocketFactory";  /* Socket Type (TCP/UDP) */
 uint32_t packetSize = 1448;                   /* Application payload size in bytes. */
 string dataRate = "300Mbps";                  /* Application data rate. */
 string tcpVariant = "NewReno";                /* TCP Variant Type. */
