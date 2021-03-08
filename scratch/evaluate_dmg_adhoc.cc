@@ -14,20 +14,19 @@
 #include <string>
 /**
  * Simulation Objective:
- * This script is used to demonstrage the usage of the DMG Ad-Hoc Class for data communication.
+ * This script is used to demonstrage the usage of the custom DMG Ad-Hoc Class for data communication.
  * The DMG Ad-Hoc is an experimental class which simplifies the implementation of the Beacon Interval.
- * In precise, it does not include BHI access period as a result only data communication takes place.
+ * In precise, it does not include any access periods except for the data transmission interval.
+ * The user must determine in advance the best sector to be used for transmission and reception.
  *
  * Network Topology:
- * The scenario consists of two DMG Ad-HocTerminals.
+ * The scenario consists of two DMG Ad-HOC stations. One of the DMG AD-HOC station is connected to a
+ * backone server through P2P link.
  *
  *      Backbone Server <-----------> DMG AD-HOC (0,0)               DMG AD-HOC (+1,0)
- *
- * Simulation Description:
- *
+ * *
  * Running Simulation:
- * To evaluate CSMA/CA channel access scheme:
- * ./waf --run "evaluate_dmg_adhoc --scheme=1 --simulationTime=10 --pcap=true"
+ * ./waf --run "evaluate_dmg_adhoc"
  *
  * Simulation Output:
  * The simulation generates the following traces:
@@ -43,7 +42,7 @@ Ptr<Node> serverNode;
 Ptr<Node> apWifiNode;
 Ptr<Node> staWifiNode;
 
-/*** Access Point Variables ***/
+/*** Application Layer Variables ***/
 Ptr<PacketSink> sink;
 uint64_t lastTotalRx = 0;
 double averagethroughput = 0;
@@ -62,27 +61,28 @@ CalculateThroughput ()
 }
 
 int
-main(int argc, char *argv[])
+main (int argc, char *argv[])
 {
-  string applicationType = "bulk";                /* Type of the Tx application */
+  string applicationType = "onoff";               /* Type of the Tx application. */
   bool customDataRate = false;                    /* Flag to indicate whether to use custom data rate for the on-off application. */
   string dataRate = "100Mbps";                    /* The data rate of the on-off application. */
   uint32_t payloadSize = 1448;                    /* Transport Layer Payload size in bytes. */
-  string socketType = "ns3::TcpSocketFactory";    /* Socket Type (TCP/UDP) */
-  uint32_t maxPackets = 0;                        /* Maximum Number of Packets */
+  string socketType = "ns3::UdpSocketFactory";    /* Socket Type (TCP/UDP). */
+  uint32_t maxPackets = 0;                        /* Maximum Number of Packets. */
   string tcpVariant = "NewReno";                  /* TCP Variant Type. */
   uint32_t bufferSize = 131072;                   /* TCP Send/Receive Buffer Size. */
   uint32_t queueSize = 10000;                     /* Wifi Mac Queue Size. */
-  string mcsIndex = "12";                         /* The index of the MCS */
+  string mcsIndex = "12";                         /* The index of the MCS. */
+  uint32_t snapShotLength = std::numeric_limits<uint32_t>::max (); /* The maximum PCAP Snapshot Length. */
   double distance = 1.0;                          /* The distance between transmitter and receiver in meters. */
   bool verbose = false;                           /* Print Logging Information. */
   double simulationTime = 10;                     /* Simulation time in seconds. */
   bool pcapTracing = false;                       /* PCAP Tracing is enabled or not. */
-  std::map<std::string, std::string> dataRateMap; /* List of the maximum data rate supported by the standard*/
-  std::map<std::string, std::string> tcpVariants; /* List of the tcp Variants */
+  std::map<std::string, std::string> dataRateMap; /* List of the maximum data rate supported by the standard. */
+  std::map<std::string, std::string> tcpVariants; /* List of the tcp Variants. */
 
   /** MCS List **/
-  /* SC PHY */
+  /* DMG SC PHY */
   dataRateMap["MCS1"] = "385Mbps";
   dataRateMap["MCS2"] = "770Mbps";
   dataRateMap["MCS3"] = "962.5Mbps";
@@ -102,7 +102,7 @@ main(int argc, char *argv[])
   dataRateMap["MCS12.4"] = "6390Mbps";
   dataRateMap["MCS12.5"] = "7507.5Mbps";
   dataRateMap["MCS12.6"] = "8085Mbps";
-  /* OFDM PHY */
+  /* DMG OFDM PHY */
   dataRateMap["MCS13"] = "693.00Mbps";
   dataRateMap["MCS14"] = "866.25Mbps";
   dataRateMap["MCS15"] = "1386.00Mbps";
@@ -131,8 +131,8 @@ main(int argc, char *argv[])
   CommandLine cmd;
 
   cmd.AddValue ("applicationType", "Type of the Tx Application: onoff or bulk", applicationType);
-  cmd.AddValue ("customDataRate", "Type of the Tx Application: onoff or bulk", applicationType);
-  cmd.AddValue ("dataRate", "Type of the Tx Application: onoff or bulk", applicationType);
+  cmd.AddValue ("customDataRate", "Whether we use a custom date rate for the application layer or we use the hardcoded ones", customDataRate);
+  cmd.AddValue ("dataRate", "Type of the Tx Application: onoff or bulk", dataRate);
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
   cmd.AddValue ("socketType", "Type of the Socket (ns3::TcpSocketFactory, ns3::UdpSocketFactory)", socketType);
   cmd.AddValue ("maxPackets", "Maximum number of packets to send", maxPackets);
@@ -143,6 +143,7 @@ main(int argc, char *argv[])
   cmd.AddValue ("verbose", "Turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
+  cmd.AddValue ("snapShotLength", "The maximum PCAP snapshot length", snapShotLength);
   cmd.Parse (argc, argv);
 
   /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
@@ -202,12 +203,16 @@ main(int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
+  // The value correspond to DMG MCS-0.
+  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
+  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
+  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
+  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
+  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
+  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue ("DMG_MCS0"),
-                                                                "DataMode", StringValue ("DMG_MCS" + mcsIndex));
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue ("DMG_MCS" + mcsIndex));
 
   /* Set Analytical Codebook for the DMG Devices */
   wifi.SetCodebook ("ns3::CodebookAnalytical",
@@ -215,7 +220,7 @@ main(int argc, char *argv[])
                     "Antennas", UintegerValue (1),
                     "Sectors", UintegerValue (8));
 
-  /* Make three nodes and set them up with the phy and the mac */
+  /* Make three nodes and set them up with the PHY and the MAC */
   NodeContainer wifiNodes;
   wifiNodes.Create (3);
   serverNode = wifiNodes.Get (0);
@@ -233,9 +238,8 @@ main(int argc, char *argv[])
 
   /* Add a DMG Ad-Hoc MAC */
   DmgWifiMacHelper wifiMac = DmgWifiMacHelper::Default ();
-
   wifiMac.SetType ("ns3::DmgAdhocWifiMac",
-                   "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the highest maximum size allowed by the standard
+                   "BE_MaxAmpduSize", UintegerValue (262143), //Enable A-MPDU with the maximum size allowed by the standard.
                    "BE_MaxAmsduSize", UintegerValue (7935));
 
   NetDeviceContainer apDevice;
@@ -244,17 +248,28 @@ main(int argc, char *argv[])
   NetDeviceContainer staDevice;
   staDevice = wifi.Install (wifiPhy, wifiMac, staWifiNode);
 
+  /* Set the best antenna configurations */
+  Ptr<WifiNetDevice> apWifiNetDevice = DynamicCast<WifiNetDevice> (apDevice.Get (0));
+  Ptr<WifiNetDevice> staWifiNetDevice = DynamicCast<WifiNetDevice> (staDevice.Get (0));
+  Ptr<DmgAdhocWifiMac> apWifiMac = DynamicCast<DmgAdhocWifiMac> (apWifiNetDevice->GetMac ());
+  Ptr<DmgAdhocWifiMac> staWifiMac = DynamicCast<DmgAdhocWifiMac> (staWifiNetDevice->GetMac ());
+  apWifiMac->AddAntennaConfig (1, 1, 1, 1, staWifiMac->GetAddress ());
+  staWifiMac->AddAntennaConfig (5, 1, 5, 1, apWifiMac->GetAddress ());
+  apWifiMac->SteerAntennaToward (staWifiMac->GetAddress ());
+  apWifiMac->SteerAntennaToward (staWifiMac->GetAddress ());
+
   /* Setting mobility model, Initial Position 1 meter apart */
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0.0, 0.0, 0.0));
-  positionAlloc->Add (Vector (distance, 0.0, 0.0));
+  positionAlloc->Add (Vector (-10.0, 0.0, 0.0));          // Backbone Server.
+  positionAlloc->Add (Vector (0.0, 0.0, 0.0));            // DMG PCP/AP.
+  positionAlloc->Add (Vector (distance, 0.0, 0.0));       // DMG STA.
 
   mobility.SetPositionAllocator (positionAlloc);
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   mobility.Install (wifiNodes);
 
-  /* Internet stack*/
+  /* Install Internet Stack */
   InternetStackHelper stack;
   stack.Install (wifiNodes);
 
@@ -274,13 +289,13 @@ main(int argc, char *argv[])
   /* We do not want any ARP packets */
   PopulateArpCache ();
 
-  /* Install Simple UDP Server on the access point */
+  /* Install Simple TCP/UDP Server on the server side */
   PacketSinkHelper sinkHelper (socketType, InetSocketAddress (Ipv4Address::GetAny (), 9999));
   ApplicationContainer sinkApp = sinkHelper.Install (serverNode);
   sink = StaticCast<PacketSink> (sinkApp.Get (0));
   sinkApp.Start (Seconds (0.0));
 
-  /* Install TCP/UDP Transmitter on the station */
+  /* Install TCP/UDP Transmitter on the DMD AD-HOC Client */
   Address dest (InetSocketAddress (serverInterface.GetAddress (0), 9999));
   ApplicationContainer srcApp;
   if (applicationType == "onoff")
@@ -310,7 +325,9 @@ main(int argc, char *argv[])
   if (pcapTracing)
     {
       p2pHelper.EnablePcap ("Traces/Server_MCS", serverDevices.Get (0));
+      p2pHelper.SetSnapshotLength (snapShotLength);
       wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+      wifiPhy.SetSnapshotLength (snapShotLength);
       wifiPhy.EnablePcap ("Traces/AccessPoint_MCS" + mcsIndex, apDevice, false);
       wifiPhy.EnablePcap ("Traces/Station_MCS" + mcsIndex, staDevice, false);
     }

@@ -44,6 +44,7 @@
 #include "ipv6-option.h"
 #include "icmpv6-l4-protocol.h"
 #include "ndisc-cache.h"
+#include "ipv6-raw-socket-factory-impl.h"
 
 /// Minimum IPv6 MTU, as defined by \RFC{2460}
 #define IPV6_MIN_MTU 1280
@@ -127,6 +128,9 @@ Ipv6L3Protocol::Ipv6L3Protocol ()
 {
   NS_LOG_FUNCTION_NOARGS ();
   m_pmtuCache = CreateObject<Ipv6PmtuCache> ();
+  
+  Ptr<Ipv6RawSocketFactoryImpl> rawFactoryImpl = CreateObject<Ipv6RawSocketFactoryImpl> ();
+  AggregateObject (rawFactoryImpl);
 }
 
 Ipv6L3Protocol::~Ipv6L3Protocol ()
@@ -207,7 +211,6 @@ uint32_t Ipv6L3Protocol::AddInterface (Ptr<NetDevice> device)
   interface->SetDevice (device);
   interface->SetTrafficControl (tc);
   interface->SetForwarding (m_ipForward);
-  tc->SetupDevice (device);
   return AddIpv6Interface (interface);
 }
 
@@ -703,6 +706,7 @@ void Ipv6L3Protocol::NotifyNewAggregate ()
           this->SetNode (node);
         }
     }
+  
   Ipv6::NotifyNewAggregate ();
 }
 
@@ -895,8 +899,7 @@ void Ipv6L3Protocol::Send (Ptr<Packet> packet, Ipv6Address source, Ipv6Address d
   /* 2) */
   if (route && route->GetGateway () == Ipv6Address::GetZero ())
     {
-      NS_LOG_LOGIC ("Ipv6L3Protocol::Send case 1: probably sent to machine on same IPv6 network");
-      /* NS_FATAL_ERROR ("This case is not yet implemented"); */
+      NS_LOG_LOGIC ("Ipv6L3Protocol::Send case 2: probably sent to machine on same IPv6 network");
       hdr = BuildHeader (source, destination, protocol, packet->GetSize (), ttl, tclass);
       int32_t interface = GetInterfaceForDevice (route->GetOutputDevice ());
       m_sendOutgoingTrace (hdr, packet, interface);
@@ -1061,7 +1064,7 @@ void Ipv6L3Protocol::Receive (Ptr<NetDevice> device, Ptr<const Packet> p, uint16
             {
               Ipv6InterfaceAddress iaddr = GetAddress (j, i);
               Ipv6Address addr = iaddr.GetAddress ();
-              if (addr.IsEqual (hdr.GetDestinationAddress ()))
+              if (addr == hdr.GetDestinationAddress ())
                 {
                   if (j == interface)
                     {
@@ -1161,7 +1164,7 @@ void Ipv6L3Protocol::SendRealOut (Ptr<Ipv6Route> route, Ptr<Packet> packet, Ipv6
       ipv6Fragment->GetFragments (packet, ipHeader, targetMtu, fragments);
     }
 
-  if (!route->GetGateway ().IsEqual (Ipv6Address::GetAny ()))
+  if (route->GetGateway () != Ipv6Address::GetAny ())
     {
       if (outInterface->IsUp ())
         {

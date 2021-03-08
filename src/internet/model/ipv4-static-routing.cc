@@ -357,7 +357,7 @@ uint32_t
 Ipv4StaticRouting::GetNRoutes (void) const
 {
   NS_LOG_FUNCTION (this);
-  return m_networkRoutes.size ();;
+  return m_networkRoutes.size ();
 }
 
 Ipv4RoutingTableEntry
@@ -697,7 +697,7 @@ Ipv4StaticRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream, Time::Uni
 
   *os << "Node: " << m_ipv4->GetObject<Node> ()->GetId ()
       << ", Time: " << Now().As (unit)
-      << ", Local time: " << GetObject<Node> ()->GetLocalTime ().As (unit)
+      << ", Local time: " << m_ipv4->GetObject<Node> ()->GetLocalTime ().As (unit)
       << ", Ipv4StaticRouting table" << std::endl;
 
   if (GetNRoutes () > 0)

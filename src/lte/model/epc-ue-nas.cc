@@ -178,8 +178,8 @@ void
 EpcUeNas::Disconnect ()
 {
   NS_LOG_FUNCTION (this);
-  m_asSapProvider->Disconnect ();
   SwitchToState (OFF);
+  m_asSapProvider->Disconnect ();
 }
 
 
@@ -198,20 +198,21 @@ EpcUeNas::ActivateEpsBearer (EpsBearer bearer, Ptr<EpcTft> tft)
       btba.bearer = bearer;
       btba.tft = tft;
       m_bearersToBeActivatedList.push_back (btba);
+      m_bearersToBeActivatedListForReconnection.push_back (btba);
       break;
     }
 }
 
 bool
-EpcUeNas::Send (Ptr<Packet> packet)
+EpcUeNas::Send (Ptr<Packet> packet, uint16_t protocolNumber)
 {
-  NS_LOG_FUNCTION (this << packet);
+  NS_LOG_FUNCTION (this << packet << protocolNumber);
 
   switch (m_state)
     {
     case ACTIVE:
       {
-        uint32_t id = m_tftClassifier.Classify (packet, EpcTft::UPLINK);
+        uint32_t id = m_tftClassifier.Classify (packet, EpcTft::UPLINK, protocolNumber);
         NS_ASSERT ((id & 0xFFFFFF00) == 0);
         uint8_t bid = (uint8_t) (id & 0x000000FF);
         if (bid == 0)
@@ -261,7 +262,16 @@ void
 EpcUeNas::DoNotifyConnectionReleased ()
 {
   NS_LOG_FUNCTION (this);
-  SwitchToState (OFF);
+  // remove tfts
+  while (m_bidCounter > 0)
+    {
+      m_tftClassifier.Delete (m_bidCounter);
+      m_bidCounter--;
+    }
+  //restore the bearer list to be activated for the next RRC connection
+  m_bearersToBeActivatedList = m_bearersToBeActivatedListForReconnection;
+
+  Disconnect ();
 }
 
 void 

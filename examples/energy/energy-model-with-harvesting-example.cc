@@ -47,18 +47,18 @@
  *
  */
 
-#include "ns3/core-module.h"
-#include "ns3/network-module.h"
-#include "ns3/mobility-module.h"
-#include "ns3/config-store-module.h"
-#include "ns3/wifi-module.h"
-#include "ns3/energy-module.h"
-#include "ns3/internet-module.h"
-
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <string>
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/config-store-module.h"
+#include "ns3/energy-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/yans-wifi-helper.h"
+#include "ns3/wifi-radio-energy-model-helper.h"
 
 using namespace ns3;
 
@@ -169,16 +169,11 @@ main (int argc, char *argv[])
   double interval = 1;          // seconds
   double startTime = 0.0;       // seconds
   double distanceToRx = 100.0;  // meters
-  /*
-   * This is a magic number used to set the transmit power, based on other
-   * configuration.
-   */
-  double offset = 81;
   
   // Energy Harvester variables
   double harvestingUpdateInterval = 1;  // seconds
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("phyMode", "Wifi Phy mode", phyMode);
   cmd.AddValue ("Prss", "Intended primary RSS (dBm)", Prss);
   cmd.AddValue ("PacketSize", "size of application packet sent", PacketSize);
@@ -218,15 +213,12 @@ main (int argc, char *argv[])
   /** Wifi PHY **/
   /***************************************************************************/
   YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
-  wifiPhy.Set ("RxGain", DoubleValue (-10));
-  wifiPhy.Set ("TxGain", DoubleValue (offset + Prss));
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (0.0));
-  /***************************************************************************/
 
   /** wifi channel **/
   YansWifiChannelHelper wifiChannel;
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel");
+
   // create wifi channel
   Ptr<YansWifiChannel> wifiChannelPtr = wifiChannel.Create ();
   wifiPhy.SetChannel (wifiChannelPtr);

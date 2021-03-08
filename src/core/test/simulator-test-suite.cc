@@ -23,6 +23,7 @@
 #include "ns3/heap-scheduler.h"
 #include "ns3/map-scheduler.h"
 #include "ns3/calendar-scheduler.h"
+#include "ns3/priority-queue-scheduler.h"
 
 using namespace ns3;
 
@@ -49,11 +50,10 @@ public:
 };
 
 SimulatorEventsTestCase::SimulatorEventsTestCase (ObjectFactory schedulerFactory)
-  : TestCase ("Check that basic event handling is working with " + 
+  : TestCase ("Check that basic event handling is working with " +
               schedulerFactory.GetTypeId ().GetName ()),
     m_schedulerFactory (schedulerFactory)
-{
-}
+{}
 uint64_t
 SimulatorEventsTestCase::NowUs (void)
 {
@@ -64,17 +64,18 @@ SimulatorEventsTestCase::NowUs (void)
 void
 SimulatorEventsTestCase::EventA (int a)
 {
+  NS_UNUSED (a);
   m_a = false;
 }
 
 void
 SimulatorEventsTestCase::EventB (int b)
 {
-  if (b != 2 || NowUs () != 11) 
+  if (b != 2 || NowUs () != 11)
     {
       m_b = false;
-    } 
-  else 
+    }
+  else
     {
       m_b = true;
     }
@@ -85,17 +86,18 @@ SimulatorEventsTestCase::EventB (int b)
 void
 SimulatorEventsTestCase::EventC (int c)
 {
+  NS_UNUSED (c);
   m_c = false;
 }
 
 void
 SimulatorEventsTestCase::EventD (int d)
 {
-  if (d != 4 || NowUs () != (11+10)) 
+  if (d != 4 || NowUs () != (11 + 10))
     {
       m_d = false;
-    } 
-  else 
+    }
+  else
     {
       m_d = true;
     }
@@ -110,10 +112,10 @@ SimulatorEventsTestCase::destroy (void)
 {
   if (m_destroyId.IsExpired ())
     {
-      m_destroy = true; 
+      m_destroy = true;
     }
 }
-void 
+void
 SimulatorEventsTestCase::DoRun (void)
 {
   m_a = true;
@@ -173,11 +175,15 @@ class SimulatorTemplateTestCase : public TestCase
 public:
   SimulatorTemplateTestCase ();
   // only here for testing of Ptr<>
-  void Ref (void) const {}
-  void Unref (void) const {}
+  void Ref (void) const
+  {}
+  void Unref (void) const
+  {}
+
 private:
   virtual void DoRun (void);
 
+  /* *NS_CHECK_STYLE_OFF* */
   void bar0 (void) {}
   void bar1 (int) {}
   void bar2 (int, int) {}
@@ -211,6 +217,7 @@ private:
   void cbaz3c (const int &, const int &, const int &) const {}
   void cbaz4c (const int &, const int &, const int &, const int &) const {}
   void cbaz5c (const int &, const int &, const int &, const int &, const int &) const {}
+  /* *NS_CHECK_STYLE_ON* */
 
 };
 
@@ -248,9 +255,8 @@ static void cber5 (const int &, const int &, const int &, const int &, const int
 {}
 
 SimulatorTemplateTestCase::SimulatorTemplateTestCase ()
-  : TestCase ("Check that all templates are instanciated correctly. This is a compilation test, it cannot fail at runtime.")
-{
-}
+  : TestCase ("Check that all templates are instantiated correctly. This is a compilation test, it cannot fail at runtime.")
+{}
 void
 SimulatorTemplateTestCase::DoRun (void)
 {
@@ -474,6 +480,8 @@ public:
     factory.SetTypeId (HeapScheduler::GetTypeId ());
     AddTestCase (new SimulatorEventsTestCase (factory), TestCase::QUICK);
     factory.SetTypeId (CalendarScheduler::GetTypeId ());
+    AddTestCase (new SimulatorEventsTestCase (factory), TestCase::QUICK);
+    factory.SetTypeId (PriorityQueueScheduler::GetTypeId ());
     AddTestCase (new SimulatorEventsTestCase (factory), TestCase::QUICK);
   }
 } g_simulatorTestSuite;

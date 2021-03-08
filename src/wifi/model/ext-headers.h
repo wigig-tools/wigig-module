@@ -140,6 +140,11 @@ public:
    * \param value
    */
   void Set_ECPAC_Policy_Enforced (bool value);
+  /**
+   * The EDMG supported subfield is set to 1 to indicate that the STA supports the IEEE 802.11ay protocol.
+   * \param value
+   */
+  void Set_EDMG_Supported (bool value);
   void Set_Reserved (uint8_t value);
 
   /**
@@ -152,6 +157,7 @@ public:
   bool Get_CBAP_Source (void) const;
   bool Get_DMG_Privacy (void) const;
   bool Get_ECPAC_Policy_Enforced (void) const;
+  bool Get_EDMG_supported (void) const;
   uint8_t Get_Reserved (void) const;
 
 private:
@@ -160,6 +166,7 @@ private:
   bool m_cbapSource;		    //!< CBAP Source.
   bool m_dmgPrivacy;		    //!< DMG Privacy.
   bool m_ecpacPolicyEnforced;	    //!< ECPAC Policy Enforced.
+  bool m_edmgSupported;             //!< EDMG support
   uint8_t m_reserved;
 
 };
@@ -275,6 +282,30 @@ public:
    * \param value
    */
   void SetPCPAssoicationReady (bool value);
+  /**
+   * The Unsolicited RSS Enabled field is set to 1 to indicate that the STA can receive unsolicited RSS.
+   * It is present only in EDMG STAs when the NextABFT field is nonzero - in all other cases the IsResponderTXSS field is present.
+   * \param value
+   */
+  void SetUnsolicitedRSSEnabled (bool value);
+  /**
+   * The A-BFT multiplier subfield allows EDMG APs to expand the total length of the A-BFT. The total length is equal to the value of the
+   * A-BFT Length subfield plus the multiplication of the value of the A-BFT Multiplier subfield and the value of the A-BFT Length subfield.
+   * This subfield is reserved if the value of the Next A-BFT subfield is nonzero or the STA does not support the IEEE 802.11ay protocol.
+   * \param value
+   */
+  void SetABFTMultiplier (uint8_t value);
+  /**
+   * The A-BFT in Secondary Channel subfield indicates that the A-BFT is allocated on an adjacent secondary
+   * channel, in addition to being allocated on the primary channel. If set to 0, the A-BFT is not allocated on any
+   * secondary channel. If set to a nonzero value, the A-BFT is allocated on an adjacent secondary channel as follows:
+   *  - If set to 1, the A-BFT is also present on the lower secondary channel adjacent to the primary channel.
+   *  - If set to 2, the A-BFT is also present on the upper secondary channel adjacent to the primary channel.
+   *  - If set to 3, the A-BFT is also present on both the lower and upper secondary channels adjacent to the primary channel.
+   * This subfield is reserved if the value of the Next A-BFT subfield is nonzero or the STA does not support the IEEE 802.11ay protocol.
+   * \param value
+   */
+  void SetABFTinSecondaryChannel (uint8_t value);
 
   bool IsCCPresent (void) const;
   bool IsDiscoveryMode (void) const;
@@ -290,6 +321,9 @@ public:
   uint8_t GetABFT_Count (void) const;
   uint8_t GetN_ABFT_Ant (void) const;
   bool GetPCPAssoicationReady (void) const;
+  bool IsUnsolicitedRssEnabled (void) const;
+  uint8_t GetABFTMultiplier (void) const;
+  uint8_t GetABFTinSecondaryChannel (void) const;
 
 private:
   bool m_ccPresent;
@@ -306,6 +340,9 @@ private:
   uint8_t m_ABFT_Count;
   uint8_t m_N_ABFT_Ant;
   bool m_pcpAssociationReady;
+  bool m_unsolicitedRssEnabled;
+  uint8_t m_ABFTMultiplier;
+  uint8_t m_ABFTinSecondaryChannel;
 
 };
 

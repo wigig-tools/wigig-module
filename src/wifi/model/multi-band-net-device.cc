@@ -4,12 +4,18 @@
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
+#include "ns3/llc-snap-header.h"
+#include "ns3/channel.h"
+#include "ns3/pointer.h"
+#include "ns3/log.h"
 #include "dmg-sta-wifi-mac.h"
 #include "sta-wifi-mac.h"
 #include "multi-band-net-device.h"
-#include "wifi-phy.h"
+
 #include "regular-wifi-mac.h"
 #include "wifi-mac-queue.h"
+#include "ns3/node.h"
+#include "wifi-phy.h"
 #include "ns3/llc-snap-header.h"
 #include "ns3/socket.h"
 #include "ns3/pointer.h"
@@ -33,7 +39,7 @@ MultiBandNetDevice::GetTypeId (void)
                    UintegerValue (MAX_MSDU_SIZE - LLC_SNAP_HEADER_LENGTH),
                    MakeUintegerAccessor (&MultiBandNetDevice::SetMtu,
                                          &MultiBandNetDevice::GetMtu),
-                   MakeUintegerChecker<uint16_t> (1, MAX_MSDU_SIZE - LLC_SNAP_HEADER_LENGTH))
+                   MakeUintegerChecker<uint16_t> (1,MAX_MSDU_SIZE - LLC_SNAP_HEADER_LENGTH))
   ;
   return tid;
 }
@@ -117,79 +123,8 @@ MultiBandNetDevice::CompleteConfig (void)
 }
 
 void
-MultiBandNetDevice::NotifyNewAggregate (void)
-{
-  NS_LOG_FUNCTION (this);
-  if (m_queueInterface == 0)
-    {
-      Ptr<NetDeviceQueueInterface> ndqi = this->GetObject<NetDeviceQueueInterface> ();
-      //verify that it's a valid netdevice queue interface and that
-      //the netdevice queue interface was not set before
-      if (ndqi != 0)
-        {
-          m_queueInterface = ndqi;
-          // register the select queue callback
-          m_queueInterface->SetSelectQueueCallback (MakeCallback (&MultiBandNetDevice::SelectQueue, this));
-          m_queueInterface->SetLateTxQueuesCreation (true);
-	  FlowControlConfig ();
-        }
-    }
-  NetDevice::NotifyNewAggregate ();
-}
-
-void
-MultiBandNetDevice::FlowControlConfig (void)
-{
-  if (m_mac == 0 || m_queueInterface == 0)
-    {
-      return;
-    }
-
-  Ptr<RegularWifiMac> mac = DynamicCast<RegularWifiMac> (m_mac);
-  if (mac == 0)
-    {
-      NS_LOG_WARN ("Flow control is only supported by RegularWifiMac");
-      return;
-    }
-
-  BooleanValue qosSupported;
-  mac->GetAttributeFailSafe ("QosSupported", qosSupported);
-  PointerValue ptr;
-  Ptr<WifiMacQueue> wmq;
-  if (qosSupported.Get ())
-    {
-      m_queueInterface->SetTxQueuesN (4);
-      m_queueInterface->CreateTxQueues ();
-
-      mac->GetAttributeFailSafe ("BE_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 0);
-
-      mac->GetAttributeFailSafe ("BK_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 1);
-
-      mac->GetAttributeFailSafe ("VI_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 2);
-
-      mac->GetAttributeFailSafe ("VO_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 3);
-    }
-  else
-    {
-      m_queueInterface->CreateTxQueues ();
-
-      mac->GetAttributeFailSafe ("DcaTxop", ptr);
-      wmq = ptr.Get<DcaTxop> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 0);
-    }
-}
-
-void
 MultiBandNetDevice::AddNewWifiTechnology (Ptr<WifiPhy> phy, Ptr<WifiMac> mac, Ptr<WifiRemoteStationManager> station,
-                                          enum WifiPhyStandard standard, bool operational)
+                                          WifiPhyStandard standard, bool operational)
 {
   WifiTechnology technology;
   technology.Phy = phy;
@@ -207,7 +142,7 @@ MultiBandNetDevice::GetWifiTechnologyList (void) const
 }
 
 void
-MultiBandNetDevice::SwitchTechnology (enum WifiPhyStandard standard)
+MultiBandNetDevice::SwitchTechnology (WifiPhyStandard standard)
 {
   NS_LOG_FUNCTION (this << standard);
   WifiTechnology *technology = &m_list[standard];
@@ -218,7 +153,7 @@ MultiBandNetDevice::SwitchTechnology (enum WifiPhyStandard standard)
 }
 
 void
-MultiBandNetDevice::BandChanged (enum WifiPhyStandard standard, Mac48Address address, bool isInitiator)
+MultiBandNetDevice::BandChanged (WifiPhyStandard standard, Mac48Address address, bool isInitiator)
 {
   NS_LOG_FUNCTION (this << standard << address << isInitiator);
   /* Before switching the current technology, we keep a pointer to the current technology */
@@ -233,12 +168,12 @@ MultiBandNetDevice::BandChanged (enum WifiPhyStandard standard, Mac48Address add
 //  m_technologyMap[address] = newMac;
 
   /* Copy DCA Packets */
-  oldMac->GetDcaTxop ()->GetQueue ()->TransferPacketsByAddress (address, newMac->GetDcaTxop ()->GetQueue ());
+  oldMac->GetTxop ()->GetWifiMacQueue ()->TransferPacketsByAddress (address, newMac->GetTxop ()->GetWifiMacQueue ());
   /* Copy EDCA Packets */
-  oldMac->GetVOQueue ()->GetQueue ()->TransferPacketsByAddress (address, newMac->GetVOQueue ()->GetQueue ());
-  oldMac->GetVIQueue ()->GetQueue ()->TransferPacketsByAddress (address, newMac->GetVIQueue ()->GetQueue ());
-  oldMac->GetBEQueue ()->GetQueue ()->TransferPacketsByAddress (address, newMac->GetBEQueue ()->GetQueue ());
-  oldMac->GetBKQueue ()->GetQueue ()->TransferPacketsByAddress (address, newMac->GetBKQueue ()->GetQueue ());
+  oldMac->GetVOQueue ()->GetWifiMacQueue ()->TransferPacketsByAddress (address, newMac->GetVOQueue ()->GetWifiMacQueue ());
+  oldMac->GetVIQueue ()->GetWifiMacQueue ()->TransferPacketsByAddress (address, newMac->GetVIQueue ()->GetWifiMacQueue ());
+  oldMac->GetBEQueue ()->GetWifiMacQueue ()->TransferPacketsByAddress (address, newMac->GetBEQueue ()->GetWifiMacQueue ());
+  oldMac->GetBKQueue ()->GetWifiMacQueue ()->TransferPacketsByAddress (address, newMac->GetBKQueue ()->GetWifiMacQueue ());
 
   /* Copy Block ACK aggreements */
   oldMac->GetVOQueue ()->CopyBlockAckAgreements (address, newMac->GetVOQueue ());
@@ -279,14 +214,14 @@ MultiBandNetDevice::EstablishFastSessionTransferSession (Mac48Address address)
 }
 
 Ptr<WifiMac>
-MultiBandNetDevice::GetTechnologyMac (enum WifiPhyStandard standard)
+MultiBandNetDevice::GetTechnologyMac (WifiPhyStandard standard)
 {
   WifiTechnology *technology = &m_list[standard];
   return technology->Mac;
 }
 
 Ptr<WifiPhy>
-MultiBandNetDevice::GetTechnologyPhy (enum WifiPhyStandard standard)
+MultiBandNetDevice::GetTechnologyPhy (WifiPhyStandard standard)
 {
   WifiTechnology *technology = &m_list[standard];
   return technology->Phy;
@@ -324,12 +259,6 @@ MultiBandNetDevice::GetIfIndex (void) const
 
 Ptr<Channel>
 MultiBandNetDevice::GetChannel (void) const
-{
-  return m_phy->GetChannel ();
-}
-
-Ptr<Channel>
-MultiBandNetDevice::DoGetChannel (void) const
 {
   return m_phy->GetChannel ();
 }
@@ -461,7 +390,7 @@ MultiBandNetDevice::SetReceiveCallback (NetDevice::ReceiveCallback cb)
 }
 
 void
-MultiBandNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to)
+MultiBandNetDevice::ForwardUp (Ptr<const Packet> packet, Mac48Address from, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << from << to);
   LlcSnapHeader llc;
@@ -483,21 +412,22 @@ MultiBandNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Addre
       type = NetDevice::PACKET_OTHERHOST;
     }
 
+  Ptr<Packet> copy = packet->Copy ();
   if (type != NetDevice::PACKET_OTHERHOST)
     {
       m_mac->NotifyRx (packet);
-      packet->RemoveHeader (llc);
-      m_forwardUp (this, packet, llc.GetType (), from);
+      copy->RemoveHeader (llc);
+      m_forwardUp (this, copy, llc.GetType (), from);
     }
   else
     {
-      packet->RemoveHeader (llc);
+      copy->RemoveHeader (llc);
     }
 
   if (!m_promiscRx.IsNull ())
     {
-      m_mac->NotifyPromiscRx (packet);
-      m_promiscRx (this, packet, llc.GetType (), from, to, type);
+      m_mac->NotifyPromiscRx (copy);
+      m_promiscRx (this, copy, llc.GetType (), from, to, type);
     }
 }
 
@@ -537,38 +467,6 @@ bool
 MultiBandNetDevice::SupportsSendFrom (void) const
 {
   return false;
-}
-
-uint8_t
-MultiBandNetDevice::SelectQueue (Ptr<QueueItem> item) const
-{
-  NS_LOG_FUNCTION (this << item);
-
-  NS_ASSERT (m_queueInterface != 0);
-
-  if (m_queueInterface->GetNTxQueues () == 1)
-    {
-      return 0;
-    }
-
-  uint8_t dscp, priority = 0;
-  if (item->GetUint8Value (QueueItem::IP_DSFIELD, dscp))
-    {
-      // if the QoS map element is implemented, it should be used here
-      // to set the priority.
-      // User priority is set to the three most significant bits of the DS field
-      priority = dscp >> 5;
-    }
-
-  // replace the priority tag
-  SocketPriorityTag priorityTag;
-  priorityTag.SetPriority (priority);
-  item->GetPacket ()->ReplacePacketTag (priorityTag);
-
-  // if the admission control were implemented, here we should check whether
-  // the access category assigned to the packet should be downgraded
-
-  return QosUtilsMapTidToAc (priority);
 }
 
 } //namespace ns3

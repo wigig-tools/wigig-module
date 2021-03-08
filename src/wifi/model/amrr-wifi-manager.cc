@@ -18,11 +18,10 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "amrr-wifi-manager.h"
-#include "ns3/simulator.h"
 #include "ns3/log.h"
-#include "ns3/uinteger.h"
-#include "ns3/double.h"
+#include "ns3/simulator.h"
+#include "amrr-wifi-manager.h"
+#include "wifi-tx-vector.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 
@@ -39,14 +38,14 @@ NS_LOG_COMPONENT_DEFINE ("AmrrWifiManager");
 struct AmrrWifiRemoteStation : public WifiRemoteStation
 {
   Time m_nextModeUpdate; ///< next mode update time
-  uint32_t m_tx_ok; ///< transmit ok
-  uint32_t m_tx_err; ///< transmit error
-  uint32_t m_tx_retr; ///< transmit retry
-  uint32_t m_retry; ///< retry
-  uint8_t m_txrate; ///< transmit rate
+  uint32_t m_tx_ok;      ///< transmit OK
+  uint32_t m_tx_err;     ///< transmit error
+  uint32_t m_tx_retr;    ///< transmit retry
+  uint32_t m_retry;      ///< retry
+  uint8_t m_txrate;      ///< transmit rate
   uint32_t m_successThreshold; ///< success threshold
-  uint32_t m_success; ///< success
-  bool m_recovery; ///< recovery
+  uint32_t m_success;    ///< success
+  bool m_recovery;       ///< recovery
 };
 
 
@@ -104,6 +103,24 @@ AmrrWifiManager::~AmrrWifiManager ()
   NS_LOG_FUNCTION (this);
 }
 
+void
+AmrrWifiManager::DoInitialize ()
+{
+  NS_LOG_FUNCTION (this);
+  if (GetHtSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HT rates");
+    }
+  if (GetVhtSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support VHT rates");
+    }
+  if (GetHeSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HE rates");
+    }
+}
+
 WifiRemoteStation *
 AmrrWifiManager::DoCreateStation (void) const
 {
@@ -138,7 +155,7 @@ void
 AmrrWifiManager::DoReportDataFailed (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  AmrrWifiRemoteStation *station = (AmrrWifiRemoteStation *)st;
+  AmrrWifiRemoteStation *station = static_cast<AmrrWifiRemoteStation*> (st);
   station->m_retry++;
   station->m_tx_retr++;
 }
@@ -151,11 +168,11 @@ AmrrWifiManager::DoReportRtsOk (WifiRemoteStation *st,
 }
 
 void
-AmrrWifiManager::DoReportDataOk (WifiRemoteStation *st,
-                                 double ackSnr, WifiMode ackMode, double dataSnr)
+AmrrWifiManager::DoReportDataOk (WifiRemoteStation *st, double ackSnr, WifiMode ackMode,
+                                 double dataSnr, uint16_t dataChannelWidth, uint8_t dataNss)
 {
-  NS_LOG_FUNCTION (this << st << ackSnr << ackMode << dataSnr);
-  AmrrWifiRemoteStation *station = (AmrrWifiRemoteStation *)st;
+  NS_LOG_FUNCTION (this << st << ackSnr << ackMode << dataSnr << dataChannelWidth << +dataNss);
+  AmrrWifiRemoteStation *station = static_cast<AmrrWifiRemoteStation*> (st);
   station->m_retry = 0;
   station->m_tx_ok++;
 }
@@ -170,7 +187,7 @@ void
 AmrrWifiManager::DoReportFinalDataFailed (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  AmrrWifiRemoteStation *station = (AmrrWifiRemoteStation *)st;
+  AmrrWifiRemoteStation *station = static_cast<AmrrWifiRemoteStation*> (st);
   station->m_retry = 0;
   station->m_tx_err++;
 }
@@ -305,7 +322,7 @@ WifiTxVector
 AmrrWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  AmrrWifiRemoteStation *station = (AmrrWifiRemoteStation *)st;
+  AmrrWifiRemoteStation *station = static_cast<AmrrWifiRemoteStation*> (st);
   UpdateMode (station);
   NS_ASSERT (station->m_txrate < GetNSupported (station));
   uint8_t rateIndex;
@@ -346,10 +363,9 @@ AmrrWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
           rateIndex = station->m_txrate;
         }
     }
-  uint8_t channelWidth = GetChannelWidth (station);
+  uint16_t channelWidth = GetChannelWidth (station);
   if (channelWidth > 20 && channelWidth != 22)
     {
-      //avoid to use legacy rate adaptation algorithms for IEEE 802.11n/ac
       channelWidth = 20;
     }
   WifiMode mode = GetSupported (station, rateIndex);
@@ -358,18 +374,17 @@ AmrrWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
       NS_LOG_DEBUG ("New datarate: " << mode.GetDataRate (channelWidth));
       m_currentRate = mode.GetDataRate (channelWidth);
     }
-  return WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode, GetAddress (station)), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
+  return WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode.GetModulationClass (), GetShortPreambleEnabled (), UseGreenfieldForDestination (GetAddress (station))), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
 }
 
 WifiTxVector
 AmrrWifiManager::DoGetRtsTxVector (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  AmrrWifiRemoteStation *station = (AmrrWifiRemoteStation *)st;
-  uint8_t channelWidth = GetChannelWidth (station);
+  AmrrWifiRemoteStation *station = static_cast<AmrrWifiRemoteStation*> (st);
+  uint16_t channelWidth = GetChannelWidth (station);
   if (channelWidth > 20 && channelWidth != 22)
     {
-      //avoid to use legacy rate adaptation algorithms for IEEE 802.11n/ac
       channelWidth = 20;
     }
   UpdateMode (station);
@@ -383,44 +398,8 @@ AmrrWifiManager::DoGetRtsTxVector (WifiRemoteStation *st)
     {
       mode = GetNonErpSupported (station, 0);
     }
-  rtsTxVector = WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode, GetAddress (station)), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
+  rtsTxVector = WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode.GetModulationClass (), GetShortPreambleEnabled (), UseGreenfieldForDestination (GetAddress (station))), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
   return rtsTxVector;
-}
-
-bool
-AmrrWifiManager::IsLowLatency (void) const
-{
-  return true;
-}
-
-void
-AmrrWifiManager::SetHtSupported (bool enable)
-{
-  //HT is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HT rates");
-    }
-}
-
-void
-AmrrWifiManager::SetVhtSupported (bool enable)
-{
-  //VHT is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support VHT rates");
-    }
-}
-
-void
-AmrrWifiManager::SetHeSupported (bool enable)
-{
-  //HE is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HE rates");
-    }
 }
 
 } //namespace ns3

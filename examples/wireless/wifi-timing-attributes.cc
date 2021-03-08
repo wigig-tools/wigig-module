@@ -1,6 +1,6 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015 SEBASTIEN DERONNE
+ * Copyright (c) 2015
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -15,14 +15,24 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Authors: Sebastien Deronne <sebastien.deronne@gmail.com>
+ * Author: Sebastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "ns3/core-module.h"
-#include "ns3/applications-module.h"
-#include "ns3/wifi-module.h"
-#include "ns3/mobility-module.h"
-#include "ns3/internet-module.h"
+#include "ns3/command-line.h"
+#include "ns3/config.h"
+#include "ns3/uinteger.h"
+#include "ns3/double.h"
+#include "ns3/string.h"
+#include "ns3/log.h"
+#include "ns3/yans-wifi-helper.h"
+#include "ns3/ssid.h"
+#include "ns3/mobility-helper.h"
+#include "ns3/ipv4-address-helper.h"
+#include "ns3/yans-wifi-channel.h"
+#include "ns3/mobility-model.h"
+#include "ns3/internet-stack-helper.h"
+#include "ns3/udp-client-server-helper.h"
+#include "ns3/ipv4-global-routing-helper.h"
 
 // This example shows how to set Wi-Fi timing parameters through WifiMac attributes.
 //
@@ -47,21 +57,21 @@ int main (int argc, char *argv[])
 {
   uint32_t slot = 9; //slot time in microseconds
   uint32_t sifs = 10; //SIFS duration in microseconds
-  uint32_t ackTimeout = 88; //ACK timeout duration in microseconds
+  uint32_t ackTimeout = 88; //Ack timeout duration in microseconds
   uint32_t ctsTimeout = 88; //CTS timeout duration in microseconds
   uint32_t rifs = 2; //RIFS duration in microseconds
-  uint32_t basicBlockAckTimeout = 286; //Basic Block ACK timeout duration in microseconds
-  uint32_t compressedBlockAckTimeout = 112; //Compressed Block ACK timeout duration in microseconds
+  uint32_t basicBlockAckTimeout = 286; //Basic BlockAck timeout duration in microseconds
+  uint32_t compressedBlockAckTimeout = 112; //Compressed BlockAck timeout duration in microseconds
   double simulationTime = 10; //simulation time in seconds
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("slot", "Slot time in microseconds", slot);
   cmd.AddValue ("sifs", "SIFS duration in microseconds", sifs);
-  cmd.AddValue ("ackTimeout", "ACK timeout duration in microseconds", ackTimeout);
+  cmd.AddValue ("ackTimeout", "Ack timeout duration in microseconds", ackTimeout);
   cmd.AddValue ("ctsTimeout", "CTS timeout duration in microseconds", ctsTimeout);
   cmd.AddValue ("rifs", "RIFS duration in microseconds", rifs);
-  cmd.AddValue ("basicBlockAckTimeoutTimeout", "Basic Block ACK timeout duration in microseconds", basicBlockAckTimeout);
-  cmd.AddValue ("compressedBlockAckTimeoutTimeout", "Compressed Block ACK timeout duration in microseconds", compressedBlockAckTimeout);
+  cmd.AddValue ("basicBlockAckTimeoutTimeout", "Basic BlockAck timeout duration in microseconds", basicBlockAckTimeout);
+  cmd.AddValue ("compressedBlockAckTimeoutTimeout", "Compressed BlockAck timeout duration in microseconds", compressedBlockAckTimeout);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
   cmd.Parse (argc,argv);
 
@@ -105,7 +115,6 @@ int main (int argc, char *argv[])
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/Slot", TimeValue (MicroSeconds (slot)));
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/Sifs", TimeValue (MicroSeconds (sifs)));
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/AckTimeout", TimeValue (MicroSeconds (ackTimeout)));
-  Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/CtsTimeout", TimeValue (MicroSeconds (ctsTimeout)));
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/Rifs", TimeValue (MicroSeconds (rifs)));
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/BasicBlockAckTimeout", TimeValue (MicroSeconds (basicBlockAckTimeout)));
   Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/CompressedBlockAckTimeout", TimeValue (MicroSeconds (compressedBlockAckTimeout)));
@@ -146,7 +155,7 @@ int main (int argc, char *argv[])
 
   UdpClientHelper client (staNodeInterface.GetAddress (0), port);
   client.SetAttribute ("MaxPackets", UintegerValue (4294967295u));
-  client.SetAttribute ("Interval", TimeValue (Time ("0.00002"))); //packets/s
+  client.SetAttribute ("Interval", TimeValue (Time ("0.0001"))); //packets/s
   client.SetAttribute ("PacketSize", UintegerValue (1472)); //bytes
 
   ApplicationContainer clientApp = client.Install (wifiApNode.Get (0));
@@ -159,12 +168,12 @@ int main (int argc, char *argv[])
   //Set simulation time and launch simulation
   Simulator::Stop (Seconds (simulationTime + 1));
   Simulator::Run ();
-  Simulator::Destroy ();
 
   //Get and print results
-  uint32_t totalPacketsThrough = DynamicCast<UdpServer> (serverApp.Get (0))->GetReceived ();
+  uint64_t totalPacketsThrough = DynamicCast<UdpServer> (serverApp.Get (0))->GetReceived ();
   double throughput = totalPacketsThrough * 1472 * 8 / (simulationTime * 1000000.0); //Mbit/s
   std::cout << "Throughput: " << throughput << " Mbit/s" << std::endl;
 
+  Simulator::Destroy ();
   return 0;
 }

@@ -38,8 +38,8 @@ namespace ns3 {
 /* static */
 std::string DesMetrics::m_outputDir; // = "";
 
-void 
-DesMetrics::Initialize (int argc, char * argv[], std::string outDir /* = "" */ )
+void
+DesMetrics::Initialize (std::vector<std::string> args, std::string outDir /* = "" */ )
 {
   if (m_initialized)
     {
@@ -50,9 +50,9 @@ DesMetrics::Initialize (int argc, char * argv[], std::string outDir /* = "" */ )
   m_initialized = true;
 
   std::string model_name ("desTraceFile");
-  if (argc)
+  if (args.size () > 0)
     {
-      std::string arg0 = argv[0];
+      std::string arg0 = args[0];
       model_name = SystemPath::Split (arg0).back ();
     }
   std::string jsonFile = model_name + ".json";
@@ -76,12 +76,15 @@ DesMetrics::Initialize (int argc, char * argv[], std::string outDir /* = "" */ )
   m_os << " \"model_name\" : \"" << model_name << "\"," << std::endl;
   m_os << " \"capture_date\" : \"" << capture_date << "\"," << std::endl;
   m_os << " \"command_line_arguments\" : \"";
-  if (argc)
+  if (args.size () == 0)
     {
-      for (int i = 0; i < argc; ++i) 
+      for (std::size_t i = 0; i < args.size (); ++i)
         {
-          if (i > 0) m_os << " ";
-          m_os << argv[i];
+          if (i > 0)
+            {
+              m_os << " ";
+            }
+          m_os << args[i];
         }
     }
   else
@@ -92,7 +95,7 @@ DesMetrics::Initialize (int argc, char * argv[], std::string outDir /* = "" */ )
   m_os << " \"events\" : [" << std::endl;
 
   m_separator = ' ';
- 
+
 }
 
 void
@@ -100,13 +103,14 @@ DesMetrics::Trace (const Time & now, const Time & delay)
 {
   TraceWithContext (Simulator::GetContext (), now, delay);
 }
- 
+
 void
 DesMetrics::TraceWithContext (uint32_t context, const Time & now, const Time & delay)
 {
   if (!m_initialized)
     {
-      Initialize (0, 0);
+      std::vector<std::string> args;
+      Initialize (args);
     }
 
   std::ostringstream ss;
@@ -119,7 +123,7 @@ DesMetrics::TraceWithContext (uint32_t context, const Time & now, const Time & d
   // Force to signed so we can show NoContext as '-1'
   int32_t send = (sendCtx != Simulator::NO_CONTEXT) ? (int32_t)sendCtx : -1;
   int32_t recv = (context != Simulator::NO_CONTEXT) ? (int32_t)context : -1;
-  
+
   ss <<                                 "  [\""
      << send                         << "\",\""
      << now.GetTimeStep ()           << "\",\""
@@ -143,7 +147,7 @@ void
 DesMetrics::Close (void)
 {
   m_os << std::endl;    // Finish the last event line
-  
+
   m_os << " ]" << std::endl;
   m_os << "}" << std::endl;
   m_os.close ();

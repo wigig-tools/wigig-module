@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -9,10 +9,11 @@
 #include "ns3/network-module.h"
 #include "ns3/wifi-module.h"
 #include "common-functions.h"
+#include <iomanip>
 
 /**
  * Simulation Objective:
- * This script is used to evaluate allocation of Static Service Periods using traffic stream in IEEE 802.11ad.
+ * Evaluate allocation of static service periods using traffic stream in the IEEE 802.11ad standard.
  *
  * Network Topology:
  * The scenario consists of 3 DMG STAs (West + South + East) and one DMG PCP/AP as following:
@@ -27,7 +28,7 @@
  *
  * Simulation Description:
  * Once all the stations have assoicated successfully with the PCP/AP. The PCP/AP allocates three SPs
- * to perform SLS (TxSS) between all the stations. Once West DMG STA has completed TxSS phase with East and
+ * to perform SLS (TXSS) between all the stations. Once West DMG STA has completed TXSS phase with East and
  * South DMG STAs. The West DMG STA sends two ADDTS Request for SP allocations request as following:
  *
  * Traffic Format = ISOCHRONOUS Traffic Type (Periodic Traffic)
@@ -45,9 +46,9 @@
  *
  * Simulation Output:
  * The simulation generates the following traces:
- * 1. PCAP traces for each station. FFrom the PCAP files, we can see that data transmission takes place during its SP.
- * In addition, we can notice in the announcement of the two Static Allocation Periods inside each DMG Beacon.
- *
+ * 1. PCAP traces for each station. From the PCAP files, we can see that data transmission takes place during its SP.
+ * In addition, we can notice the announcement of two static allocation periods inside each DMG Beacon.
+ * 2. Summary for the total number of received packets and the total throughput during each service period.
  */
 
 NS_LOG_COMPONENT_DEFINE ("EvaluateTrafficStreamAllocation");
@@ -69,47 +70,40 @@ Ptr<WifiNetDevice> apWifiNetDevice;
 Ptr<WifiNetDevice> southWifiNetDevice;
 Ptr<WifiNetDevice> westWifiNetDevice;
 Ptr<WifiNetDevice> eastWifiNetDevice;
-
 NetDeviceContainer staDevices;
-
 Ptr<DmgApWifiMac> apWifiMac;
 Ptr<DmgStaWifiMac> southWifiMac;
 Ptr<DmgStaWifiMac> westWifiMac;
 Ptr<DmgStaWifiMac> eastWifiMac;
 
 /*** Access Point Variables ***/
-uint8_t assoicatedStations = 0;           /* Total number of assoicated stations with the AP */
-uint8_t stationsTrained = 0;              /* Number of BF trained stations */
-bool scheduledStaticPeriods = false;      /* Flag to indicate whether we scheduled Static Service Periods or not */
+uint8_t assoicatedStations = 0;           /* Total number of assoicated stations with the AP. */
+uint8_t stationsTrained = 0;              /* Number of BF trained stations. */
+bool scheduledStaticPeriods = false;      /* Flag to indicate whether we scheduled Static Service Periods or not. */
 
 /*** Service Period ***/
-uint16_t spDuration = 3200;               /* The duration of the allocated service period block in MicroSeconds */
-
-double
-CalculateSingleStreamThroughput (Ptr<PacketSink> sink, uint64_t &lastTotalRx, double &averageThroughput)
-{
-  double thr = (sink->GetTotalRx() - lastTotalRx) * (double) 8/1e5;     /* Convert Application RX Packets to MBits. */
-  lastTotalRx = sink->GetTotalRx ();
-  averageThroughput += thr;
-  return thr;
-}
+uint16_t spDuration = 3200;               /* The duration of the allocated service period block in MicroSeconds. */
 
 void
 CalculateThroughput (void)
 {
   double thr1, thr2;
-  Time now = Simulator::Now ();
+  string duration = to_string_with_precision<double> (Simulator::Now ().GetSeconds () - 0.1, 1)
+                  + " - " + to_string_with_precision<double> (Simulator::Now ().GetSeconds (), 1);
   thr1 = CalculateSingleStreamThroughput (sink1, westEastLastTotalRx, westEastAverageThroughput);
   thr2 = CalculateSingleStreamThroughput (sink2, westSouthTotalRx, westSouthAverageThroughput);
-  std::cout << now.GetSeconds () << '\t' << thr1 << '\t'<< thr2 << std::endl;
+  std::cout << std::left << std::setw (12) << duration
+            << std::left << std::setw (12) << thr1
+            << std::left << std::setw (12) << thr2
+            << std::endl;
   Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
 }
 
 void
-StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
+StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t aid)
 {
-  std::cout << "DMG STA " << staWifiMac->GetAddress () << " associated with DMG AP " << address << std::endl;
-  std::cout << "Association ID (AID) = " << staWifiMac->GetAssociationID () << std::endl;
+  std::cout << "DMG STA " << staWifiMac->GetAddress () << " associated with DMG PCP/AP " << address << std::endl;
+  std::cout << "Association ID (AID) = " << aid << std::endl;
   assoicatedStations++;
   /* Check if all stations have assoicated with the PCP/AP */
   if (assoicatedStations == 3)
@@ -130,10 +124,24 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
         }
 
       std::cout << "All stations got associated with " << address << std::endl;
+
+      /* For simplicity we assume that each station is aware of the capabilities of the peer station */
+      /* Otherwise, we have to request the capabilities of the peer station. */
+      westWifiMac->StorePeerDmgCapabilities (eastWifiMac);
+      westWifiMac->StorePeerDmgCapabilities (southWifiMac);
+      eastWifiMac->StorePeerDmgCapabilities (westWifiMac);
+      eastWifiMac->StorePeerDmgCapabilities (southWifiMac);
+      southWifiMac->StorePeerDmgCapabilities (westWifiMac);
+      southWifiMac->StorePeerDmgCapabilities (eastWifiMac);
+
       /* Schedule Beamforming Training SP */
-      apWifiMac->AllocateBeamformingServicePeriod (westWifiMac->GetAssociationID (), eastWifiMac->GetAssociationID (), 0, true);
-      apWifiMac->AllocateBeamformingServicePeriod (westWifiMac->GetAssociationID (), southWifiMac->GetAssociationID (), 500, true);
-      apWifiMac->AllocateBeamformingServicePeriod (southWifiMac->GetAssociationID (), eastWifiMac->GetAssociationID (), 1000, true);
+      uint32_t allocationStart = 0;
+      allocationStart = apWifiMac->AllocateBeamformingServicePeriod (westWifiMac->GetAssociationID (),
+                                                                     eastWifiMac->GetAssociationID (), allocationStart, true);
+      allocationStart = apWifiMac->AllocateBeamformingServicePeriod (westWifiMac->GetAssociationID (),
+                                                                     southWifiMac->GetAssociationID (), allocationStart, true);
+      allocationStart = apWifiMac->AllocateBeamformingServicePeriod (southWifiMac->GetAssociationID (),
+                                                                     eastWifiMac->GetAssociationID (), allocationStart, true);
     }
 }
 
@@ -168,23 +176,23 @@ CreateTimeAllocationRequest (AllocationFormat format, uint8_t destAid, bool mult
 }
 
 void
-SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, SlsCompletionAttrbitutes attributes)
 {
-  if (accessPeriod == CHANNEL_ACCESS_DTI)
+  if (attributes.accessPeriod == CHANNEL_ACCESS_DTI)
     {
-      std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-      std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
-                << ", AntennaID=" << uint32_t (antennaId) << std::endl;
+      std::cout << "DMG STA " << staWifiMac->GetAddress ()
+                << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
+      std::cout << "The best antenna configuration is AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
       if ((westWifiMac->GetAddress () == staWifiMac->GetAddress ()) &&
-          ((southWifiMac->GetAddress () == address) || (eastWifiMac->GetAddress () == address)))
+          ((southWifiMac->GetAddress () == attributes.peerStation) || (eastWifiMac->GetAddress () == attributes.peerStation)))
         {
           stationsTrained++;
         }
       if ((stationsTrained == 2) & !scheduledStaticPeriods)
         {
-          std::cout << "West DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with South and East DMG STAs " << std::endl;
+          std::cout << "West DMG STA " << staWifiMac->GetAddress ()
+                    << " completed SLS phase with South and East DMG STAs " << std::endl;
           std::cout << "Schedule Static Periods" << std::endl;
           scheduledStaticPeriods = true;
           /* Create Airtime Allocation Requests */
@@ -264,32 +272,37 @@ DeleteAllocation (Ptr<DmgStaWifiMac> wifiMac, uint8_t id, uint8_t destAid)
 int
 main (int argc, char *argv[])
 {
-  uint32_t payloadSize = 1472;                  /* Transport Layer Payload size in bytes. */
-  string dataRate = "300Mbps";                  /* Application Layer Data Rate. */
-  uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
-  uint32_t queueSize = 1000;                   /* Wifi Mac Queue Size. */
-  string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
-  bool verbose = false;                         /* Print Logging Information. */
-  double simulationTime = 10;                   /* Simulation time in seconds. */
-  bool pcapTracing = false;                     /* PCAP Tracing is enabled or not. */
+  uint32_t payloadSize = 1472;                    /* Transport Layer Payload size in bytes. */
+  string dataRate = "300Mbps";                    /* Application Layer Data Rate. */
+  string msduAggSize = "max";                     /* The maximum aggregation size for A-MSDU in Bytes. */
+  string mpduAggSize = "0";                       /* The maximum aggregation size for A-MPDU in Bytes. */
+  string queueSize = "4000p";                     /* Wifi MAC Queue Size. */
+  string phyMode = "DMG_MCS12";                   /* Type of the Physical Layer. */
+  bool verbose = false;                           /* Print Logging Information. */
+  double simulationTime = 10;                     /* Simulation time in seconds. */
+  bool pcapTracing = false;                       /* PCAP Tracing is enabled or not. */
+  uint32_t snapshotLength = std::numeric_limits<uint32_t>::max ();       /* The maximum PCAP Snapshot Length */
 
   /* Command line argument parser setup. */
   CommandLine cmd;
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
   cmd.AddValue ("dataRate", "Payload size in bytes", dataRate);
-  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
+  cmd.AddValue ("msduAggSize", "The maximum aggregation size for A-MSDU in Bytes", msduAggSize);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
   cmd.AddValue ("duration", "The duration of service period in MicroSeconds", spDuration);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
   cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
+  cmd.AddValue ("snapshotLength", "The maximum PCAP Snapshot Length", snapshotLength);
   cmd.Parse (argc, argv);
 
-  /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
-  Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::QueueBase::MaxPackets", UintegerValue (queueSize));
+  /* Validate A-MSDU and A-MPDU values */
+  ValidateFrameAggregationAttributes (msduAggSize, mpduAggSize);
+  /* Configure RTS/CTS and Fragmentation */
+  ConfigureRtsCtsAndFragmenatation ();
+  /* Wifi MAC Queue Parameters */
+  ChangeQueueSize (queueSize);
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
   DmgWifiHelper wifi;
@@ -321,12 +334,8 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   /* Set default algorithm for all nodes to be constant rate */
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
-                                                                "DataMode", StringValue (phyMode));
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -343,11 +352,10 @@ main (int argc, char *argv[])
   Ssid ssid = Ssid ("TrafficStream");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue(ssid),
-                   "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
-                   "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "ATIPresent", BooleanValue (false));
+                   "BeaconInterval", TimeValue (MicroSeconds (102400)));
 
   /* Set Analytical Codebook for the DMG Devices */
   wifi.SetCodebook ("ns3::CodebookAnalytical",
@@ -361,15 +369,15 @@ main (int argc, char *argv[])
   /* Install DMG STA Nodes */
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize));
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize));
 
   staDevices = wifi.Install (wifiPhy, wifiMac, NodeContainer (westNode, southNode, eastNode));
 
   /* Setting mobility model */
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0.0, +1.0, 0.0));   /* PCP/AP */
+  positionAlloc->Add (Vector (0.0, +1.0, 0.0));   /* DMG PCP/AP */
   positionAlloc->Add (Vector (-1.0, 0.0, 0.0));   /* DMG STA West */
   positionAlloc->Add (Vector (0.0, -1.0, 0.0));   /* DMG STA South */
   positionAlloc->Add (Vector (+1.0, 0.0, 0.0));   /* DMG STA East */
@@ -406,23 +414,20 @@ main (int argc, char *argv[])
   /* Install Simple UDP Transmiter on the West Node (Transmit to the East Node) */
   ApplicationContainer srcApp;
   OnOffHelper src ("ns3::UdpSocketFactory", InetSocketAddress (staInterfaces.GetAddress (2), 9999));
-  src.SetAttribute ("MaxBytes", UintegerValue (0));
+  src.SetAttribute ("MaxPackets", UintegerValue (0));
   src.SetAttribute ("PacketSize", UintegerValue (payloadSize));
   src.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1e6]"));
   src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
   src.SetAttribute ("DataRate", DataRateValue (DataRate (dataRate)));
   srcApp = src.Install (westNode);
   srcApp.Start (Seconds (3.0));
+  srcApp.Stop (Seconds (simulationTime));
 
   /* Install Simple UDP Transmiter on the West Node (Transmit to the South Node) */
   src.SetAttribute ("Remote", AddressValue (InetSocketAddress (staInterfaces.GetAddress (1), 9999)));
   srcApp = src.Install (westNode);
   srcApp.Start (Seconds (3.0));
-
-  /* Set Maximum number of packets in WifiMacQueue */
-  Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/DcaTxop/Queue/MaxPackets", UintegerValue (queueSize));
-  Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/BE_EdcaTxopN/Queue/MaxPackets", UintegerValue (queueSize));
-  Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::DmgWifiMac/SPQueue/MaxPackets", UintegerValue (queueSize));
+  srcApp.Stop (Seconds (simulationTime));
 
   /* Schedule Throughput Calulcations */
   Simulator::Schedule (Seconds (3.1), &CalculateThroughput);
@@ -454,6 +459,7 @@ main (int argc, char *argv[])
   if (pcapTracing)
     {
       wifiPhy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11_RADIO);
+      wifiPhy.SetSnapshotLength (snapshotLength);
       wifiPhy.EnablePcap ("Traces/AccessPoint", apDevice, false);
       wifiPhy.EnablePcap ("Traces/WestNode", staDevices.Get (0), false);
       wifiPhy.EnablePcap ("Traces/SouthNode", staDevices.Get (1), false);
@@ -461,20 +467,30 @@ main (int argc, char *argv[])
     }
 
   /* Print Output*/
-  std::cout << "Time(s)" << '\t' << "SP1" << '\t'<< "SP2" << std::endl;
+  std::cout << std::left << std::setw (12) << "Time [s]"
+            << std::left << std::setw (12) << "SP1"
+            << std::left << std::setw (12) << "SP2"
+            << std::endl;
 
-  Simulator::Stop (Seconds (simulationTime));
+  /* Install FlowMonitor on all nodes */
+  FlowMonitorHelper flowmon;
+  Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
+
+  Simulator::Stop (Seconds (simulationTime + 0.101));
   Simulator::Run ();
   Simulator::Destroy ();
 
+  /* Print per flow statistics */
+  PrintFlowMonitorStatistics (flowmon, monitor, simulationTime - 1);
+
   /* Print Results Summary */
   std::cout << "Total number of packets received during each service period:" << std::endl;
-  std::cout << "A1 = " << sink1->GetTotalReceivedPackets () << std::endl;
-  std::cout << "A2 = " << sink2->GetTotalReceivedPackets () << std::endl;
+  std::cout << "SP1 = " << sink1->GetTotalReceivedPackets () << std::endl;
+  std::cout << "SP2 = " << sink2->GetTotalReceivedPackets () << std::endl;
 
-  std::cout << "Total throughput during each service period:" << std::endl;
-  std::cout << "A1 = " << westEastAverageThroughput/((simulationTime - 3) * 10) << std::endl;
-  std::cout << "A2 = " << westSouthAverageThroughput/((simulationTime - 3) * 10)<< std::endl;
+  std::cout << "Total throughput [Mbps] during each service period allocation:" << std::endl;
+  std::cout << "SP1 = " << westEastAverageThroughput/((simulationTime - 3) * 10) << std::endl;
+  std::cout << "SP2 = " << westSouthAverageThroughput/((simulationTime - 3) * 10) << std::endl;
 
   return 0;
 }

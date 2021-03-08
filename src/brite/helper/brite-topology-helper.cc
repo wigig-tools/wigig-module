@@ -353,10 +353,11 @@ void BriteTopologyHelper::GenerateBriteTopology (void)
   BuildBriteNodeInfoList ();
   BuildBriteEdgeInfoList ();
 
-  //brite automatically spits out the seed values used to a seperate file so no need to keep this anymore
+  //brite automatically spits out the seed values used to a separate file so no need to keep this anymore
   if (generateSeedFile)
     {
       remove ("briteSeedFile.txt");
+      remove ("last_seed_file");
     }
 
 }

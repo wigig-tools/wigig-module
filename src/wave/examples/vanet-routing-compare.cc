@@ -105,7 +105,6 @@
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/mobility-module.h"
-#include "ns3/wifi-module.h"
 #include "ns3/aodv-module.h"
 #include "ns3/olsr-module.h"
 #include "ns3/dsdv-module.h"
@@ -120,7 +119,7 @@
 #include "ns3/integer.h"
 #include "ns3/wave-bsm-helper.h"
 #include "ns3/wave-helper.h"
-// future #include "ns3/topology.h"
+#include "ns3/yans-wifi-helper.h"
 
 using namespace ns3;
 using namespace dsr;
@@ -220,7 +219,7 @@ public:
 
   /**
    * \brief Increment the number of bytes transmitted
-   * \param txBytes the number of addtional bytes transmitted
+   * \param txBytes the number of additional bytes transmitted
    * \return none
    */
   void IncTxBytes (uint32_t txBytes);
@@ -400,7 +399,7 @@ public:
   virtual ~RoutingHelper ();
 
   /**
-   * \brief Installs routing funcationality on nodes and their
+   * \brief Installs routing functionality on nodes and their
    * devices and interfaces.
    * \param c node container
    * \param d net device container
@@ -2006,7 +2005,7 @@ VanetRoutingExperiment::SetGlobalsFromConfig ()
 void
 VanetRoutingExperiment::CommandSetup (int argc, char **argv)
 {
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   double txDist1 = 50.0;
   double txDist2 = 100.0;
   double txDist3 = 150.0;

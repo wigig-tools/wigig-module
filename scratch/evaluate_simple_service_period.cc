@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -101,8 +101,9 @@ main (int argc, char *argv[])
   uint32_t packetSize = 1448;                   /* Transport Layer Payload size in bytes. */
   string dataRate = "300Mbps";                  /* Application Layer Data Rate. */
   uint64_t maxPackets = 0;                      /* The maximum number of packets to transmit. */
-  uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
-  uint32_t queueSize = 10000;                   /* Wifi Mac Queue Size. */
+  string msduAggSize = "max";                   /* The maximum aggregation size for A-MSDU in Bytes. */
+  string mpduAggSize = "0";                     /* The maximum aggregation size for A-MPDU in Bytes. */
+  string queueSize = "4000p";                   /* Wifi MAC Queue Size. */
   string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
   bool verbose = false;                         /* Print Logging Information. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
@@ -113,7 +114,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("packetSize", "Payload size in bytes", packetSize);
   cmd.AddValue ("dataRate", "Data rate for OnOff Application", dataRate);
   cmd.AddValue ("maxPackets", "The maximum number of packets to transmit", maxPackets);
-  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
+  cmd.AddValue ("msduAggSize", "The maximum aggregation size for A-MSDU in Bytes", msduAggSize);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
   cmd.AddValue ("spDuration", "The duration of service period in MicroSeconds", spDuration);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
@@ -122,9 +123,12 @@ main (int argc, char *argv[])
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
   cmd.Parse (argc, argv);
 
-  /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
-  Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
+  /* Validate A-MSDU and A-MPDU values */
+  ValidateFrameAggregationAttributes (msduAggSize, mpduAggSize);
+  /* Configure RTS/CTS and Fragmentation */
+  ConfigureRtsCtsAndFragmenatation ();
+  /* Wifi MAC Queue Parameters */
+  ChangeQueueSize (queueSize);
 
   /**** DmgWifiHelper is a meta-helper ****/
   DmgWifiHelper wifi;
@@ -156,12 +160,8 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   /* Set default algorithm for all nodes to be constant rate */
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
-                                                                "DataMode", StringValue (phyMode));
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -176,11 +176,10 @@ main (int argc, char *argv[])
   Ssid ssid = Ssid ("ServicePeriod");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue(ssid),
-                   "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
-                   "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "ATIPresent", BooleanValue (false));
+                   "BeaconInterval", TimeValue (MicroSeconds (102400)));
 
   /* Set Analytical Codebook for the DMG Devices */
   wifi.SetCodebook ("ns3::CodebookAnalytical",
@@ -194,8 +193,8 @@ main (int argc, char *argv[])
   /* Install DMG STA Nodes */
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize));
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize));
 
   staDevices = wifi.Install (wifiPhy, wifiMac, staNode);
 
@@ -255,15 +254,12 @@ main (int argc, char *argv[])
   /* Schedule Throughput Calulcations */
   Simulator::Schedule (Seconds (1.1), &CalculateThroughput, packetSink, staNodeLastTotalRx, staNodeAverageThroughput);
 
-  /* Set Maximum number of packets in WifiMacQueue */
-  Config::Set ("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/BE_EdcaTxopN/Queue/MaxPackets", UintegerValue (queueSize));
-
   /* Connect Wifi MAC Queue Occupancy */
   AsciiTraceHelper asciiTraceHelper;
   Ptr<OutputStreamWrapper> queueOccupanyStream;
   /* Trace DMG PCP/AP MAC Queue Changes */
   queueOccupanyStream = asciiTraceHelper.CreateFileStream ("Traces/AccessPointMacQueueOccupany.txt");
-  Config::ConnectWithoutContext ("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/BE_EdcaTxopN/Queue/OccupancyChanged",
+  Config::ConnectWithoutContext ("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::RegularWifiMac/BE_QosTxop/Queue/OccupancyChanged",
                                  MakeBoundCallback (&QueueOccupancyChange, queueOccupanyStream));
 
   /* Enable Traces */
@@ -290,20 +286,7 @@ main (int argc, char *argv[])
   Simulator::Destroy ();
 
   /* Print per flow statistics */
-  monitor->CheckForLostPackets ();
-  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
-  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
-  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
-    {
-      Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-      std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")" << std::endl;;
-      std::cout << "  Tx Packets: " << i->second.txPackets << std::endl;
-      std::cout << "  Tx Bytes:   " << i->second.txBytes << std::endl;
-      std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
-      std::cout << "  Rx Packets: " << i->second.rxPackets << std::endl;;
-      std::cout << "  Rx Bytes:   " << i->second.rxBytes << std::endl;
-      std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
-    }
+  PrintFlowMonitorStatistics (flowmon, monitor, simulationTime - 1);
 
   /* Print Application Layer Results Summary */
   std::cout << "\nApplication Layer Statistics:" << std::endl;;

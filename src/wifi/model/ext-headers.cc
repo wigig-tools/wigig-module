@@ -201,7 +201,8 @@ ExtDMGParameters::Serialize (Buffer::Iterator start) const
   buffer |= ((m_cbapSource & 0x1) << 3);
   buffer |= ((m_dmgPrivacy & 0x1) << 4);
   buffer |= ((m_ecpacPolicyEnforced & 0x1) << 5);
-  buffer |= ((m_reserved & 0x3) << 6);
+  buffer |= ((m_edmgSupported & 0x1) << 6);
+  buffer |= ((m_reserved & 0x1) << 7);
 
   start.WriteU8 (buffer);
   return start;
@@ -218,7 +219,8 @@ ExtDMGParameters::Deserialize (Buffer::Iterator start)
   m_cbapSource = (buffer >> 3) & 0x1;
   m_dmgPrivacy = (buffer >> 4) & 0x1;
   m_ecpacPolicyEnforced = (buffer >> 5) & 0x1;
-  m_reserved = (buffer >> 6) & 0x3;
+  m_edmgSupported = (buffer >> 6) & 0x1;
+  m_reserved = (buffer >> 7) & 0x1;
 
   return start;
 }
@@ -261,6 +263,13 @@ ExtDMGParameters::Set_ECPAC_Policy_Enforced (bool value)
 {
   NS_LOG_FUNCTION (this << value);
   m_ecpacPolicyEnforced = value;
+}
+
+void
+ExtDMGParameters::Set_EDMG_Supported (bool value)
+{
+  NS_LOG_FUNCTION (this << value);
+  m_edmgSupported = value;
 }
 
 void
@@ -308,6 +317,13 @@ ExtDMGParameters::Get_ECPAC_Policy_Enforced (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_ecpacPolicyEnforced;
+}
+
+bool
+ExtDMGParameters::Get_EDMG_supported (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return m_edmgSupported;
 }
 
 uint8_t
@@ -386,7 +402,14 @@ ExtDMGBeaconIntervalCtrlField::Serialize (Buffer::Iterator start) const
   ctrl1 |= ((m_ATI_Present & 0x1) << 6);
   ctrl1 |= ((m_ABFT_Length & 0x7) << 7);
   ctrl1 |= ((m_FSS & 0xF) << 10);
-  ctrl1 |= ((m_isResponderTXSS & 0x1) << 14);
+  if (m_next_ABFT == 0)
+    {
+      ctrl1 |= ((m_isResponderTXSS & 0x1) << 14);
+    }
+  else
+    {
+      ctrl1 |= ((m_unsolicitedRssEnabled & 0x1) << 14);
+    }
   ctrl1 |= ((m_next_ABFT & 0xF) << 15);
   ctrl1 |= ((m_fragmentedTXSS & 0x1) << 19);
   ctrl1 |= ((m_TXSS_Span & 0x3F) << 20);
@@ -396,6 +419,9 @@ ExtDMGBeaconIntervalCtrlField::Serialize (Buffer::Iterator start) const
   ctrl2 |= (m_ABFT_Count >> 1) & 0x1F;
   ctrl2 |= ((m_N_ABFT_Ant & 0x3F) << 5);
   ctrl2 |= ((m_pcpAssociationReady & 0x1) << 11);
+  ctrl2 |= ((m_ABFTMultiplier & 0x3) << 12);
+  ctrl2 |= ((m_ABFTinSecondaryChannel & 0x3) << 14);
+
 
   start.WriteHtolsbU32 (ctrl1);
   start.WriteHtolsbU16 (ctrl2);
@@ -416,14 +442,24 @@ ExtDMGBeaconIntervalCtrlField::Deserialize (Buffer::Iterator start)
   m_ATI_Present = (ctrl1 >> 6) & 0x1;
   m_ABFT_Length = (ctrl1 >> 7) & 0x7;
   m_FSS = (ctrl1 >> 10) & 0xF;
-  m_isResponderTXSS = (ctrl1 >> 14) & 0x1;
+  bool b14 = (ctrl1 >> 14) & 0x1;
   m_next_ABFT = (ctrl1 >> 15) & 0xF;
+  if (m_next_ABFT == 0)
+    {
+      m_isResponderTXSS = b14;
+    }
+  else
+    {
+      m_unsolicitedRssEnabled = b14;
+    }
   m_fragmentedTXSS = (ctrl1 >> 19) & 0x1;
   m_TXSS_Span = (ctrl1 >> 20) & 0x3F;
   m_N_BI = (ctrl1 >> 27) & 0xF;
   m_ABFT_Count =  ((ctrl1 >> 31) & 0x1) | ((ctrl2 << 1) & 0x3E);
   m_N_ABFT_Ant = (ctrl2 >> 5) & 0x3F;
   m_pcpAssociationReady = (ctrl2 >> 11) & 0x1;
+  m_ABFTMultiplier = (ctrl2 >> 12) & 0x3;
+  m_ABFTinSecondaryChannel = (ctrl2 >> 14) & 0x3;
 
   return start;
 }
@@ -515,6 +551,24 @@ ExtDMGBeaconIntervalCtrlField::SetPCPAssoicationReady (bool value)
   m_pcpAssociationReady = value;
 }
 
+void
+ExtDMGBeaconIntervalCtrlField::SetUnsolicitedRSSEnabled (bool value)
+{
+  m_unsolicitedRssEnabled = value;
+}
+
+void
+ExtDMGBeaconIntervalCtrlField::SetABFTMultiplier (uint8_t value)
+{
+  m_ABFTMultiplier = value;
+}
+
+void
+ExtDMGBeaconIntervalCtrlField::SetABFTinSecondaryChannel (uint8_t value)
+{
+  m_ABFTinSecondaryChannel = value;
+}
+
 bool
 ExtDMGBeaconIntervalCtrlField::IsCCPresent (void) const
 {
@@ -598,6 +652,24 @@ bool
 ExtDMGBeaconIntervalCtrlField::GetPCPAssoicationReady (void) const
 {
   return m_pcpAssociationReady;
+}
+
+bool
+ExtDMGBeaconIntervalCtrlField::IsUnsolicitedRssEnabled (void) const
+{
+  return m_unsolicitedRssEnabled;
+}
+
+uint8_t
+ExtDMGBeaconIntervalCtrlField::GetABFTMultiplier (void) const
+{
+  return m_ABFTMultiplier;
+}
+
+uint8_t
+ExtDMGBeaconIntervalCtrlField::GetABFTinSecondaryChannel (void) const
+{
+  return m_ABFTinSecondaryChannel;
 }
 
 /******************************************

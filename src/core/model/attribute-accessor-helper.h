@@ -21,6 +21,7 @@
 #define ATTRIBUTE_ACCESSOR_HELPER_H
 
 #include "attribute.h"
+#include "unused.h"
 
 /**
  * \file
@@ -30,7 +31,7 @@
 
 namespace ns3 {
 
-  
+
 /**
  * \ingroup attributeimpl
  *
@@ -41,7 +42,7 @@ namespace ns3 {
  * \code
  *   typedef U (T::*getter)(void) const
  * \endcode
- * where \p T is the class and \p U is the type of
+ * where \pname{T} is the class and \pname{U} is the type of
  * the return value.
  *
  * The set method should have one of these signatures:
@@ -49,16 +50,16 @@ namespace ns3 {
  *   typedef void (T::*setter)(U)
  *   typedef bool (T::*setter)(U)
  * \endcode
- * where \p T is the class and \p U is the type of the value to set
+ * where \pname{T} is the class and \pname{U} is the type of the value to set
  * the attribute to, which should be compatible with the
- * specific AttributeValue type \p V which holds the value
+ * specific AttributeValue type \pname{V} which holds the value
  * (or the type implied by the name \c Make<V>Accessor of this function.)
- * In the case of a \p setter returning \p bool, the return value
+ * In the case of a \pname{setter} returning \pname{bool,} the return value
  * should be \c true if the value could be set successfully.
  *
  * \tparam V  \explicit (If present) The specific AttributeValue type
  *            to use to represent the Attribute.  (If not present,
- *            the type \p V is implicit in the name of this function,
+ *            the type \pname{V} is implicit in the name of this function,
  *            as "Make<V>Accessor"
  * \tparam T1 \deduced The type of the class data member,
  *            or the type of the class get functor or set method.
@@ -71,7 +72,7 @@ inline
 Ptr<const AttributeAccessor>
 MakeAccessorHelper (T1 a1);
 
-  
+
 /**
  * \ingroup attributeimpl
  *
@@ -82,7 +83,7 @@ MakeAccessorHelper (T1 a1);
  * \code
  *   typedef U (T::*getter)(void) const
  * \endcode
- * where \p T is the class and \p U is the type of
+ * where \pname{T} is the class and \pname{U} is the type of
  * the return value.
  *
  * The set method should have one of these signatures:
@@ -90,18 +91,18 @@ MakeAccessorHelper (T1 a1);
  *   typedef void (T::*setter)(U)
  *   typedef bool (T::*setter)(U)
  * \endcode
- * where \p T is the class and \p U is the type of the value to set
+ * where \pname{T} is the class and \pname{U} is the type of the value to set
  * the attribute to, which should be compatible with the
- * specific AttributeValue type \p V which holds the value
+ * specific AttributeValue type \pname{V} which holds the value
  * (or the type implied by the name \c Make<V>Accessor of this function.)
- * In the case of a \p setter returning \p bool, the return value
+ * In the case of a \pname{setter} returning \pname{bool,} the return value
  * should be true if the value could be set successfully.
  *
  * In practice the setter and getter arguments can appear in either order,
  * but setter first is preferred.
  *
  * \tparam V  \explicit (If present) The specific AttributeValue type to use to represent
- *            the Attribute.  (If not present, the type \p V is implicit
+ *            the Attribute.  (If not present, the type \pname{V} is implicit
  *            in the name of this function as "Make<V>Accessor"
  * \tparam T1 \deduced The type of the class data member,
  *            or the type of the class get functor or set method.
@@ -117,7 +118,7 @@ inline
 Ptr<const AttributeAccessor>
 MakeAccessorHelper (T1 a1, T2 a2);
 
-  
+
 } // namespace ns3
 
 
@@ -129,11 +130,11 @@ MakeAccessorHelper (T1 a1, T2 a2);
 
 namespace ns3 {
 
-  
+
 /**
  * \ingroup attributeimpl
  *
- * The non-const and non-reference type equivalent to \p T.
+ * The non-const and non-reference type equivalent to \pname{T}.
  *
  * \tparam T \explicit The original (possibly qualified) type.
  */
@@ -144,7 +145,7 @@ struct AccessorTrait
   typedef typename TypeTraits<typename TypeTraits<T>::ReferencedType>::NonConstType Result;
 };
 
-  
+
 /**
  * \ingroup attributeimpl
  *
@@ -160,7 +161,8 @@ class AccessorHelper : public AttributeAccessor
 {
 public:
   /** Constructor */
-  AccessorHelper () {}
+  AccessorHelper ()
+  {}
 
   /**
    * Set the underlying member to the argument AttributeValue.
@@ -170,11 +172,12 @@ public:
    *
    * Forwards to DoSet method.
    *
-   * \param [in] object Generic object pointer, to upcast to \p T.
-   * \param [in] val Generic AttributeValue, to upcast to \p U.
+   * \param [in] object Generic object pointer, to upcast to \pname{T}.
+   * \param [in] val Generic AttributeValue, to upcast to \pname{U}.
    * \returns true if the member was set successfully.
    */
-  virtual bool Set (ObjectBase * object, const AttributeValue & val) const {
+  virtual bool Set (ObjectBase * object, const AttributeValue & val) const
+  {
     const U *value = dynamic_cast<const U *> (&val);
     if (value == 0)
       {
@@ -196,11 +199,12 @@ public:
    *
    * Forwards to DoGet method.
    *
-   * \param [out] object Generic object pointer, to upcast to \p T.
-   * \param [out] val Generic AttributeValue, to upcast to \p U.
+   * \param [out] object Generic object pointer, to upcast to \pname{T}.
+   * \param [out] val Generic AttributeValue, to upcast to \pname{U}.
    * \returns true if the member value could be retrieved successfully
    */
-  virtual bool Get (const ObjectBase * object, AttributeValue &val) const {
+  virtual bool Get (const ObjectBase * object, AttributeValue &val) const
+  {
     U *value = dynamic_cast<U *> (&val);
     if (value == 0)
       {
@@ -236,7 +240,7 @@ private:
 
 };  // class AccessorHelper
 
-  
+
 /**
  * \ingroup attributeimpl
  *
@@ -257,7 +261,7 @@ DoMakeAccessorHelperOne (U T::*memberVariable)
   /* AttributeAcessor implementation for a class member variable. */
   class MemberVariable : public AccessorHelper<T,V>
   {
-public:
+  public:
     /*
      * Construct from a class data member address.
      * \param [in] memberVariable The class data member address.
@@ -266,8 +270,10 @@ public:
       : AccessorHelper<T,V> (),
         m_memberVariable (memberVariable)
     {}
-private:
-    virtual bool DoSet (T *object, const V *v) const {
+
+  private:
+    virtual bool DoSet (T *object, const V *v) const
+    {
       typename AccessorTrait<U>::Result tmp;
       bool ok = v->GetAccessor (tmp);
       if (!ok)
@@ -277,14 +283,17 @@ private:
       (object->*m_memberVariable) = tmp;
       return true;
     }
-    virtual bool DoGet (const T *object, V *v) const {
+    virtual bool DoGet (const T *object, V *v) const
+    {
       v->Set (object->*m_memberVariable);
       return true;
     }
-    virtual bool HasGetter (void) const {
+    virtual bool HasGetter (void) const
+    {
       return true;
     }
-    virtual bool HasSetter (void) const {
+    virtual bool HasSetter (void) const
+    {
       return true;
     }
 
@@ -293,7 +302,7 @@ private:
   return Ptr<const AttributeAccessor> (new MemberVariable (memberVariable), false);
 }
 
-  
+
 /**
  * \ingroup attributeimpl
  *
@@ -314,7 +323,7 @@ DoMakeAccessorHelperOne (U (T::*getter)(void) const)
   /* AttributeAccessor implementation with a class get functor method. */
   class MemberMethod : public AccessorHelper<T,V>
   {
-public:
+  public:
     /*
      * Construct from a class get functor method.
      * \param [in] getter The class get functor method pointer.
@@ -323,18 +332,25 @@ public:
       : AccessorHelper<T,V> (),
         m_getter (getter)
     {}
-private:
-    virtual bool DoSet (T *object, const V *v) const {
+
+  private:
+    virtual bool DoSet (T *object, const V *v) const
+    {
+      NS_UNUSED (object);
+      NS_UNUSED (v);
       return false;
     }
-    virtual bool DoGet (const T *object, V *v) const {
+    virtual bool DoGet (const T *object, V *v) const
+    {
       v->Set ((object->*m_getter)());
       return true;
     }
-    virtual bool HasGetter (void) const {
+    virtual bool HasGetter (void) const
+    {
       return true;
     }
-    virtual bool HasSetter (void) const {
+    virtual bool HasSetter (void) const
+    {
       return false;
     }
     U (T::*m_getter)(void) const;  // The class get functor method pointer.
@@ -364,7 +380,7 @@ DoMakeAccessorHelperOne (void (T::*setter)(U))
   /* AttributeAccessor implementation with a class set method returning void. */
   class MemberMethod : public AccessorHelper<T,V>
   {
-public:
+  public:
     /*
      * Construct from a class set method.
      * \param [in] setter The class set method pointer.
@@ -373,8 +389,10 @@ public:
       : AccessorHelper<T,V> (),
         m_setter (setter)
     {}
-private:
-    virtual bool DoSet (T *object, const V *v) const {
+
+  private:
+    virtual bool DoSet (T *object, const V *v) const
+    {
       typename AccessorTrait<U>::Result tmp;
       bool ok = v->GetAccessor (tmp);
       if (!ok)
@@ -384,13 +402,18 @@ private:
       (object->*m_setter)(tmp);
       return true;
     }
-    virtual bool DoGet (const T *object, V *v) const {
+    virtual bool DoGet (const T *object, V *v) const
+    {
+      NS_UNUSED (object);
+      NS_UNUSED (v);
       return false;
     }
-    virtual bool HasGetter (void) const {
+    virtual bool HasGetter (void) const
+    {
       return false;
     }
-    virtual bool HasSetter (void) const {
+    virtual bool HasSetter (void) const
+    {
       return true;
     }
     void (T::*m_setter)(U);  // The class set method pointer, returning void.
@@ -398,12 +421,12 @@ private:
   return Ptr<const AttributeAccessor> (new MemberMethod (setter), false);
 }
 
-  
+
 /**
  * \ingroup attributeimpl
  *
  * MakeAccessorHelper implementation with a class get functor method
- * and a class set method returning \p void.
+ * and a class set method returning \pname{void}.
  *
  * The two versions of this function differ only in argument order.
  *
@@ -428,7 +451,7 @@ DoMakeAccessorHelperTwo (void (T::*setter)(U),
    */
   class MemberMethod : public AccessorHelper<T,W>
   {
-public:
+  public:
     /*
      * Construct from class get functor and set methods.
      * \param [in] setter The class set method pointer, returning void.
@@ -440,8 +463,10 @@ public:
         m_setter (setter),
         m_getter (getter)
     {}
-private:
-    virtual bool DoSet (T *object, const W *v) const {
+
+  private:
+    virtual bool DoSet (T *object, const W *v) const
+    {
       typename AccessorTrait<U>::Result tmp;
       bool ok = v->GetAccessor (tmp);
       if (!ok)
@@ -451,14 +476,17 @@ private:
       (object->*m_setter)(tmp);
       return true;
     }
-    virtual bool DoGet (const T *object, W *v) const {
+    virtual bool DoGet (const T *object, W *v) const
+    {
       v->Set ((object->*m_getter)());
       return true;
     }
-    virtual bool HasGetter (void) const {
+    virtual bool HasGetter (void) const
+    {
       return true;
     }
-    virtual bool HasSetter (void) const {
+    virtual bool HasSetter (void) const
+    {
       return true;
     }
     void (T::*m_setter)(U);        // The class set method pointer, returning void.
@@ -467,7 +495,7 @@ private:
   return Ptr<const AttributeAccessor> (new MemberMethod (setter, getter), false);
 }
 
-  
+
 /**
  * \ingroup attributeimpl
  * \copydoc DoMakeAccessorHelperTwo(void(T::*)(U),V(T::*)(void)const)
@@ -481,12 +509,12 @@ DoMakeAccessorHelperTwo (V (T::*getter)(void) const,
   return DoMakeAccessorHelperTwo<W> (setter, getter);
 }
 
-  
+
 /**
  * \ingroup attributeimpl
  *
  * MakeAccessorHelper implementation with a class get functor method
- * and a class set method returning \p bool.
+ * and a class set method returning \pname{bool}.
  *
  * The two versions of this function differ only in argument order.
  *
@@ -511,7 +539,7 @@ DoMakeAccessorHelperTwo (bool (T::*setter)(U),
    */
   class MemberMethod : public AccessorHelper<T,W>
   {
-public:
+  public:
     /*
      * Construct from class get functor and set method, returning bool.
      * \param [in] setter The class set method pointer, returning bool.
@@ -523,8 +551,10 @@ public:
         m_setter (setter),
         m_getter (getter)
     {}
-private:
-    virtual bool DoSet (T *object, const W *v) const {
+
+  private:
+    virtual bool DoSet (T *object, const W *v) const
+    {
       typename AccessorTrait<U>::Result tmp;
       bool ok = v->GetAccessor (tmp);
       if (!ok)
@@ -534,14 +564,17 @@ private:
       ok = (object->*m_setter)(tmp);
       return ok;
     }
-    virtual bool DoGet (const T *object, W *v) const {
+    virtual bool DoGet (const T *object, W *v) const
+    {
       v->Set ((object->*m_getter)());
       return true;
     }
-    virtual bool HasGetter (void) const {
+    virtual bool HasGetter (void) const
+    {
       return true;
     }
-    virtual bool HasSetter (void) const {
+    virtual bool HasSetter (void) const
+    {
       return true;
     }
     bool (T::*m_setter)(U);        // The class set method pointer, returning bool.
@@ -550,7 +583,7 @@ private:
   return Ptr<const AttributeAccessor> (new MemberMethod (setter, getter), false);
 }
 
-  
+
 /**
  * \ingroup attributeimpl
  * \copydoc ns3::DoMakeAccessorHelperTwo(bool(T::*)(U),V(T::*)(void)const)

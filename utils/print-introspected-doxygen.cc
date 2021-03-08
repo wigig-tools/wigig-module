@@ -25,6 +25,7 @@
  */
 
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 #include <map>
 #include <climits>    // CHAR_BIT
@@ -47,6 +48,10 @@ NS_LOG_COMPONENT_DEFINE ("PrintIntrospectedDoxygen");
 
 namespace
 {
+  /**
+   * Markup tokens.
+   * @{
+   */
   std::string anchor;              ///< hyperlink anchor
   std::string argument;            ///< function argument
   std::string boldStart;           ///< start of bold span
@@ -68,6 +73,10 @@ namespace
   std::string functionStop;        ///< end of a method/function
   std::string headingStart;        ///< start of section heading (h3)
   std::string headingStop;         ///< end of section heading (h3)
+  // Linking:  [The link text displayed](\ref TheTarget) 
+  std::string hrefStart;           ///< start of a link
+  std::string hrefMid;             ///< middle part of a link
+  std::string hrefStop;            ///< end of a link
   std::string indentHtmlOnly;      ///< small indent
   std::string listLineStart;       ///< start unordered list item
   std::string listLineStop;        ///< end unordered list item
@@ -76,6 +85,7 @@ namespace
   std::string note;                ///< start a note section
   std::string page;                ///< start a separate page
   std::string reference;           ///< reference tag
+  std::string referenceNo;         ///< block automatic references
   std::string returns;             ///< the return value
   std::string sectionStart;        ///< start of a section or group
   std::string seeAlso;             ///< Reference to other docs
@@ -84,6 +94,7 @@ namespace
   std::string templArgExplicit;    ///< template argument required
   std::string templateArgument;    ///< template argument
   std::string variable;            ///< variable or class member
+  /** @} */
 
 }  // unnamed namespace
 
@@ -120,6 +131,10 @@ SetMarkup (bool outputText)
       functionStop                 = "\n\n";
       headingStart                 = "";
       headingStop                  = "";
+      // Linking:  The link text displayed (see TheTarget) 
+      hrefStart                    = "";
+      hrefMid                      = "(see ";
+      hrefStop                     = ")";
       indentHtmlOnly               = "";
       listLineStart                = "    * ";
       listLineStop                 = "";
@@ -128,6 +143,7 @@ SetMarkup (bool outputText)
       note                         = "Note: ";
       page                         = "Page ";
       reference                    = " ";
+      referenceNo                  = " ";
       returns                      = "  Returns: ";
       sectionStart                 = "Section ";
       seeAlso                      = "  See: ";
@@ -160,6 +176,10 @@ SetMarkup (bool outputText)
       functionStop                 = "";
       headingStart                 = "<h3>";
       headingStop                  = "</h3>";
+      // Linking:  [The link text displayed](\ref TheTarget) 
+      hrefStart                    = "[";
+      hrefMid                      = "](\\ref ";
+      hrefStop                     = ")";
       indentHtmlOnly               = "  ";
       listLineStart                = "<li>";
       listLineStop                 = "</li>";
@@ -168,6 +188,7 @@ SetMarkup (bool outputText)
       note                         = "\\note ";
       page                         = "\\page ";
       reference                    = " \\ref ";
+      referenceNo                  = " %";
       returns                      = "\\returns ";
       sectionStart                 = "\\ingroup ";
       seeAlso                      = "\\see ";
@@ -181,8 +202,475 @@ SetMarkup (bool outputText)
 
 
 /***************************************************************
+ *        Aggregation and configuration paths
+ ***************************************************************/
+
+/**
+ * Gather aggregation and configuration path information from registered types.
+ */
+class StaticInformation
+{
+public:
+  /**
+   * Record the a -> b aggregation relation.
+   *
+   * \param a [in] the source(?) TypeId name
+   * \param b [in] the destination(?) TypeId name
+   */
+  void RecordAggregationInfo (std::string a, std::string b);
+  /**
+   * Gather aggregation and configuration path information for tid
+   *
+   * \param tid [in] the TypeId to gather information from
+   */
+  void Gather (TypeId tid);
+  /**
+   * Print output in "a -> b" form on std::cout
+   */
+  void Print (void) const;
+
+  /**
+   * \return the configuration paths for tid
+   *
+   * \param tid [in] the TypeId to return information for
+   */
+  std::vector<std::string> Get (TypeId tid) const;
+
+  /**
+   * \return the type names we couldn't aggregate.
+   */
+  std::vector<std::string> GetNoTypeIds (void) const;
+
+private:
+  /**
+   * \return the current configuration path
+   */
+  std::string GetCurrentPath (void) const;
+  /**
+   * Gather attribute, configuration path information for tid
+   *
+   * \param tid [in] the TypeId to gather information from
+   */
+  void DoGather (TypeId tid);
+  /**
+   *  Record the current config path for tid.
+   *
+   * \param tid [in] the TypeId to record.
+   */
+  void RecordOutput (TypeId tid);
+  /**
+   * \return whether the tid has already been processed
+   *
+   * \param tid [in] the TypeId to check.
+   */
+  bool HasAlreadyBeenProcessed (TypeId tid) const;
+  /**
+   * Configuration path for each TypeId
+   */
+  std::vector<std::pair<TypeId,std::string> > m_output;
+  /**
+   * Current configuration path
+   */
+  std::vector<std::string> m_currentPath;
+  /**
+   * List of TypeIds we've already processed
+   */
+  std::vector<TypeId> m_alreadyProcessed;
+  /**
+   * List of aggregation relationships.
+   */
+  std::vector<std::pair<TypeId,TypeId> > m_aggregates;
+  /**
+   * List of type names without TypeIds, because those modules aren't enabled.
+   *
+   * This is mutable because GetNoTypeIds sorts and uniquifies this list
+   * before returning it.
+   */
+  mutable std::vector<std::string> m_noTids;
+  
+};  // class StaticInformation
+
+
+void 
+StaticInformation::RecordAggregationInfo (std::string a, std::string b)
+{
+  NS_LOG_FUNCTION (this << a << b);
+  TypeId aTid;
+  bool found = TypeId::LookupByNameFailSafe (a, &aTid);
+  if (!found)
+    {
+      m_noTids.push_back (a);
+      return;
+    }
+  TypeId bTid;
+  found = TypeId::LookupByNameFailSafe (b, &bTid);
+  if (!found)
+    {
+      m_noTids.push_back (b);
+      return;
+    }
+
+  m_aggregates.push_back (std::make_pair (aTid, bTid));
+}
+
+
+void 
+StaticInformation::Print (void) const
+{
+  NS_LOG_FUNCTION (this);
+  for (auto item : m_output)
+    {
+      std::cout << item.first.GetName () << " -> " << item.second << std::endl;
+    }
+}
+
+
+std::string
+StaticInformation::GetCurrentPath (void) const
+{
+  NS_LOG_FUNCTION (this);
+  std::ostringstream oss;
+  for (auto item : m_currentPath)
+    {
+      oss << "/" << item;
+    }
+  return oss.str ();
+}
+
+
+void
+StaticInformation::RecordOutput (TypeId tid)
+{
+  NS_LOG_FUNCTION (this << tid);
+  m_output.push_back (std::make_pair (tid, GetCurrentPath ()));
+}
+
+
+bool
+StaticInformation::HasAlreadyBeenProcessed (TypeId tid) const
+{
+  NS_LOG_FUNCTION (this << tid);
+  for (auto it : m_alreadyProcessed)
+    {
+      if (it == tid)
+	{
+	  return true;
+	}
+    }
+  return false;
+}
+
+
+std::vector<std::string> 
+StaticInformation::Get (TypeId tid) const
+{
+  NS_LOG_FUNCTION (this << tid);
+  std::vector<std::string> paths;
+  for (auto item : m_output)
+    {
+      if (item.first == tid)
+	{
+	  paths.push_back (item.second);
+	}
+    }
+  return paths;
+}
+
+/**
+ * Helper to keep only the unique items in a container.
+ *
+ * The container is modified in place; the elements end up sorted.
+ *
+ * The container must support \c begin(), \c end() and \c erase(),
+ * which, among the STL containers, limits this to
+ * \c std::vector, \c std::dequeue and \c std::list.
+ *
+ * The container elements must support \c operator< (for \c std::sort)
+ * and \c operator== (for \c std::unique).
+ *
+ * \tparam T \deduced The container type.
+ * \param t The container.
+ */
+template <typename T>
+void
+Uniquefy (T t)
+{
+  std::sort (t.begin (), t.end ());
+  t.erase (std::unique (t.begin (), t.end ()), t.end ());
+}
+
+std::vector<std::string>
+StaticInformation::GetNoTypeIds (void) const
+{
+  NS_LOG_FUNCTION (this);
+  Uniquefy (m_noTids);
+  return m_noTids;
+}
+
+
+void
+StaticInformation::Gather (TypeId tid)
+{
+  NS_LOG_FUNCTION (this << tid);
+  DoGather (tid);
+  Uniquefy (m_output);
+}
+
+
+void 
+StaticInformation::DoGather (TypeId tid)
+{
+  NS_LOG_FUNCTION (this << tid);
+  if (HasAlreadyBeenProcessed (tid))
+    {
+      return;
+    }
+  RecordOutput (tid);
+  for (uint32_t i = 0; i < tid.GetAttributeN (); ++i)
+    {
+      struct TypeId::AttributeInformation info = tid.GetAttribute(i);
+      const PointerChecker *ptrChecker = dynamic_cast<const PointerChecker *> (PeekPointer (info.checker));
+      if (ptrChecker != 0)
+        {
+          TypeId pointee = ptrChecker->GetPointeeTypeId ();
+
+	  // See if this is a pointer to an Object.
+	  Ptr<Object> object = CreateObject<Object> ();
+	  TypeId objectTypeId = object->GetTypeId ();
+	  if (objectTypeId == pointee)
+	    {
+	      // Stop the recursion at this attribute if it is a
+	      // pointer to an Object, which create too many spurious
+	      // paths in the list of attribute paths because any
+	      // Object can be in that part of the path.
+	      continue;
+	    }
+
+          m_currentPath.push_back (info.name);
+          m_alreadyProcessed.push_back (tid);
+          DoGather (pointee);
+          m_alreadyProcessed.pop_back ();
+          m_currentPath.pop_back ();
+          continue;
+        }
+      // attempt to cast to an object vector.
+      const ObjectPtrContainerChecker *vectorChecker = dynamic_cast<const ObjectPtrContainerChecker *> (PeekPointer (info.checker));
+      if (vectorChecker != 0)
+        {
+          TypeId item = vectorChecker->GetItemTypeId ();
+          m_currentPath.push_back (info.name + "/[i]");
+          m_alreadyProcessed.push_back (tid);
+          DoGather (item);
+          m_alreadyProcessed.pop_back ();
+          m_currentPath.pop_back ();
+          continue;
+        }
+    }
+  for (uint32_t j = 0; j < TypeId::GetRegisteredN (); j++)
+    {
+      TypeId child = TypeId::GetRegistered (j);
+      if (child.IsChildOf (tid))
+        {
+          std::string childName = "$" + child.GetName ();
+          m_currentPath.push_back (childName);
+          m_alreadyProcessed.push_back (tid);
+          DoGather (child);
+          m_alreadyProcessed.pop_back ();
+          m_currentPath.pop_back ();
+        }
+    }
+  for (auto item : m_aggregates)
+    {
+      if (item.first == tid || item.second == tid)
+        {
+          TypeId other;
+          if (item.first == tid)
+            {
+              other = item.second;
+            }
+          if (item.second == tid)
+            {
+              other = item.first;
+            }
+          std::string name = "$" + other.GetName ();
+          m_currentPath.push_back (name);
+          m_alreadyProcessed.push_back (tid);
+          DoGather (other);
+          m_alreadyProcessed.pop_back ();
+          m_currentPath.pop_back ();	  
+        }
+    }
+}  // StaticInformation::DoGather ()
+
+
+/// Register aggregation relationships that are not automatically
+/// detected by this introspection program.  Statements added here
+/// result in more configuration paths being added to the doxygen.
+/// \return instance of StaticInformation with the registered information
+StaticInformation GetTypicalAggregations ()
+{
+  NS_LOG_FUNCTION_NOARGS ();
+
+  static StaticInformation info;
+  static bool mapped = false;
+
+  if (mapped)
+    {
+      return info;
+    }
+
+  // Short circuit next call
+  mapped = true;
+
+  // The below statements register typical aggregation relationships
+  // in ns-3 programs, that otherwise aren't picked up automatically
+  // by the creation of the above node.  To manually list other common
+  // aggregation relationships that you would like to see show up in
+  // the list of configuration paths in the doxygen, add additional
+  // statements below.
+  info.RecordAggregationInfo ("ns3::Node", "ns3::TcpSocketFactory");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::UdpSocketFactory");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::PacketSocketFactory");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::MobilityModel");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::Ipv4L3Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::Ipv4NixVectorRouting");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::Icmpv4L4Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::ArpL3Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::Icmpv4L4Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::UdpL4Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::Ipv6L3Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::Icmpv6L4Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::TcpL4Protocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::RipNg");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::GlobalRouter");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::aodv::RoutingProtocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::dsdv::RoutingProtocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::dsr::DsrRouting");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::olsr::RoutingProtocol");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::EnergyHarvesterContainer");
+  info.RecordAggregationInfo ("ns3::Node", "ns3::EnergySourceContainer");
+
+  // Create a channel object so that channels appear in the namespace
+  // paths that will be generated here.
+  Ptr<SimpleChannel> simpleChannel;
+  simpleChannel = CreateObject<SimpleChannel> ();
+
+  for (uint32_t i = 0; i < Config::GetRootNamespaceObjectN (); ++i)
+    {
+      Ptr<Object> object = Config::GetRootNamespaceObject (i);
+      info.Gather (object->GetInstanceTypeId ());
+    }
+
+  return info;
+
+}  // GetTypicalAggregations ()
+
+
+/// Map from TypeId name to tid
+typedef std::map< std::string, int32_t> NameMap;
+typedef NameMap::const_iterator         NameMapIterator; ///< NameMap iterator
+
+
+/**
+ * Create a map from the class names to their index in the vector of
+ * TypeId's so that the names will end up in alphabetical order.
+ *
+ * \returns NameMap
+ */
+NameMap
+GetNameMap (void)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+
+  static NameMap nameMap;
+  static bool mapped = false;
+
+  if (mapped)
+    {
+      return nameMap;
+    }
+
+  // Short circuit next call
+  mapped = true;
+  
+  // Get typical aggregation relationships.
+  StaticInformation info = GetTypicalAggregations ();
+
+  // Registered types
+  for (uint32_t i = 0; i < TypeId::GetRegisteredN (); i++)
+    {
+      TypeId tid = TypeId::GetRegistered (i);
+      if (tid.MustHideFromDocumentation ())
+	{
+	  continue;
+	}
+      
+      // Capitalize all of letters in the name so that it sorts
+      // correctly in the map.
+      std::string name = tid.GetName ();
+      std::transform (name.begin (), name.end (), name.begin (), ::toupper);
+      
+      // Save this name's index.
+      nameMap[name] = i;
+    }
+
+  // Type names without TypeIds
+  std::vector<std::string> noTids = info.GetNoTypeIds ();
+  for (auto item : noTids)
+    {
+      nameMap[item] = -1;
+    }
+       
+  return nameMap;
+}  // GetNameMap ()
+
+
+/***************************************************************
  *        Docs for a single TypeId
  ***************************************************************/
+
+/**
+ * Print config paths
+ * \param os the output stream
+ * \param tid the type ID
+ */
+void
+PrintConfigPaths (std::ostream & os, const TypeId tid)
+{
+  NS_LOG_FUNCTION (tid);
+  std::vector<std::string> paths = GetTypicalAggregations ().Get (tid);
+
+  // Config --------------
+  if (paths.empty ())
+    {
+      os << "Introspection did not find any typical Config paths."
+	 << breakBoth
+	 << std::endl;
+    }
+  else
+    {
+      os << headingStart
+	 <<   "Config Paths"
+	 << headingStop
+	 << std::endl;
+      os << std::endl;
+      os << tid.GetName ()
+	 << " is accessible through the following paths"
+	 << " with Config::Set and Config::Connect:"
+	 << std::endl;
+      os << listStart << std::endl;
+      for (auto path : paths)
+	{
+	  os << listLineStart
+             <<   "\"" << path << "\""
+	     <<  listLineStop 
+	     << breakTextOnly
+	     << std::endl;
+	}
+      os << listStop << std::endl;
+    }
+}  // PrintConfigPaths ()
+      
 
 /**
  * Print direct Attributes for this TypeId.
@@ -456,14 +944,107 @@ void PrintSize (std::ostream & os, const TypeId tid)
 }  // PrintSize ()
 
 
+/**
+ * Print the doxy block for each TypeId
+ *
+ * \param [in,out] os The output stream.
+*/
+void
+PrintTypeIdBlocks (std::ostream & os)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+
+  NameMap nameMap = GetNameMap ();
+
+  // Iterate over the map, which will print the class names in
+  // alphabetical order.
+  for (auto item : nameMap)
+    {
+      // Handle only real TypeIds
+      if (item.second < 0)
+        {
+          continue ;
+        }
+      // Get the class's index out of the map;
+      TypeId tid = TypeId::GetRegistered (item.second);
+      std::string name = tid.GetName ();
+      
+      std::cout << commentStart << std::endl;
+      
+      std::cout << classStart << name << std::endl;
+      std::cout << std::endl;
+
+      PrintConfigPaths (std::cout, tid);
+      PrintAttributes (std::cout, tid);
+      PrintTraceSources (std::cout, tid);
+      PrintSize (std::cout, tid);
+      
+      std::cout << commentStop << std::endl;
+    }  // for class documentation
+
+}  // PrintTypeIdBlocks
+
+
 /***************************************************************
  *        Lists of All things
  ***************************************************************/
 
 /**
+ * Print the list of all TypeIds
+ *
+ * \param [in,out] os The output stream.
+ */
+void
+PrintAllTypeIds (std::ostream & os)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+  os << commentStart << page << "TypeIdList All ns3::TypeId's\n"
+     << std::endl;
+  os << "This is a list of all" << reference << "ns3::TypeId's.\n"
+     << "For more information see the" << reference << "ns3::TypeId "
+     << "section of this API documentation and the"
+     << referenceNo << "TypeId section "
+     << "in the Configuration and "
+     << referenceNo << "Attributes chapter of the Manual.\n"
+     << std::endl;
+
+  os << listStart << std::endl;
+  
+  NameMap nameMap = GetNameMap ();
+  // Iterate over the map, which will print the class names in
+  // alphabetical order.
+  for (auto item : nameMap)
+    {
+      // Handle only real TypeIds
+      if (item.second < 0)
+        {
+          continue ;
+        }
+      // Get the class's index out of the map;
+      TypeId tid = TypeId::GetRegistered (item.second);
+      
+      os << indentHtmlOnly
+	 <<   listLineStart
+         <<     boldStart
+         <<       tid.GetName ()
+         <<     boldStop
+	 <<   listLineStop
+	 << std::endl;
+      
+    }
+  os << listStop << std::endl;
+  os << commentStop << std::endl;
+
+}  // PrintAllTypeIds ()
+
+
+/**
  * Print the list of all Attributes.
  *
  * \param [in,out] os The output stream.
+ *
+ * \todo Print this sorted by class (the current version)
+ * as well as by Attribute name.
  */
 void
 PrintAllAttributes (std::ostream & os)
@@ -471,17 +1052,26 @@ PrintAllAttributes (std::ostream & os)
   NS_LOG_FUNCTION_NOARGS ();
   os << commentStart << page << "AttributeList All Attributes\n"
      << std::endl;
-  os << "This is a list of all" << reference << "attribute by class.  "
-     << "For more information see the" << reference << "attribute "
+  os << "This is a list of all" << reference << "ns3::Attributes by class.  "
+     << "For more information see the" << reference << "ns3:Attributes "
      << "section of this API documentation and the Attributes sections "
      << "in the Tutorial and Manual.\n"
      << std::endl;
 
-  for (uint32_t i = 0; i < TypeId::GetRegisteredN (); ++i)
+  NameMap nameMap = GetNameMap ();
+  // Iterate over the map, which will print the class names in
+  // alphabetical order.
+  for (auto item: nameMap)
     {
-      TypeId tid = TypeId::GetRegistered (i);
-      if (tid.GetAttributeN () == 0 ||
-	  tid.MustHideFromDocumentation ())
+      // Handle only real TypeIds
+      if (item.second < 0)
+        {
+          continue ;
+        }
+      // Get the class's index out of the map;
+      TypeId tid = TypeId::GetRegistered (item.second);
+      
+      if (tid.GetAttributeN () == 0 )
 	{
 	  continue;
 	}
@@ -517,6 +1107,7 @@ PrintAllGlobals (std::ostream & os)
   os << commentStart << page << "GlobalValueList All GlobalValues\n"
      << std::endl;
   os << "This is a list of all" << reference << "ns3::GlobalValue instances.\n"
+     << "See ns3::GlobalValue for how to set these."
      << std::endl;
   
   os << listStart << std::endl;
@@ -529,11 +1120,12 @@ PrintAllGlobals (std::ostream & os)
       os << indentHtmlOnly
 	 <<   listLineStart
 	 <<     boldStart
-	 <<       anchor
-	 <<       "GlobalValue" << (*i)->GetName () << " " << (*i)->GetName ()
+         <<       hrefStart << (*i)->GetName ()
+         <<       hrefMid << "GlobalValue" << (*i)->GetName ()
+         <<       hrefStop
 	 <<     boldStop
-	 <<     ": "            << (*i)->GetHelp ()
-	 <<     ".  Default value: " << val.Get () << "."
+	 <<     ": " << (*i)->GetHelp ()
+	 <<     ".  Default value: " << val.Get () << ". "
 	 <<   listLineStop
 	 << std::endl;
     }
@@ -561,12 +1153,34 @@ PrintAllLogComponents (std::ostream & os)
    * \todo Switch to a border-less table, so the file links align
    * See http://www.stack.nl/~dimitri/doxygen/manual/htmlcmds.html
    */
-  os << listStart << std::endl;
   LogComponent::ComponentList * logs = LogComponent::GetComponentList ();
-  LogComponent::ComponentList::const_iterator it;
-  for (it = logs->begin (); it != logs->end (); ++it)
+  // Find longest log name
+  std::size_t widthL = std::string ("Log Component").size ();
+  std::size_t widthR = std::string ("file").size ();
+  for (auto it : (*logs))
     {
-      std::string file = it->second->File ();
+      widthL = std::max (widthL, it.first.size ());
+      std::string file = it.second->File ();
+      // Strip leading "../" related to depth in build directory
+      // since doxygen only sees the path starting with "src/", etc.
+      while (file.find ("../") == 0)
+        {
+          file = file.substr (3);
+        }
+      widthR  = std::max (widthR, file.size ());
+    }
+  const std::string sep (" | ");
+
+  os << std::setw (widthL) << std::left << "Log Component" << sep
+    // Header line has to be padded to same length as separator line
+     << std::setw (widthR) << std::left << "File " << std::endl;
+  os << ":" << std::string (widthL - 1, '-') << sep
+     << ":" << std::string (widthR - 1, '-') << std::endl;
+  
+  LogComponent::ComponentList::const_iterator it;
+  for (auto it : (*logs))
+    {
+      std::string file = it.second->File ();
       // Strip leading "../" related to depth in build directory
       // since doxygen only sees the path starting with "src/", etc.
       while (file.find ("../") == 0)
@@ -574,12 +1188,9 @@ PrintAllLogComponents (std::ostream & os)
           file = file.substr (3);
         }
       
-      os << listLineStart
-         <<   boldStart << it->first << boldStop <<   ": " << file
-         << listLineStop
-         << std::endl;
+      os << std::setw (widthL) << std::left << it.first << sep << file << std::endl;
     }
-  os << listStop << std::endl;
+  os << std::right << std::endl;
   os << commentStop << std::endl;
 }  // PrintAllLogComponents ()
 
@@ -588,6 +1199,9 @@ PrintAllLogComponents (std::ostream & os)
  * Print the list of all Trace sources.
  *
  * \param [in,out] os The output stream.
+ *
+ * \todo Print this sorted by class (the current version)
+ * as well as by TraceSource name.
  */
 void
 PrintAllTraceSources (std::ostream & os)
@@ -601,11 +1215,21 @@ PrintAllTraceSources (std::ostream & os)
      << "in the Tutorial and Manual.\n"
      << std::endl;
 
-  for (uint32_t i = 0; i < TypeId::GetRegisteredN (); ++i)
+  NameMap nameMap = GetNameMap ();
+
+  // Iterate over the map, which will print the class names in
+  // alphabetical order.
+  for (auto item : nameMap)
     {
-      TypeId tid = TypeId::GetRegistered (i);
-      if (tid.GetTraceSourceN () == 0 ||
-	  tid.MustHideFromDocumentation ())
+      // Handle only real TypeIds
+      if (item.second < 0)
+        {
+          continue ;
+        }
+      // Get the class's index out of the map;
+      TypeId tid = TypeId::GetRegistered (item.second);
+
+      if (tid.GetTraceSourceN () == 0 )
 	{
 	  continue;
 	}
@@ -681,7 +1305,7 @@ PrintAttributeValueSection (std::ostream & os,
 /**
  * Print the AttributeValue documentation for a class.
  *
- * This will print documentation for the \p AttributeValue class and methods.
+ * This will print documentation for the \pname{AttributeValue} class and methods.
  *
  * \param [in,out] os The output stream.
  * \param [in] name The token to use in defining the accessor name.
@@ -770,7 +1394,7 @@ PrintAttributeValueWithName (std::ostream & os,
 /**
  * Print the AttributeValue MakeAccessor documentation for a class.
  *
- * This will print documentation for the \p Make<name>Accessor functions.
+ * This will print documentation for the \pname{Make<name>Accessor} functions.
  *
  * \param [in,out] os The output stream.
  * \param [in] name The token to use in defining the accessor name.
@@ -805,7 +1429,7 @@ PrintMakeAccessors (std::ostream & os, const std::string & name)
 /**
  * Print the AttributeValue MakeChecker documentation for a class.
  *
- * This will print documentation for the \p Make<name>Checker function.
+ * This will print documentation for the \pname{Make<name>Checker} function.
  *
  * \param [in,out] os The output stream.
  * \param [in] name The token to use in defining the accessor name.
@@ -872,6 +1496,7 @@ PrintAttributeHelper (std::ostream & os,
 
 /**
  * Print documentation for Attribute implementations.
+ * \param os The stream to print on.
  */
 void
 PrintAttributeImplementations (std::ostream & os)
@@ -886,17 +1511,6 @@ PrintAttributeImplementations (std::ostream & os)
       { "Address",        "Address",        true,  "address.h"          },
       { "Box",            "Box",            true,  "box.h"              },
       { "DataRate",       "DataRate",       true,  "data-rate.h"        },
-      { "DsssParameterSet",
-                          "DsssParameterSet",
-                                            true,  "dsss-parameter-set.h"},
-      { "EdcaParameterSet",
-                          "EdcaParameterSet",
-                                            true,  "edca-parameter-set.h"},
-      { "ErpInformation", "ErpInformation", true,  "erp-information.h"  },
-      { "ExtendedCapabilities", "ExtendedCapabilities", true,  "extended-capabilities.h"  },
-      { "HeCapabilities", "HeCapabilities", true,  "he-capabilities.h"  },
-      { "VhtCapabilities","VhtCapabilities",true,  "vht-capabilities.h" },
-      { "HtCapabilities", "HtCapabilities", true,  "ht-capabilities.h"  },
       { "IeMeshId",       "IeMeshId",       true,  "ie-dot11s-id.h"     },
       { "Ipv4Address",    "Ipv4Address",    true,  "ipv4-address.h"     },
       { "Ipv4Mask",       "Ipv4Mask",       true,  "ipv4-address.h"     },
@@ -914,22 +1528,19 @@ PrintAttributeImplementations (std::ostream & os)
       { "TypeId",         "TypeId",         true,  "type-id.h"          },
       { "UanModesList",   "UanModesList",   true,  "uan-tx-mode.h"      },
       // { "ValueClassTest", "ValueClassTest", false, "" /* outside ns3 */ },
+      { "Vector",         "Vector",         true,  "vector.h"           },
       { "Vector2D",       "Vector2D",       true,  "vector.h"           },
       { "Vector3D",       "Vector3D",       true,  "vector.h"           },
-      { "HeOperation",    "HeOperation",    true,  "he-operation.h"    },
-      { "VhtOperation",   "VhtOperation",   true,  "vht-operation.h"    },
-      { "HtOperation",    "HtOperation",    true,  "ht-operation.h"  },
       { "Waypoint",       "Waypoint",       true,  "waypoint.h"         },
       { "WifiMode",       "WifiMode",       true,  "wifi-mode.h"        },
       
       // All three (Value, Access and Checkers) defined, but custom
-      { "Boolean",        "Boolean",        false, "boolean.h"          },
+      { "Boolean",        "bool",           false, "boolean.h"          },
       { "Callback",       "Callback",       true,  "callback.h"         },
       { "Double",         "double",         false, "double.h"           },
       { "Enum",           "int",            false, "enum.h"             },
       { "Integer",        "int64_t",        false, "integer.h"          },
       { "Pointer",        "Pointer",        false, "pointer.h"          },
-      { "RandomVariable", "RandomVariable", true,  "random-variable-stream.h"  },
       { "String",         "std::string",    false, "string.h"           },
       { "Time",           "Time",           true,  "nstime.h"           },
       { "Uinteger",       "uint64_t",       false, "uinteger.h"         },
@@ -964,462 +1575,6 @@ PrintAttributeImplementations (std::ostream & os)
 
 
 /***************************************************************
- *        Aggregation and configuration paths
- ***************************************************************/
-
-/**
- * Gather aggregation and configuration path information from registered types.
- */
-class StaticInformation
-{
-public:
-  /**
-   * Record the a -> b aggregation relation.
-   *
-   * \param a [in] the source(?) TypeId name
-   * \param b [in] the destination(?) TypeId name
-   */
-  void RecordAggregationInfo (std::string a, std::string b);
-  /**
-   * Gather aggregation and configuration path information for tid
-   *
-   * \param tid [in] the TypeId to gather information from
-   */
-  void Gather (TypeId tid);
-  /**
-   * Print output in "a -> b" form on std::cout
-   */
-  void Print (void) const;
-
-  /**
-   * \return the configuration paths for tid
-   *
-   * \param tid [in] the TypeId to return information for
-   */
-  std::vector<std::string> Get (TypeId tid) const;
-
-  /**
-   * \return the type names we couldn't aggregate.
-   */
-  std::vector<std::string> GetNoTypeIds (void) const;
-
-private:
-  /**
-   * \return the current configuration path
-   */
-  std::string GetCurrentPath (void) const;
-  /**
-   * Gather attribute, configuration path information for tid
-   *
-   * \param tid [in] the TypeId to gather information from
-   */
-  void DoGather (TypeId tid);
-  /**
-   *  Record the current config path for tid.
-   *
-   * \param tid [in] the TypeId to record.
-   */
-  void RecordOutput (TypeId tid);
-  /**
-   * \return whether the tid has already been processed
-   *
-   * \param tid [in] the TypeId to check.
-   */
-  bool HasAlreadyBeenProcessed (TypeId tid) const;
-  /**
-   * Configuration path for each TypeId
-   */
-  std::vector<std::pair<TypeId,std::string> > m_output;
-  /**
-   * Current configuration path
-   */
-  std::vector<std::string> m_currentPath;
-  /**
-   * List of TypeIds we've already processed
-   */
-  std::vector<TypeId> m_alreadyProcessed;
-  /**
-   * List of aggregation relationships.
-   */
-  std::vector<std::pair<TypeId,TypeId> > m_aggregates;
-  /**
-   * List of type names without TypeIds, because those modules aren't enabled.
-   *
-   * This is mutable because GetNoTypeIds sorts and uniquifies this list
-   * before returning it.
-   */
-  mutable std::vector<std::string> m_noTids;
-  
-};  // class StaticInformation
-
-
-void 
-StaticInformation::RecordAggregationInfo (std::string a, std::string b)
-{
-  NS_LOG_FUNCTION (this << a << b);
-  TypeId aTid;
-  bool found = TypeId::LookupByNameFailSafe (a, &aTid);
-  if (!found)
-    {
-      m_noTids.push_back (a);
-      return;
-    }
-  TypeId bTid;
-  found = TypeId::LookupByNameFailSafe (b, &bTid);
-  if (!found)
-    {
-      m_noTids.push_back (b);
-      return;
-    }
-
-  m_aggregates.push_back (std::make_pair (aTid, bTid));
-}
-
-
-void 
-StaticInformation::Print (void) const
-{
-  NS_LOG_FUNCTION (this);
-  for (std::vector<std::pair<TypeId,std::string> >::const_iterator i = m_output.begin (); i != m_output.end (); ++i)
-    {
-      std::pair<TypeId,std::string> item = *i;
-      std::cout << item.first.GetName () << " -> " << item.second << std::endl;
-    }
-}
-
-
-std::string
-StaticInformation::GetCurrentPath (void) const
-{
-  NS_LOG_FUNCTION (this);
-  std::ostringstream oss;
-  for (std::vector<std::string>::const_iterator i = m_currentPath.begin (); i != m_currentPath.end (); ++i)
-    {
-      std::string item = *i;
-      oss << "/" << item;
-    }
-  return oss.str ();
-}
-
-
-void
-StaticInformation::RecordOutput (TypeId tid)
-{
-  NS_LOG_FUNCTION (this << tid);
-  m_output.push_back (std::make_pair (tid, GetCurrentPath ()));
-}
-
-
-bool
-StaticInformation::HasAlreadyBeenProcessed (TypeId tid) const
-{
-  NS_LOG_FUNCTION (this << tid);
-  for (uint32_t i = 0; i < m_alreadyProcessed.size (); ++i)
-    {
-      if (m_alreadyProcessed[i] == tid)
-	{
-	  return true;
-	}
-    }
-  return false;
-}
-
-
-std::vector<std::string> 
-StaticInformation::Get (TypeId tid) const
-{
-  NS_LOG_FUNCTION (this << tid);
-  std::vector<std::string> paths;
-  for (uint32_t i = 0; i < m_output.size (); ++i)
-    {
-      std::pair<TypeId,std::string> tmp = m_output[i];
-      if (tmp.first == tid)
-	{
-	  paths.push_back (tmp.second);
-	}
-    }
-  return paths;
-}
-
-/**
- * Helper to keep only the unique items in a container.
- *
- * The container is modified in place; the elements end up sorted.
- *
- * The container must support \c begin(), \c end() and \c erase(),
- * which, among the STL containers, limits this to
- * \c std::vector, \c std::dequeue and \c std::list.
- *
- * The container elements must support \c operator< (for \c std::sort)
- * and \c operator== (for \c std::unique).
- *
- * \tparam T \deduced The container type.
- * \param t The container.
- */
-template <typename T>
-void
-Uniquefy (T t)
-{
-  std::sort (t.begin (), t.end ());
-  t.erase (std::unique (t.begin (), t.end ()), t.end ());
-}
-
-std::vector<std::string>
-StaticInformation::GetNoTypeIds (void) const
-{
-  NS_LOG_FUNCTION (this);
-  Uniquefy (m_noTids);
-  return m_noTids;
-}
-
-
-void
-StaticInformation::Gather (TypeId tid)
-{
-  NS_LOG_FUNCTION (this << tid);
-  DoGather (tid);
-  Uniquefy (m_output);
-}
-
-
-void 
-StaticInformation::DoGather (TypeId tid)
-{
-  NS_LOG_FUNCTION (this << tid);
-  if (HasAlreadyBeenProcessed (tid))
-    {
-      return;
-    }
-  RecordOutput (tid);
-  for (uint32_t i = 0; i < tid.GetAttributeN (); ++i)
-    {
-      struct TypeId::AttributeInformation info = tid.GetAttribute(i);
-      const PointerChecker *ptrChecker = dynamic_cast<const PointerChecker *> (PeekPointer (info.checker));
-      if (ptrChecker != 0)
-        {
-          TypeId pointee = ptrChecker->GetPointeeTypeId ();
-
-	  // See if this is a pointer to an Object.
-	  Ptr<Object> object = CreateObject<Object> ();
-	  TypeId objectTypeId = object->GetTypeId ();
-	  if (objectTypeId == pointee)
-	    {
-	      // Stop the recursion at this attribute if it is a
-	      // pointer to an Object, which create too many spurious
-	      // paths in the list of attribute paths because any
-	      // Object can be in that part of the path.
-	      continue;
-	    }
-
-          m_currentPath.push_back (info.name);
-          m_alreadyProcessed.push_back (tid);
-          DoGather (pointee);
-          m_alreadyProcessed.pop_back ();
-          m_currentPath.pop_back ();
-          continue;
-        }
-      // attempt to cast to an object vector.
-      const ObjectPtrContainerChecker *vectorChecker = dynamic_cast<const ObjectPtrContainerChecker *> (PeekPointer (info.checker));
-      if (vectorChecker != 0)
-        {
-          TypeId item = vectorChecker->GetItemTypeId ();
-          m_currentPath.push_back (info.name + "/[i]");
-          m_alreadyProcessed.push_back (tid);
-          DoGather (item);
-          m_alreadyProcessed.pop_back ();
-          m_currentPath.pop_back ();
-          continue;
-        }
-    }
-  for (uint32_t j = 0; j < TypeId::GetRegisteredN (); j++)
-    {
-      TypeId child = TypeId::GetRegistered (j);
-      if (child.IsChildOf (tid))
-        {
-          std::string childName = "$" + child.GetName ();
-          m_currentPath.push_back (childName);
-          m_alreadyProcessed.push_back (tid);
-          DoGather (child);
-          m_alreadyProcessed.pop_back ();
-          m_currentPath.pop_back ();
-        }
-    }
-  for (uint32_t k = 0; k < m_aggregates.size (); ++k)
-    {
-      std::pair<TypeId,TypeId> tmp = m_aggregates[k];
-      if (tmp.first == tid || tmp.second == tid)
-        {
-          TypeId other;
-          if (tmp.first == tid)
-            {
-              other = tmp.second;
-            }
-          if (tmp.second == tid)
-            {
-              other = tmp.first;
-            }
-          std::string name = "$" + other.GetName ();
-          m_currentPath.push_back (name);
-          m_alreadyProcessed.push_back (tid);
-          DoGather (other);
-          m_alreadyProcessed.pop_back ();
-          m_currentPath.pop_back ();	  
-        }
-    }
-}  // StaticInformation::DoGather ()
-
-
-/// Register aggregation relationships that are not automatically
-/// detected by this introspection program.  Statements added here
-/// result in more configuration paths being added to the doxygen.
-/// \return instance of StaticInformation with the registered information
-StaticInformation GetTypicalAggregations ()
-{
-  NS_LOG_FUNCTION_NOARGS ();
-  // The below statements register typical aggregation relationships
-  // in ns-3 programs, that otherwise aren't picked up automatically
-  // by the creation of the above node.  To manually list other common
-  // aggregation relationships that you would like to see show up in
-  // the list of configuration paths in the doxygen, add additional
-  // statements below.
-  StaticInformation info;
-  info.RecordAggregationInfo ("ns3::Node", "ns3::TcpSocketFactory");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::UdpSocketFactory");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::PacketSocketFactory");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::MobilityModel");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::Ipv4L3Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::Ipv4NixVectorRouting");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::Icmpv4L4Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::ArpL3Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::Icmpv4L4Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::UdpL4Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::Ipv6L3Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::Icmpv6L4Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::TcpL4Protocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::RipNg");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::GlobalRouter");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::aodv::RoutingProtocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::dsdv::RoutingProtocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::dsr::DsrRouting");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::olsr::RoutingProtocol");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::EnergyHarvesterContainer");
-  info.RecordAggregationInfo ("ns3::Node", "ns3::EnergySourceContainer");
-
-  // Create a channel object so that channels appear in the namespace
-  // paths that will be generated here.
-  Ptr<SimpleChannel> simpleChannel;
-  simpleChannel = CreateObject<SimpleChannel> ();
-
-  for (uint32_t i = 0; i < Config::GetRootNamespaceObjectN (); ++i)
-    {
-      Ptr<Object> object = Config::GetRootNamespaceObject (i);
-      info.Gather (object->GetInstanceTypeId ());
-    }
-
-  return info;
-
-}  // GetTypicalAggregations ()
-
-
-/// Map from TypeId name to tid
-typedef std::map< std::string, int32_t> NameMap;
-typedef NameMap::const_iterator         NameMapIterator; ///< NameMap iterator
-
-
-/**
- * Create a map from the class names to their index in the vector of
- * TypeId's so that the names will end up in alphabetical order.
- *
- * \param info type names withut type ids
- * \returns NameMap
- */
-NameMap
-GetNameMap (const StaticInformation & info)
-{
-  NS_LOG_FUNCTION_NOARGS ();
-  NameMap nameMap;
-
-  // Registered types
-  for (uint32_t i = 0; i < TypeId::GetRegisteredN (); i++)
-    {
-      TypeId tid = TypeId::GetRegistered (i);
-      if (tid.MustHideFromDocumentation ())
-	{
-	  continue;
-	}
-      
-      // Capitalize all of letters in the name so that it sorts
-      // correctly in the map.
-      std::string name = tid.GetName ();
-      for (uint32_t j = 0; j < name.length (); j++)
-	{
-	  name[j] = toupper (name[j]);
-	}
-      
-      // Save this name's index.
-      nameMap[name] = i;
-    }
-
-  // Type names without TypeIds
-  std::vector<std::string> noTids = info.GetNoTypeIds ();
-  for (std::vector<std::string>::const_iterator i = noTids.begin ();
-       i != noTids.end ();
-       ++i)
-    {
-      nameMap[*i] = -1;
-    }
-       
-  return nameMap;
-}  // GetNameMap ()
-
-
-/**
- * Print config paths
- * \param os the output stream
- * \param info the information
- * \param tid the type ID
- */
-void
-PrintConfigPaths (std::ostream & os, const StaticInformation & info,
-		  const TypeId tid)
-{
-  NS_LOG_FUNCTION (tid);
-  std::vector<std::string> paths = info.Get (tid);
-
-  // Config --------------
-  if (paths.empty ())
-    {
-      os << "Introspection did not find any typical Config paths."
-	 << breakBoth
-	 << std::endl;
-    }
-  else
-    {
-      os << headingStart
-	 <<   "Config Paths"
-	 << headingStop
-	 << std::endl;
-      os << std::endl;
-      os << tid.GetName ()
-	 << " is accessible through the following paths"
-	 << " with Config::Set and Config::Connect:"
-	 << std::endl;
-      os << listStart << std::endl;
-      for (uint32_t k = 0; k < paths.size (); ++k)
-	{
-	  std::string path = paths[k];
-	  os << listLineStart
-             <<   "\"" << path << "\""
-	     <<  listLineStop 
-	     << breakTextOnly
-	     << std::endl;
-	}
-      os << listStop << std::endl;
-    }
-}  // PrintConfigPaths ()
-      
-
-/***************************************************************
  *        Main
  ***************************************************************/
 
@@ -1428,7 +1583,7 @@ int main (int argc, char *argv[])
   NS_LOG_FUNCTION_NOARGS ();
   bool outputText = false;
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Usage ("Generate documentation for all ns-3 registered types, "
 	     "trace sources, attributes and global variables.");
   cmd.AddValue ("output-text", "format output as plain text", outputText);
@@ -1447,8 +1602,6 @@ int main (int argc, char *argv[])
       std::cout << "/* -*- Mode:C++; c-file-style:\"gnu\"; "
 	           "indent-tabs-mode:nil; -*- */\n"
 		<< std::endl;
-      std::cout << "#include \"ns3/log.h\""
-                << std::endl;
     }
 
   // Doxygen file header
@@ -1462,58 +1615,10 @@ int main (int argc, char *argv[])
             << "Edit that file instead.\n"
             << commentStop
             << std::endl;
+
+  PrintTypeIdBlocks (std::cout);
   
-  // Get typical aggregation relationships.
-  StaticInformation info = GetTypicalAggregations ();
-  
-  NameMap nameMap = GetNameMap (info);
-
-  // Iterate over the map, which will print the class names in
-  // alphabetical order.
-  for (NameMapIterator nameMapIterator = nameMap.begin ();
-       nameMapIterator != nameMap.end ();
-       nameMapIterator++)
-    {
-      // Get the class's index out of the map;
-      std::string name = nameMapIterator->first;
-      int32_t i = nameMapIterator->second;
-      TypeId tid;
-
-      if (i >= 0)
-        {
-          tid = TypeId::GetRegistered (i);
-          if (tid.MustHideFromDocumentation ())
-            {
-              continue;
-            }
-          name = tid.GetName ();
-        }
-      
-      std::cout << commentStart << std::endl;
-      
-      std::cout << classStart << name << std::endl;
-      std::cout << std::endl;
-
-      if (i >= 0)
-        {
-          PrintConfigPaths (std::cout, info, tid);
-          PrintAttributes (std::cout, tid);
-          PrintTraceSources (std::cout, tid);
-          PrintSize (std::cout, tid);
-        }
-      else
-        {
-          std::cout << "Introspection could not find Config paths for " << name
-                    << " in this build because the parent module"
-                    << " was not included in the waf configuration."
-                    << breakBoth
-                    << std::endl;
-        }
-      
-      std::cout << commentStop << std::endl;
-    }  // class documentation
-
-
+  PrintAllTypeIds (std::cout);
   PrintAllAttributes (std::cout);
   PrintAllGlobals (std::cout);
   PrintAllLogComponents (std::cout);

@@ -21,6 +21,7 @@
 
 #include "spectrum-propagation-loss-model.h"
 #include <ns3/log.h>
+#include "spectrum-signal-parameters.h"
 
 namespace ns3 {
 
@@ -71,6 +72,39 @@ SpectrumPropagationLossModel::CalcRxPowerSpectralDensity (Ptr<const SpectrumValu
       rxPsd = m_next->CalcRxPowerSpectralDensity (rxPsd, a, b);
     }
   return rxPsd;
+}
+
+bool
+SpectrumPropagationLossModel::DoCalculateRxPowerAtReceiverSide (void) const
+{
+  return false;
+}
+
+bool
+SpectrumPropagationLossModel::SupportMimoSystemPowerCalculation (void) const
+{
+  return false;
+}
+
+Ptr<SpectrumValue>
+SpectrumPropagationLossModel::CalcRxPower (Ptr<SpectrumSignalParameters> rxParams,
+                                           Ptr<const MobilityModel> a,
+                                           Ptr<const MobilityModel> b) const
+{
+  rxParams->psd = DoCalcRxPowerSpectralDensity (rxParams->psd, a, b);
+  if (m_next != 0)
+    {
+      rxParams->psd = m_next->CalcRxPower (rxParams, a, b);
+    }
+  return rxParams->psd;
+}
+
+void
+SpectrumPropagationLossModel::CalcMimoRxPower (Ptr<SpectrumSignalParameters> rxParams,
+                                               Ptr<const MobilityModel> a,
+                                               Ptr<const MobilityModel> b) const
+{
+  NS_FATAL_ERROR ("You must define this function");
 }
 
 } // namespace ns3

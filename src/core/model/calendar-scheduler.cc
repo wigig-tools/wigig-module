@@ -140,8 +140,8 @@ CalendarScheduler::PeekNext (void) const
   uint64_t bucketTop = m_bucketTop;
   Scheduler::Event minEvent;
   minEvent.impl = 0;
-  minEvent.key.m_ts = ~0;
-  minEvent.key.m_uid = ~0;
+  minEvent.key.m_ts = UINT64_MAX;
+  minEvent.key.m_uid = UINT32_MAX;
   minEvent.key.m_context = 0;
   do
     {
@@ -175,8 +175,8 @@ CalendarScheduler::DoRemoveNext (void)
   uint64_t bucketTop = m_bucketTop;
   int32_t minBucket = -1;
   Scheduler::EventKey minKey;
-  NS_ASSERT(!IsEmpty());
-  minKey.m_ts = uint64_t(-int64_t(1));
+  NS_ASSERT (!IsEmpty ());
+  minKey.m_ts = uint64_t (-int64_t (1));
   minKey.m_uid = 0;
   minKey.m_context = 0xffffffff;
   do
@@ -207,7 +207,7 @@ CalendarScheduler::DoRemoveNext (void)
   m_lastPrio = minKey.m_ts;
   m_lastBucket = Hash (minKey.m_ts);
   m_bucketTop = (minKey.m_ts / m_width + 1) * m_width;
-  Scheduler::Event next = m_buckets[minBucket].front();
+  Scheduler::Event next = m_buckets[minBucket].front ();
   m_buckets[minBucket].pop_front ();
 
   return next;
@@ -274,7 +274,7 @@ CalendarScheduler::ResizeDown (void)
     }
 }
 
-uint32_t
+uint64_t
 CalendarScheduler::CalculateNewWidth (void)
 {
   NS_LOG_FUNCTION (this);
@@ -354,7 +354,7 @@ CalendarScheduler::CalculateNewWidth (void)
   return totalSeparation;
 }
 void
-CalendarScheduler::DoResize (uint32_t newSize, uint32_t newWidth)
+CalendarScheduler::DoResize (uint32_t newSize, uint64_t newWidth)
 {
   NS_LOG_FUNCTION (this << newSize << newWidth);
 
@@ -378,7 +378,7 @@ CalendarScheduler::Resize (uint32_t newSize)
   NS_LOG_FUNCTION (this << newSize);
 
   // PrintInfo ();
-  uint32_t newWidth = CalculateNewWidth ();
+  uint64_t newWidth = CalculateNewWidth ();
   DoResize (newSize, newWidth);
 }
 

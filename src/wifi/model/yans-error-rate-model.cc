@@ -19,10 +19,11 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
+#include "ns3/log.h"
 #include "yans-error-rate-model.h"
+#include "dsss-error-rate-model.h"
 #include "wifi-utils.h"
 #include "wifi-phy.h"
-#include "ns3/log.h"
 
 namespace ns3 {
 
@@ -61,10 +62,10 @@ YansErrorRateModel::GetQamBer (double snr, unsigned int m, uint32_t signalSpread
 {
   NS_LOG_FUNCTION (this << snr << m << signalSpread << phyRate);
   double EbNo = snr * signalSpread / phyRate;
-  double z = std::sqrt ((1.5 * Log2 (m) * EbNo) / (m - 1.0));
+  double z = std::sqrt ((1.5 * log2 (m) * EbNo) / (m - 1.0));
   double z1 = ((1.0 - 1.0 / std::sqrt (m)) * erfc (z));
   double z2 = 1 - std::pow ((1 - z1), 2);
-  double ber = z2 / Log2 (m);
+  double ber = z2 / log2 (m);
   NS_LOG_INFO ("Qam m=" << m << " rate=" << phyRate << " snr=" << snr << " ber=" << ber);
   return ber;
 }
@@ -195,7 +196,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecBpskBer (snr,
                                     nbits,
                                     txVector.GetChannelWidth () * 1000000, //signal spread
-                                    mode.GetPhyRate (txVector), //phy rate
+                                    mode.GetPhyRate (txVector), //PHY rate
                                     10, //dFree
                                     11); //adFree
             }
@@ -204,7 +205,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecBpskBer (snr,
                                     nbits,
                                     txVector.GetChannelWidth () * 1000000, //signal spread
-                                    mode.GetPhyRate (txVector), //phy rate
+                                    mode.GetPhyRate (txVector), //PHY rate
                                     5, //dFree
                                     8); //adFree
             }
@@ -216,7 +217,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, //signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    4, //m
                                    10, //dFree
                                    11, //adFree
@@ -227,7 +228,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, //signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    4, //m
                                    5, //dFree
                                    8, //adFree
@@ -241,7 +242,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, //signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    16, //m
                                    10, //dFree
                                    11, //adFree
@@ -252,7 +253,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, //signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    16, //m
                                    5, //dFree
                                    8, //adFree
@@ -266,7 +267,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, //signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    64, //m
                                    6, //dFree
                                    1, //adFree
@@ -278,7 +279,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, //signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    64, //m
                                    4, //dFree
                                    14, //adFree
@@ -289,7 +290,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, //signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    64, //m
                                    5, //dFree
                                    8, //adFree
@@ -303,7 +304,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, // signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    256, // m
                                    4,  // dFree
                                    14,  // adFree
@@ -315,7 +316,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, // signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    256, // m
                                    5,  // dFree
                                    8,  // adFree
@@ -330,7 +331,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, // signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    1024, // m
                                    4,  // dFree
                                    14,  // adFree
@@ -342,7 +343,7 @@ YansErrorRateModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, d
               return GetFecQamBer (snr,
                                    nbits,
                                    txVector.GetChannelWidth () * 1000000, // signal spread
-                                   mode.GetPhyRate (txVector), //phy rate
+                                   mode.GetPhyRate (txVector), //PHY rate
                                    1024, // m
                                    5,  // dFree
                                    8,  // adFree

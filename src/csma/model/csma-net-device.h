@@ -39,7 +39,6 @@ namespace ns3 {
 template <typename Item> class Queue;
 class CsmaChannel;
 class ErrorModel;
-class NetDeviceQueueInterface;
 
 /** 
  * \defgroup csma CSMA Network Device
@@ -269,7 +268,7 @@ public:
    * \param packet packet to send
    * \param dest layer 2 destination address
    * \param protocolNumber protocol number
-   * \return true if successfull, false otherwise (drop, ...)
+   * \return true if successful, false otherwise (drop, ...)
    */
   virtual bool Send (Ptr<Packet> packet, const Address& dest, 
                      uint16_t protocolNumber);
@@ -280,7 +279,7 @@ public:
    * \param source layer 2 source address
    * \param dest layer 2 destination address
    * \param protocolNumber protocol number
-   * \return true if successfull, false otherwise (drop, ...)
+   * \return true if successful, false otherwise (drop, ...)
    */
   virtual bool SendFrom (Ptr<Packet> packet, const Address& source, const Address& dest, 
                          uint16_t protocolNumber);
@@ -356,9 +355,6 @@ protected:
    * payload contained in this packet.
    */
   void AddHeader (Ptr<Packet> p, Mac48Address source, Mac48Address dest, uint16_t protocolNumber);
-
-  virtual void DoInitialize (void);
-  virtual void NotifyNewAggregate (void);
 
 private:
 
@@ -686,11 +682,6 @@ private:
    * The Node to which this device is attached.
    */
   Ptr<Node> m_node;
-
-  /**
-   * NetDevice queue interface.
-   */
-  Ptr<NetDeviceQueueInterface> m_queueInterface;
 
   /**
    * The MAC address which has been assigned to this device.

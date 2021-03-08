@@ -30,6 +30,7 @@
 #include "ns3/address.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/deprecated.h"
+#include "mac8-address.h"
 
 namespace ns3 { 
 
@@ -100,9 +101,12 @@ public:
   /**
    * \brief Comparison operation between two Ipv6Addresses.
    *
-   * \param other the IPv6 address to which to compare thisaddress
+   * \deprecated Use the == operator (same functionality)
+   *
+   * \param other the IPv6 address to which to compare this address
    * \return true if the addresses are equal, false otherwise
    */
+  NS_DEPRECATED_3_31
   bool IsEqual (const Ipv6Address& other) const;
 
   /**
@@ -140,7 +144,21 @@ public:
   Ipv4Address GetIpv4MappedAddress () const;
 
   /**
+   * \brief Make the autoconfigured IPv6 address from a Mac address.
+   *
+   * Actually the MAC supported are: Mac8, Mac16, Mac48, and Mac64.
+   *
+   * \param addr the MAC address.
+   * \param prefix the IPv6 prefix
+   * \return autoconfigured IPv6 address
+   */
+  static Ipv6Address MakeAutoconfiguredAddress (Address addr, Ipv6Address prefix);
+
+  /**
    * \brief Make the autoconfigured IPv6 address with Mac16Address.
+   *
+   * The EUI-64 scheme used is based on the \RFC{4944}.
+   *
    * \param addr the MAC address (16 bits).
    * \param prefix the IPv6 prefix
    * \return autoconfigured IPv6 address
@@ -149,6 +167,9 @@ public:
 
   /**
    * \brief Make the autoconfigured IPv6 address with Mac48Address.
+   *
+   * The EUI-64 scheme used is based on \RFC{2464}.
+   *
    * \param addr the MAC address (48 bits).
    * \param prefix the IPv6 prefix
    * \return autoconfigured IPv6 address
@@ -156,7 +177,7 @@ public:
   static Ipv6Address MakeAutoconfiguredAddress (Mac48Address addr, Ipv6Address prefix);
 
   /**
-   * \brief Make the autoconfigured IPv6 address with Mac48Address.
+   * \brief Make the autoconfigured IPv6 address with Mac64Address.
    * \param addr the MAC address (64 bits).
    * \param prefix the IPv6 prefix
    * \return autoconfigured IPv6 address
@@ -164,7 +185,31 @@ public:
   static Ipv6Address MakeAutoconfiguredAddress (Mac64Address addr, Ipv6Address prefix);
 
   /**
+   * \brief Make the autoconfigured IPv6 address with Mac8Address.
+   *
+   * The EUI-64 scheme used is loosely based on the \RFC{2464}.
+   *
+   * \param addr the Mac8Address address (8 bits).
+   * \param prefix the IPv6 prefix
+   * \return autoconfigured IPv6 address
+   */
+  static Ipv6Address MakeAutoconfiguredAddress (Mac8Address addr, Ipv6Address prefix);
+
+  /**
+   * \brief Make the autoconfigured link-local IPv6 address from a Mac address.
+   *
+   * Actually the MAC supported are: Mac8, Mac16, Mac48, and Mac64.
+   *
+   * \param mac the MAC address.
+   * \return autoconfigured link-local IPv6 address
+   */
+  static Ipv6Address MakeAutoconfiguredLinkLocalAddress (Address mac);
+
+  /**
    * \brief Make the autoconfigured link-local IPv6 address with Mac16Address.
+   *
+   * The EUI-64 scheme used is based on the \RFC{4944}.
+   *
    * \param mac the MAC address (16 bits).
    * \return autoconfigured link-local IPv6 address
    */
@@ -172,17 +217,30 @@ public:
 
   /**
    * \brief Make the autoconfigured link-local IPv6 address with Mac48Address.
+   *
+   * The EUI-64 scheme used is based on \RFC{2464}.
+   *
    * \param mac the MAC address (48 bits).
    * \return autoconfigured link-local IPv6 address
    */
   static Ipv6Address MakeAutoconfiguredLinkLocalAddress (Mac48Address mac);
 
   /**
-   * \brief Make the autoconfigured link-local IPv6 address with Mac48Address.
+   * \brief Make the autoconfigured link-local IPv6 address with Mac64Address.
    * \param mac the MAC address (64 bits).
    * \return autoconfigured link-local IPv6 address
    */
   static Ipv6Address MakeAutoconfiguredLinkLocalAddress (Mac64Address mac);
+
+  /**
+   * \brief Make the autoconfigured link-local IPv6 address with Mac8Address.
+   *
+   * The EUI-64 scheme used is loosely based on the \RFC{2464}.
+   *
+   * \param mac the MAC address (8 bits).
+   * \return autoconfigured link-local IPv6 address
+   */
+  static Ipv6Address MakeAutoconfiguredLinkLocalAddress (Mac8Address mac);
 
   /**
    * \brief Print this address to the given output stream.
@@ -257,12 +315,19 @@ public:
   bool IsDocumentation () const;
 
   /**
+   * \brief Compares an address and a prefix.
+   * \param prefix the prefix to compare with
+   * \return true if the address has the given prefix
+   */
+  bool HasPrefix (Ipv6Prefix const& prefix) const;
+
+  /**
    * \brief Combine this address with a prefix.
    * \param prefix a IPv6 prefix
    * \return an IPv6 address that is this address combined
    * (bitwise AND) with a prefix, yielding an IPv6 network address.
    */
-  Ipv6Address CombinePrefix (Ipv6Prefix const & prefix);
+  Ipv6Address CombinePrefix (Ipv6Prefix const & prefix) const;
 
   /**
    * \brief If the Address matches the type.
@@ -401,15 +466,37 @@ public:
 
   /**
    * \brief Constructs an Ipv6Prefix by using the input 16 bytes.
+   *
+   * The prefix length is calculated as the minimum prefix length, i.e.,
+   * 2001:db8:cafe:: will have a 47 bit prefix length.
+   *
    * \param prefix the 128-bit prefix
    */
   Ipv6Prefix (uint8_t prefix[16]);
 
   /**
    * \brief Constructs an Ipv6Prefix by using the input string.
+   *
+   * The prefix length is calculated as the minimum prefix length, i.e.,
+   * 2001:db8:cafe:: will have a 47 bit prefix length.
+   *
    * \param prefix the 128-bit prefix
    */
   Ipv6Prefix (char const* prefix);
+
+  /**
+   * \brief Constructs an Ipv6Prefix by using the input 16 bytes.
+   * \param prefix the 128-bit prefix
+   * \param prefixLength the prefix length
+   */
+  Ipv6Prefix (uint8_t prefix[16], uint8_t prefixLength);
+
+  /**
+   * \brief Constructs an Ipv6Prefix by using the input string.
+   * \param prefix the 128-bit prefix
+   * \param prefixLength the prefix length
+   */
+  Ipv6Prefix (char const* prefix, uint8_t prefixLength);
 
   /**
    * \brief Constructs an Ipv6Prefix by using the input number of bits.
@@ -456,10 +543,26 @@ public:
   uint8_t GetPrefixLength () const;
 
   /**
+   * \brief Set prefix length.
+   * \param prefixLength the prefix length
+   */
+  void SetPrefixLength (uint8_t prefixLength);
+
+   /**
+    * \brief Get the minimum prefix length, i.e., 128 - the length of the largest sequence trailing zeroes.
+    * \return minimum prefix length
+    */
+  uint8_t GetMinimumPrefixLength () const;
+
+  /**
    * \brief Comparison operation between two Ipv6Prefix.
+   *
+   * \deprecated Use the == operator (same functionality)
+   *
    * \param other the IPv6 prefix to which to compare this prefix
    * \return true if the prefixes are equal, false otherwise
    */
+  NS_DEPRECATED_3_31
   bool IsEqual (const Ipv6Prefix& other) const;
 
   /**
@@ -493,6 +596,11 @@ private:
    * \brief The prefix representation.
    */
   uint8_t m_prefix[16];
+
+  /**
+   * \brief The prefix length.
+   */
+  uint8_t m_prefixLength;
 
   /**
    * \brief Equal to operator.

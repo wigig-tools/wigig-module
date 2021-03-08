@@ -18,15 +18,18 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "wifi-net-device.h"
-#include "wifi-phy.h"
-#include "regular-wifi-mac.h"
-#include "wifi-mac-queue.h"
 #include "ns3/llc-snap-header.h"
-#include "ns3/socket.h"
+#include "ns3/channel.h"
 #include "ns3/pointer.h"
 #include "ns3/log.h"
-#include "ns3/net-device-queue-interface.h"
+#include "ns3/node.h"
+#include "ns3/uinteger.h"
+#include "wifi-net-device.h"
+#include "wifi-phy.h"
+#include "wifi-mac.h"
+#include "ht-configuration.h"
+#include "vht-configuration.h"
+#include "he-configuration.h"
 
 namespace ns3 {
 
@@ -65,6 +68,21 @@ WifiNetDevice::GetTypeId (void)
                    MakePointerAccessor (&WifiNetDevice::SetRemoteStationManager,
                                         &WifiNetDevice::GetRemoteStationManager),
                    MakePointerChecker<WifiRemoteStationManager> ())
+    .AddAttribute ("HtConfiguration",
+                   "The HtConfiguration object.",
+                   PointerValue (),
+                   MakePointerAccessor (&WifiNetDevice::GetHtConfiguration),
+                   MakePointerChecker<HtConfiguration> ())
+    .AddAttribute ("VhtConfiguration",
+                   "The VhtConfiguration object.",
+                   PointerValue (),
+                   MakePointerAccessor (&WifiNetDevice::GetVhtConfiguration),
+                   MakePointerChecker<VhtConfiguration> ())
+    .AddAttribute ("HeConfiguration",
+                   "The HeConfiguration object.",
+                   PointerValue (),
+                   MakePointerAccessor (&WifiNetDevice::GetHeConfiguration),
+                   MakePointerChecker<HeConfiguration> ())
   ;
   return tid;
 }
@@ -85,13 +103,36 @@ WifiNetDevice::DoDispose (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
   m_node = 0;
-  m_mac->Dispose ();
-  m_phy->Dispose ();
-  m_stationManager->Dispose ();
-  m_mac = 0;
-  m_phy = 0;
-  m_stationManager = 0;
-  m_queueInterface = 0;
+  if (m_mac)
+    {
+      m_mac->Dispose ();
+      m_mac = 0;
+    }
+  if (m_phy)
+    {
+      m_phy->Dispose ();
+      m_phy = 0;
+    }
+  if (m_stationManager)
+    {
+      m_stationManager->Dispose ();
+      m_stationManager = 0;
+    }
+  if (m_htConfiguration)
+    {
+      m_htConfiguration->Dispose ();
+      m_htConfiguration = 0;
+    }
+  if (m_vhtConfiguration)
+    {
+      m_vhtConfiguration->Dispose ();
+      m_vhtConfiguration = 0;
+    }
+  if (m_heConfiguration)
+    {
+      m_heConfiguration->Dispose ();
+      m_heConfiguration = 0;
+    }
   NetDevice::DoDispose ();
 }
 
@@ -99,9 +140,18 @@ void
 WifiNetDevice::DoInitialize (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
-  m_phy->Initialize ();
-  m_mac->Initialize ();
-  m_stationManager->Initialize ();
+  if (m_phy)
+    {
+      m_phy->Initialize ();
+    }
+  if (m_mac)
+    {
+      m_mac->Initialize ();
+    }
+  if (m_stationManager)
+    {
+      m_stationManager->Initialize ();
+    }
   NetDevice::DoInitialize ();
 }
 
@@ -127,82 +177,10 @@ WifiNetDevice::CompleteConfig (void)
 }
 
 void
-WifiNetDevice::NotifyNewAggregate (void)
-{
-  NS_LOG_FUNCTION (this);
-  if (m_queueInterface == 0)
-    {
-      Ptr<NetDeviceQueueInterface> ndqi = this->GetObject<NetDeviceQueueInterface> ();
-      //verify that it's a valid netdevice queue interface and that
-      //the netdevice queue interface was not set before
-      if (ndqi != 0)
-        {
-          m_queueInterface = ndqi;
-          // register the select queue callback
-          m_queueInterface->SetSelectQueueCallback (MakeCallback (&WifiNetDevice::SelectQueue, this));
-          m_queueInterface->SetLateTxQueuesCreation (true);
-          FlowControlConfig ();
-        }
-    }
-  NetDevice::NotifyNewAggregate ();
-}
-
-void
-WifiNetDevice::FlowControlConfig (void)
-{
-  if (m_mac == 0 || m_queueInterface == 0)
-    {
-      return;
-    }
-
-  Ptr<RegularWifiMac> mac = DynamicCast<RegularWifiMac> (m_mac);
-  if (mac == 0)
-    {
-      NS_LOG_WARN ("Flow control is only supported by RegularWifiMac");
-      return;
-    }
-
-  BooleanValue qosSupported;
-  mac->GetAttributeFailSafe ("QosSupported", qosSupported);
-  PointerValue ptr;
-  Ptr<WifiMacQueue> wmq;
-  if (qosSupported.Get ())
-    {
-      m_queueInterface->SetTxQueuesN (4);
-      m_queueInterface->CreateTxQueues ();
-
-      mac->GetAttributeFailSafe ("BE_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 0);
-
-      mac->GetAttributeFailSafe ("BK_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 1);
-
-      mac->GetAttributeFailSafe ("VI_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 2);
-
-      mac->GetAttributeFailSafe ("VO_EdcaTxopN", ptr);
-      wmq = ptr.Get<EdcaTxopN> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 3);
-    }
-  else
-    {
-      m_queueInterface->CreateTxQueues ();
-
-      mac->GetAttributeFailSafe ("DcaTxop", ptr);
-      wmq = ptr.Get<DcaTxop> ()->GetQueue ();
-      m_queueInterface->ConnectQueueTraces<WifiMacQueueItem> (wmq, 0);
-    }
-}
-
-void
 WifiNetDevice::SetMac (const Ptr<WifiMac> mac)
 {
   m_mac = mac;
   CompleteConfig ();
-  FlowControlConfig ();
 }
 
 void
@@ -380,7 +358,7 @@ WifiNetDevice::SetReceiveCallback (NetDevice::ReceiveCallback cb)
 }
 
 void
-WifiNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to)
+WifiNetDevice::ForwardUp (Ptr<const Packet> packet, Mac48Address from, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << from << to);
   LlcSnapHeader llc;
@@ -402,21 +380,22 @@ WifiNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to
       type = NetDevice::PACKET_OTHERHOST;
     }
 
+  Ptr<Packet> copy = packet->Copy ();
   if (type != NetDevice::PACKET_OTHERHOST)
     {
       m_mac->NotifyRx (packet);
-      packet->RemoveHeader (llc);
-      m_forwardUp (this, packet, llc.GetType (), from);
+      copy->RemoveHeader (llc);
+      m_forwardUp (this, copy, llc.GetType (), from);
     }
   else
     {
-      packet->RemoveHeader (llc);
+      copy->RemoveHeader (llc);
     }
 
   if (!m_promiscRx.IsNull ())
     {
-      m_mac->NotifyPromiscRx (packet);
-      m_promiscRx (this, packet, llc.GetType (), from, to, type);
+      m_mac->NotifyPromiscRx (copy);
+      m_promiscRx (this, copy, llc.GetType (), from, to, type);
     }
 }
 
@@ -467,36 +446,40 @@ WifiNetDevice::SupportsSendFrom (void) const
   return m_mac->SupportsSendFrom ();
 }
 
-uint8_t
-WifiNetDevice::SelectQueue (Ptr<QueueItem> item) const
+void
+WifiNetDevice::SetHtConfiguration (Ptr<HtConfiguration> htConfiguration)
 {
-  NS_LOG_FUNCTION (this << item);
+  m_htConfiguration = htConfiguration;
+}
 
-  NS_ASSERT (m_queueInterface != 0);
+Ptr<HtConfiguration>
+WifiNetDevice::GetHtConfiguration (void) const
+{
+  return m_htConfiguration;
+}
 
-  if (m_queueInterface->GetNTxQueues () == 1)
-    {
-      return 0;
-    }
+void
+WifiNetDevice::SetVhtConfiguration (Ptr<VhtConfiguration> vhtConfiguration)
+{
+  m_vhtConfiguration = vhtConfiguration;
+}
 
-  uint8_t dscp, priority = 0;
-  if (item->GetUint8Value (QueueItem::IP_DSFIELD, dscp))
-    {
-      // if the QoS map element is implemented, it should be used here
-      // to set the priority.
-      // User priority is set to the three most significant bits of the DS field
-      priority = dscp >> 5;
-    }
+Ptr<VhtConfiguration>
+WifiNetDevice::GetVhtConfiguration (void) const
+{
+  return m_vhtConfiguration;
+}
 
-  // replace the priority tag
-  SocketPriorityTag priorityTag;
-  priorityTag.SetPriority (priority);
-  item->GetPacket ()->ReplacePacketTag (priorityTag);
+void
+WifiNetDevice::SetHeConfiguration (Ptr<HeConfiguration> heConfiguration)
+{
+  m_heConfiguration = heConfiguration;
+}
 
-  // if the admission control were implemented, here we should check whether
-  // the access category assigned to the packet should be downgraded
-
-  return QosUtilsMapTidToAc (priority);
+Ptr<HeConfiguration>
+WifiNetDevice::GetHeConfiguration (void) const
+{
+  return m_heConfiguration;
 }
 
 } //namespace ns3

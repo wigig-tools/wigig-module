@@ -25,7 +25,7 @@
 #include "ns3/packet.h"
 #include "ns3/traced-callback.h"
 #include "ns3/mac48-address.h"
-#include "ns3/net-device.h"
+#include "ns3/wifi-net-device.h"
 #include "ocb-wifi-mac.h"
 #include "vendor-specific-action.h"
 #include "channel-coordinator.h"
@@ -84,7 +84,7 @@ struct TxInfo
    * \param preamble the preamble
    * \param powerLevel the power level
    */
-  TxInfo (uint32_t channel, uint32_t prio = 7, WifiMode rate = WifiMode (), WifiPreamble preamble = WIFI_PREAMBLE_NONE, uint32_t powerLevel = 8)
+  TxInfo (uint32_t channel, uint32_t prio = 7, WifiMode rate = WifiMode (), WifiPreamble preamble = WIFI_PREAMBLE_LONG, uint32_t powerLevel = 8)
     : channelNumber (channel),
       priority (prio),
       dataRate (rate),
@@ -157,7 +157,7 @@ struct TxProfile
  * UtcTime GetUtcTime ();
  * void SetUtcTime ();
  */
-class WaveNetDevice : public NetDevice
+class WaveNetDevice : public WifiNetDevice
 {
 public:
   /**
@@ -376,7 +376,7 @@ private:
    * \param from
    * \param to
    */
-  void ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to);
+  void ForwardUp (Ptr<const Packet> packet, Mac48Address from, Mac48Address to);
 
   /// MacEntities typedef
   typedef std::map<uint32_t, Ptr<OcbWifiMac> > MacEntities;

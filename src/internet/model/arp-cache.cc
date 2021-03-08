@@ -436,6 +436,7 @@ ArpCache::Entry::UpdateWaitReply (Ipv4PayloadHeaderPair waiting)
   m_pending.push_back (waiting);
   return true;
 }
+
 void
 ArpCache::Entry::MarkWaitReply (Ptr<Packet> waiting)
 {
@@ -467,12 +468,6 @@ ArpCache::Entry::GetMacAddress (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_macAddress;
-}
-void 
-ArpCache::Entry::SetMacAddresss (Address macAddress)
-{
-  NS_LOG_FUNCTION (this);
-  m_macAddress = macAddress;
 }
 void 
 ArpCache::Entry::SetMacAddress (Address macAddress)

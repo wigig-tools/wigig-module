@@ -25,7 +25,6 @@
 
 #include <fstream>
 #include "ns3/core-module.h"
-#include "ns3/core-module.h"
 #include "ns3/csma-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/internet-module.h"
@@ -46,7 +45,7 @@ main (int argc, char *argv[])
   bool useV6 = false;
   Address serverAddress;
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("useIpv6", "Use Ipv6", useV6);
   cmd.Parse (argc, argv);
 

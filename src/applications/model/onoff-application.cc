@@ -42,6 +42,7 @@
 #include "ns3/string.h"
 #include "ns3/pointer.h"
 #include "ns3/seq-ts-header.h"
+#include "timestamp-tag.h"
 
 namespace ns3 {
 
@@ -68,6 +69,11 @@ OnOffApplication::GetTypeId (void)
                    AddressValue (),
                    MakeAddressAccessor (&OnOffApplication::m_peer),
                    MakeAddressChecker ())
+    .AddAttribute ("Local",
+                   "The Address on which to bind the socket. If not set, it is generated automatically.",
+                   AddressValue (),
+                   MakeAddressAccessor (&OnOffApplication::m_local),
+                   MakeAddressChecker ())
     .AddAttribute ("OnTime", "A RandomVariableStream used to pick the duration of the 'On' state.",
                    StringValue ("ns3::ConstantRandomVariable[Constant=1.0]"),
                    MakePointerAccessor (&OnOffApplication::m_onTime),
@@ -76,6 +82,10 @@ OnOffApplication::GetTypeId (void)
                    StringValue ("ns3::ConstantRandomVariable[Constant=1.0]"),
                    MakePointerAccessor (&OnOffApplication::m_offTime),
                    MakePointerChecker <RandomVariableStream>())
+    .AddAttribute ("EnableTimestamp", "Whether we add timestamp tag to each outgoing packet or not.",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&OnOffApplication::m_enableTimestamp),
+                   MakeBooleanChecker ())
     .AddAttribute ("MaxBytes", 
                    "The total number of bytes to send. Once these bytes are sent, "
                    "no packet is sent again, even in on state. The value zero means "
@@ -96,9 +106,20 @@ OnOffApplication::GetTypeId (void)
                    MakeTypeIdAccessor (&OnOffApplication::m_tid),
                    // This should check for SocketFactory as a parent
                    MakeTypeIdChecker ())
+    .AddAttribute ("EnableE2EStats",
+                   "Enable E2E statistics (sequences, timestamps)",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&OnOffApplication::m_enableE2EStats),
+                   MakeBooleanChecker ())
     .AddTraceSource ("Tx", "A new packet is created and is sent",
                      MakeTraceSourceAccessor (&OnOffApplication::m_txTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("TxWithAddresses", "A new packet is created and is sent",
+                     MakeTraceSourceAccessor (&OnOffApplication::m_txTraceWithAddresses),
+                     "ns3::Packet::TwoAddressTracedCallback")
+    .AddTraceSource ("TxE2EStat", "Statistic sent with the packet",
+                     MakeTraceSourceAccessor (&OnOffApplication::m_txTraceWithStats),
+                     "ns3::PacketSink::E2EStatCallback")
   ;
   return tid;
 }
@@ -160,6 +181,7 @@ OnOffApplication::DoDispose (void)
 {
   NS_LOG_FUNCTION (this);
 
+  CancelEvents ();
   m_socket = 0;
   // chain up
   Application::DoDispose ();
@@ -174,21 +196,33 @@ void OnOffApplication::StartApplication () // Called at time specified by Start
   if (!m_socket)
     {
       m_socket = Socket::CreateSocket (GetNode (), m_tid);
-      if (Inet6SocketAddress::IsMatchingType (m_peer))
+      int ret = -1;
+
+      if (! m_local.IsInvalid())
         {
-          if (m_socket->Bind6 () == -1)
+          NS_ABORT_MSG_IF ((Inet6SocketAddress::IsMatchingType (m_peer) && InetSocketAddress::IsMatchingType (m_local)) ||
+                           (InetSocketAddress::IsMatchingType (m_peer) && Inet6SocketAddress::IsMatchingType (m_local)),
+                           "Incompatible peer and local address IP version");
+          ret = m_socket->Bind (m_local);
+        }
+      else
+        {
+          if (Inet6SocketAddress::IsMatchingType (m_peer))
             {
-              NS_FATAL_ERROR ("Failed to bind socket");
+              ret = m_socket->Bind6 ();
+            }
+          else if (InetSocketAddress::IsMatchingType (m_peer) ||
+                   PacketSocketAddress::IsMatchingType (m_peer))
+            {
+              ret = m_socket->Bind ();
             }
         }
-      else if (InetSocketAddress::IsMatchingType (m_peer) ||
-               PacketSocketAddress::IsMatchingType (m_peer))
+
+      if (ret == -1)
         {
-          if (m_socket->Bind () == -1)
-            {
-              NS_FATAL_ERROR ("Failed to bind socket");
-            }
+          NS_FATAL_ERROR ("Failed to bind socket");
         }
+
       m_socket->Connect (m_peer);
       m_socket->SetAllowBroadcast (true);
       m_socket->ShutdownRecv ();
@@ -301,20 +335,38 @@ void OnOffApplication::SendPacket ()
 
   NS_ASSERT (m_sendEvent.IsExpired ());
 
-//  static uint32_t m_seq = 0;
-//  SeqTsHeader header;
-//  header.SetSeq (m_seq++);
-//  NS_ABORT_IF (m_pktSize < header.GetSerializedSize ());
-//  Ptr<Packet> packet = Create<Packet> (m_pktSize - header.GetSerializedSize ());
-//  packet->AddHeader (header);
-//  NS_ABORT_IF (packet->GetSize () != m_pktSize);
-//  NS_LOG_UNCOND ("TRX: " << header.GetSeq () << " " << header.GetTs ().GetSeconds ());
+  Ptr<Packet> packet;
+  if (m_enableE2EStats)
+    {
+      Address from, to;
+      m_socket->GetSockName (from);
+      m_socket->GetPeerName (to);
+      E2eStatsHeader header;
+      header.SetSeq (m_seq++);
+      header.SetSize (m_pktSize);
+      NS_ABORT_IF (m_pktSize < header.GetSerializedSize ());
+      packet = Create<Packet> (m_pktSize - header.GetSerializedSize ());
+      packet->AddHeader (header);
+      m_txTraceWithStats (packet, from, to, header);
+    }
+  else
+    {
+      packet = Create<Packet> (m_pktSize);
+    }
 
-  Ptr<Packet> packet = Create<Packet> (m_pktSize);
+  if (m_enableTimestamp)
+    {
+      TimestampTag timestamp;
+      timestamp.SetTimestamp (Simulator::Now ());
+      packet->AddByteTag (timestamp);
+    }
+
   m_txTrace (packet);
   m_socket->Send (packet);
   m_totBytes += m_pktSize;
   m_txPackets++;
+  Address localAddress;
+  m_socket->GetSockName (localAddress);
   if (InetSocketAddress::IsMatchingType (m_peer))
     {
       NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds ()
@@ -323,6 +375,7 @@ void OnOffApplication::SendPacket ()
                    << InetSocketAddress::ConvertFrom(m_peer).GetIpv4 ()
                    << " port " << InetSocketAddress::ConvertFrom (m_peer).GetPort ()
                    << " total Tx " << m_totBytes << " bytes");
+      m_txTraceWithAddresses (packet, localAddress, InetSocketAddress::ConvertFrom (m_peer));
     }
   else if (Inet6SocketAddress::IsMatchingType (m_peer))
     {
@@ -332,6 +385,7 @@ void OnOffApplication::SendPacket ()
                    << Inet6SocketAddress::ConvertFrom(m_peer).GetIpv6 ()
                    << " port " << Inet6SocketAddress::ConvertFrom (m_peer).GetPort ()
                    << " total Tx " << m_totBytes << " bytes");
+      m_txTraceWithAddresses (packet, localAddress, Inet6SocketAddress::ConvertFrom(m_peer));
     }
   m_lastStartTime = Simulator::Now ();
   m_residualBits = 0;
@@ -348,6 +402,7 @@ void OnOffApplication::ConnectionSucceeded (Ptr<Socket> socket)
 void OnOffApplication::ConnectionFailed (Ptr<Socket> socket)
 {
   NS_LOG_FUNCTION (this << socket);
+  NS_FATAL_ERROR ("Can't connect");
 }
 
 

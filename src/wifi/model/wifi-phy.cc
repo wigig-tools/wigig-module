@@ -19,19 +19,26 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
-#include "wifi-phy.h"
 #include "ns3/simulator.h"
 #include "ns3/log.h"
-#include "ns3/boolean.h"
-#include "ns3/double.h"
-#include "ns3/uinteger.h"
 #include "ns3/pointer.h"
-#include "wifi-phy-tag.h"
+#include "ns3/mobility-model.h"
+#include "ns3/random-variable-stream.h"
+#include "ns3/error-model.h"
+#include "wifi-phy.h"
 #include "ampdu-tag.h"
 #include "wifi-utils.h"
 #include "frame-capture-model.h"
+#include "preamble-detection-model.h"
 #include "wifi-radio-energy-model.h"
 #include "error-rate-model.h"
+#include "wifi-net-device.h"
+#include "ht-configuration.h"
+#include "he-configuration.h"
+#include "mpdu-aggregator.h"
+#include "wifi-psdu.h"
+#include "wifi-ppdu.h"
+#include "dmg-wifi-phy.h"
 
 namespace ns3 {
 
@@ -110,19 +117,25 @@ WifiPhy::ChannelToFrequencyWidthMap WifiPhy::m_channelToFrequencyWidth =
   { std::make_pair (157, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5785, 20) },
   { std::make_pair (161, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5805, 20) },
   { std::make_pair (165, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5825, 20) },
+  { std::make_pair (169, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5845, 20) },
+  { std::make_pair (173, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5865, 20) },
+  { std::make_pair (177, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5885, 20) },
+  { std::make_pair (181, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5905, 20) },
   // 40 MHz channels
   { std::make_pair (38, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5190, 40) },
   { std::make_pair (46, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5230, 40) },
-  { std::make_pair (54, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5230, 40) },
+  { std::make_pair (54, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5270, 40) },
   { std::make_pair (62, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5310, 40) },
   { std::make_pair (102, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5510, 40) },
   { std::make_pair (110, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5550, 40) },
   { std::make_pair (118, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5590, 40) },
-  { std::make_pair (126, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5590, 40) },
+  { std::make_pair (126, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5630, 40) },
   { std::make_pair (134, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5670, 40) },
   { std::make_pair (142, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5710, 40) },
   { std::make_pair (151, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5755, 40) },
   { std::make_pair (159, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5795, 40) },
+  { std::make_pair (167, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5835, 40) },
+  { std::make_pair (175, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5875, 40) },
   // 80 MHz channels
   { std::make_pair (42, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5210, 80) },
   { std::make_pair (58, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5290, 80) },
@@ -130,9 +143,11 @@ WifiPhy::ChannelToFrequencyWidthMap WifiPhy::m_channelToFrequencyWidth =
   { std::make_pair (122, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5610, 80) },
   { std::make_pair (138, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5690, 80) },
   { std::make_pair (155, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5775, 80) },
+  { std::make_pair (171, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5855, 80) },
   // 160 MHz channels
   { std::make_pair (50, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5250, 160) },
   { std::make_pair (114, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5570, 160) },
+  { std::make_pair (163, WIFI_PHY_STANDARD_UNSPECIFIED), std::make_pair (5815, 160) },
 
   // 802.11p (10 MHz channels at the 5.855-5.925 band
   { std::make_pair (172, WIFI_PHY_STANDARD_80211_10MHZ), std::make_pair (5860, 10) },
@@ -142,12 +157,46 @@ WifiPhy::ChannelToFrequencyWidthMap WifiPhy::m_channelToFrequencyWidth =
   { std::make_pair (180, WIFI_PHY_STANDARD_80211_10MHZ), std::make_pair (5900, 10) },
   { std::make_pair (182, WIFI_PHY_STANDARD_80211_10MHZ), std::make_pair (5910, 10) },
   { std::make_pair (184, WIFI_PHY_STANDARD_80211_10MHZ), std::make_pair (5920, 10) },
-
-  // 802.11ad/WiGig (2.16 GHz channels at the 56.16-64.8) GHz band
+  //// WIGIG ////
+  /* 802.11ad (2.16 GHz channels at the 56.16-64.8 GHz band) */
   { std::make_pair (1, WIFI_PHY_STANDARD_80211ad), std::make_pair (58320, 2160) },
   { std::make_pair (2, WIFI_PHY_STANDARD_80211ad), std::make_pair (60480, 2160) },
   { std::make_pair (3, WIFI_PHY_STANDARD_80211ad), std::make_pair (62640, 2160) },
-  { std::make_pair (4, WIFI_PHY_STANDARD_80211ad), std::make_pair (64800, 2160) }
+  { std::make_pair (4, WIFI_PHY_STANDARD_80211ad), std::make_pair (64800, 2160) },
+  { std::make_pair (5, WIFI_PHY_STANDARD_80211ad), std::make_pair (66960, 2160) },
+  { std::make_pair (6, WIFI_PHY_STANDARD_80211ad), std::make_pair (69120, 2160) },
+
+  /* IEEE 802.11ay D5.0 Figure 28-7 – Channelization used by EDMG STAs */
+  { std::make_pair (1, WIFI_PHY_STANDARD_80211ay), std::make_pair (58320, 2160) },
+  { std::make_pair (2, WIFI_PHY_STANDARD_80211ay), std::make_pair (60480, 2160) },
+  { std::make_pair (3, WIFI_PHY_STANDARD_80211ay), std::make_pair (62640, 2160) },
+  { std::make_pair (4, WIFI_PHY_STANDARD_80211ay), std::make_pair (64800, 2160) },
+  { std::make_pair (5, WIFI_PHY_STANDARD_80211ay), std::make_pair (66960, 2160) },
+  { std::make_pair (6, WIFI_PHY_STANDARD_80211ay), std::make_pair (69120, 2160) },
+  { std::make_pair (7, WIFI_PHY_STANDARD_80211ay), std::make_pair (71280, 2160) },
+  { std::make_pair (8, WIFI_PHY_STANDARD_80211ay), std::make_pair (73440, 2160) },
+
+  { std::make_pair (9, WIFI_PHY_STANDARD_80211ay), std::make_pair (59400, 4320) },
+  { std::make_pair (10, WIFI_PHY_STANDARD_80211ay), std::make_pair (61560, 4320) },
+  { std::make_pair (11, WIFI_PHY_STANDARD_80211ay), std::make_pair (63720, 4320) },
+  { std::make_pair (12, WIFI_PHY_STANDARD_80211ay), std::make_pair (65880, 4320) },
+  { std::make_pair (13, WIFI_PHY_STANDARD_80211ay), std::make_pair (68040, 4320) },
+  { std::make_pair (14, WIFI_PHY_STANDARD_80211ay), std::make_pair (70200, 4320) },
+  { std::make_pair (15, WIFI_PHY_STANDARD_80211ay), std::make_pair (72360, 4320) },
+
+  { std::make_pair (17, WIFI_PHY_STANDARD_80211ay), std::make_pair (60480, 6480) },
+  { std::make_pair (18, WIFI_PHY_STANDARD_80211ay), std::make_pair (62640, 6480) },
+  { std::make_pair (19, WIFI_PHY_STANDARD_80211ay), std::make_pair (64800, 6480) },
+  { std::make_pair (20, WIFI_PHY_STANDARD_80211ay), std::make_pair (66960, 6480) },
+  { std::make_pair (21, WIFI_PHY_STANDARD_80211ay), std::make_pair (69120, 6480) },
+  { std::make_pair (22, WIFI_PHY_STANDARD_80211ay), std::make_pair (71280, 6480) },
+
+  { std::make_pair (25, WIFI_PHY_STANDARD_80211ay), std::make_pair (61560, 8640) },
+  { std::make_pair (26, WIFI_PHY_STANDARD_80211ay), std::make_pair (63720, 8640) },
+  { std::make_pair (27, WIFI_PHY_STANDARD_80211ay), std::make_pair (65880, 8640) },
+  { std::make_pair (28, WIFI_PHY_STANDARD_80211ay), std::make_pair (68040, 8640) },
+  { std::make_pair (29, WIFI_PHY_STANDARD_80211ay), std::make_pair (70200, 8640) },
+  //// WIGIG ////
 };
 
 TypeId
@@ -176,17 +225,25 @@ WifiPhy::GetTypeId (void)
                    MakeUintegerChecker<uint8_t> (0, 196))
     .AddAttribute ("EnergyDetectionThreshold",
                    "The energy of a received signal should be higher than "
-                   "this threshold (dbm) to allow the PHY layer to detect the signal.",
-                   DoubleValue (-96.0),
-                   MakeDoubleAccessor (&WifiPhy::SetEdThreshold,
-                                       &WifiPhy::GetEdThreshold),
-                   MakeDoubleChecker<double> ())
-    .AddAttribute ("CcaMode1Threshold",
+                   "this threshold (dBm) to allow the PHY layer to detect the signal.",
+                   DoubleValue (-101.0),
+                   MakeDoubleAccessor (&WifiPhy::SetEdThreshold),
+                   MakeDoubleChecker<double> (),
+                   TypeId::DEPRECATED, "Replaced by RxSensitivity.")
+    .AddAttribute ("RxSensitivity",
                    "The energy of a received signal should be higher than "
-                   "this threshold (dbm) to allow the PHY layer to declare CCA BUSY state.",
-                   DoubleValue (-99.0),
-                   MakeDoubleAccessor (&WifiPhy::SetCcaMode1Threshold,
-                                       &WifiPhy::GetCcaMode1Threshold),
+                   "this threshold (dBm) for the PHY to detect the signal.",
+                   DoubleValue (-101.0),
+                   MakeDoubleAccessor (&WifiPhy::SetRxSensitivity,
+                                       &WifiPhy::GetRxSensitivity),
+                   MakeDoubleChecker<double> ())
+    .AddAttribute ("CcaEdThreshold",
+                   "The energy of a non Wi-Fi received signal should be higher than "
+                   "this threshold (dBm) to allow the PHY layer to declare CCA BUSY state. "
+                   "This check is performed on the 20 MHz primary channel only.",
+                   DoubleValue (-62.0),
+                   MakeDoubleAccessor (&WifiPhy::SetCcaEdThreshold,
+                                       &WifiPhy::GetCcaEdThreshold),
                    MakeDoubleChecker<double> ())
     .AddAttribute ("TxGain",
                    "Transmission gain (dB).",
@@ -207,13 +264,13 @@ WifiPhy::GetTypeId (void)
                    MakeUintegerAccessor (&WifiPhy::m_nTxPower),
                    MakeUintegerChecker<uint8_t> ())
     .AddAttribute ("TxPowerEnd",
-                   "Maximum available transmission level (dbm).",
+                   "Maximum available transmission level (dBm).",
                    DoubleValue (16.0206),
                    MakeDoubleAccessor (&WifiPhy::SetTxPowerEnd,
                                        &WifiPhy::GetTxPowerEnd),
                    MakeDoubleChecker<double> ())
     .AddAttribute ("TxPowerStart",
-                   "Minimum available transmission level (dbm).",
+                   "Minimum available transmission level (dBm).",
                    DoubleValue (16.0206),
                    MakeDoubleAccessor (&WifiPhy::SetTxPowerStart,
                                        &WifiPhy::GetTxPowerStart),
@@ -226,8 +283,7 @@ WifiPhy::GetTypeId (void)
                    " ideal receiver with the same overall gain and bandwidth when the receivers "
                    " are connected to sources at the standard noise temperature T0 (usually 290 K)\".",
                    DoubleValue (7),
-                   MakeDoubleAccessor (&WifiPhy::SetRxNoiseFigure,
-                                       &WifiPhy::GetRxNoiseFigure),
+                   MakeDoubleAccessor (&WifiPhy::SetRxNoiseFigure),
                    MakeDoubleChecker<double> ())
     .AddAttribute ("State",
                    "The state of the PHY layer.",
@@ -265,58 +321,63 @@ WifiPhy::GetTypeId (void)
                    BooleanValue (false),
                    MakeBooleanAccessor (&WifiPhy::GetShortGuardInterval,
                                         &WifiPhy::SetShortGuardInterval),
-                   MakeBooleanChecker ())
+                   MakeBooleanChecker (),
+                   TypeId::DEPRECATED, "Use the HtConfiguration instead")
     .AddAttribute ("GuardInterval",
                    "Whether 800ns, 1600ns or 3200ns guard interval is used for HE transmissions."
                    "This parameter is only valuable for 802.11ax STAs and APs.",
                    TimeValue (NanoSeconds (3200)),
                    MakeTimeAccessor (&WifiPhy::GetGuardInterval,
                                      &WifiPhy::SetGuardInterval),
-                   MakeTimeChecker (NanoSeconds (400), NanoSeconds (3200)))
-    .AddAttribute ("LdpcEnabled",
-                   "Whether or not LDPC is enabled (not supported yet!).",
-                   BooleanValue (false),
-                   MakeBooleanAccessor (&WifiPhy::GetLdpc,
-                                        &WifiPhy::SetLdpc),
-                   MakeBooleanChecker ())
-    .AddAttribute ("STBCEnabled",
-                   "Whether or not STBC is enabled (not supported yet!).",
-                   BooleanValue (false),
-                   MakeBooleanAccessor (&WifiPhy::GetStbc,
-                                        &WifiPhy::SetStbc),
-                   MakeBooleanChecker ())
+                   MakeTimeChecker (NanoSeconds (800), NanoSeconds (3200)),
+                   TypeId::DEPRECATED, "Use the HeConfiguration instead")
     .AddAttribute ("GreenfieldEnabled",
                    "Whether or not Greenfield is enabled."
                    "This parameter is only valuable for 802.11n STAs and APs.",
                    BooleanValue (false),
                    MakeBooleanAccessor (&WifiPhy::GetGreenfield,
                                         &WifiPhy::SetGreenfield),
-                   MakeBooleanChecker ())
+                   MakeBooleanChecker (),
+                   TypeId::DEPRECATED, "Use the HtConfiguration instead")
     .AddAttribute ("ShortPlcpPreambleSupported",
-                   "Whether or not short PLCP preamble is supported."
+                   "Whether or not short PHY preamble is supported."
                    "This parameter is only valuable for 802.11b STAs and APs."
-                   "Note: 802.11g APs and STAs always support short PLCP preamble.",
+                   "Note: 802.11g APs and STAs always support short PHY preamble.",
                    BooleanValue (false),
-                   MakeBooleanAccessor (&WifiPhy::GetShortPlcpPreambleSupported,
-                                        &WifiPhy::SetShortPlcpPreambleSupported),
+                   MakeBooleanAccessor (&WifiPhy::GetShortPhyPreambleSupported,
+                                        &WifiPhy::SetShortPhyPreambleSupported),
                    MakeBooleanChecker ())
     .AddAttribute ("FrameCaptureModel",
                    "Ptr to an object that implements the frame capture model",
-                   PointerValue (0), //StringValue ("ns3::SimpleFrameCaptureModel"),
-                   MakePointerAccessor (&WifiPhy::GetFrameCaptureModel,
-                                        &WifiPhy::SetFrameCaptureModel),
+                   PointerValue (),
+                   MakePointerAccessor (&WifiPhy::m_frameCaptureModel),
                    MakePointerChecker <FrameCaptureModel> ())
+    .AddAttribute ("PreambleDetectionModel",
+                   "Ptr to an object that implements the preamble detection model",
+                   PointerValue (),
+                   MakePointerAccessor (&WifiPhy::m_preambleDetectionModel),
+                   MakePointerChecker <PreambleDetectionModel> ())
+    .AddAttribute ("PostReceptionErrorModel",
+                   "An optional packet error model can be added to the receive "
+                   "packet process after any propagation-based (SNR-based) error "
+                   "models have been applied. Typically this is used to force "
+                   "specific packet drops, for testing purposes.",
+                   PointerValue (),
+                   MakePointerAccessor (&WifiPhy::m_postReceptionErrorModel),
+                   MakePointerChecker<ErrorModel> ())
     .AddTraceSource ("PhyTxBegin",
                      "Trace source indicating a packet "
                      "has begun transmitting over the channel medium",
                      MakeTraceSourceAccessor (&WifiPhy::m_phyTxBeginTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("PhyTxPsduBegin",
+                     "Trace source indicating a PSDU "
+                     "has begun transmitting over the channel medium",
+                     MakeTraceSourceAccessor (&WifiPhy::m_phyTxPsduBeginTrace),
+                     "ns3::WifiPhy::PsduTxBeginCallback")
     .AddTraceSource ("PhyTxEnd",
                      "Trace source indicating a packet "
-                     "has been completely transmitted over the channel. "
-                     "NOTE: the only official WifiPhy implementation "
-                     "available to this date never fires "
-                     "this trace source.",
+                     "has been completely transmitted over the channel.",
                      MakeTraceSourceAccessor (&WifiPhy::m_phyTxEndTrace),
                      "ns3::Packet::TracedCallback")
     .AddTraceSource ("PhyTxDrop",
@@ -330,6 +391,11 @@ WifiPhy::GetTypeId (void)
                      "by the device",
                      MakeTraceSourceAccessor (&WifiPhy::m_phyRxBeginTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource ("PhyRxPayloadBegin",
+                     "Trace source indicating the reception of the "
+                     "payload of a PPDU has begun",
+                     MakeTraceSourceAccessor (&WifiPhy::m_phyRxPayloadBeginTrace),
+                     "ns3::WifiPhy::PhyRxPayloadBeginTracedCallback")
     .AddTraceSource ("PhyRxEnd",
                      "Trace source indicating a packet "
                      "has been completely received from the channel medium "
@@ -351,34 +417,41 @@ WifiPhy::GetTypeId (void)
                      "in monitor mode to sniff all frames being transmitted",
                      MakeTraceSourceAccessor (&WifiPhy::m_phyMonitorSniffTxTrace),
                      "ns3::WifiPhy::MonitorSnifferTxTracedCallback")
+    .AddTraceSource ("EndOfHePreamble",
+                     "Trace source indicating the end of the 802.11ax preamble (after training fields)",
+                     MakeTraceSourceAccessor (&WifiPhy::m_phyEndOfHePreambleTrace),
+                     "ns3::WifiPhy::EndOfHePreambleTracedCallback")
   ;
   return tid;
 }
 
 WifiPhy::WifiPhy ()
-  : m_mpdusNum (0),
-    m_plcpSuccess (false),
-    m_txMpduReferenceNumber (0xffffffff),
+  : m_txMpduReferenceNumber (0xffffffff),
     m_rxMpduReferenceNumber (0xffffffff),
     m_endRxEvent (),
-    m_endPlcpRxEvent (),
+    m_endPhyRxEvent (),
+    m_endPreambleDetectionEvent (),
+    m_endTxEvent (),
     m_currentEvent (0),
     m_wifiRadioEnergyModel (0),
-    m_standard (WIFI_PHY_STANDARD_UNSPECIFIED),
     m_isConstructed (false),
+    m_standard (WIFI_PHY_STANDARD_UNSPECIFIED),
     m_channelCenterFrequency (0),
     m_initialFrequency (0),
     m_frequencyChannelNumberInitialized (false),
+    m_channelWidth (0),
+    m_powerRestricted (false),
+    m_channelAccessRequested (false),
+    m_txSpatialStreams (0),
+    m_rxSpatialStreams (0),
     m_channelNumber (0),
     m_initialChannelNumber (0),
-    m_totalAmpduSize (0),
-    m_totalAmpduNumSymbols (0)
+    m_timeLastPreambleDetected (Seconds (0))
 {
   NS_LOG_FUNCTION (this);
   m_random = CreateObject<UniformRandomVariable> ();
   m_state = CreateObject<WifiPhyStateHelper> ();
   m_interference.SetWifiPhy (this);
-  m_totalBits = 0;
 }
 
 WifiPhy::~WifiPhy ()
@@ -390,12 +463,18 @@ void
 WifiPhy::DoDispose (void)
 {
   NS_LOG_FUNCTION (this);
+  m_endTxEvent.Cancel ();
+  m_endRxEvent.Cancel ();
+  m_endPhyRxEvent.Cancel ();
+  m_endPreambleDetectionEvent.Cancel ();
   m_device = 0;
   m_mobility = 0;
   m_state = 0;
   m_wifiRadioEnergyModel = 0;
+  m_postReceptionErrorModel = 0;
   m_deviceRateSet.clear ();
   m_deviceMcsSet.clear ();
+  m_mcsIndexMap.clear ();
 }
 
 void
@@ -409,6 +488,12 @@ WifiPhy::DoInitialize (void)
       return;
     }
   InitializeFrequencyChannelNumber ();
+}
+
+Ptr<WifiPhyStateHelper>
+WifiPhy::GetState (void) const
+{
+  return m_state;
 }
 
 void
@@ -472,33 +557,33 @@ WifiPhy::InitializeFrequencyChannelNumber (void)
 void
 WifiPhy::SetEdThreshold (double threshold)
 {
-  NS_LOG_FUNCTION (this << threshold);
-  m_edThresholdW = DbmToW (threshold);
-}
-
-double
-WifiPhy::GetEdThresholdW (void) const
-{
-  return m_edThresholdW;
-}
-
-double
-WifiPhy::GetEdThreshold (void) const
-{
-  return WToDbm (m_edThresholdW);
+  SetRxSensitivity (threshold);
 }
 
 void
-WifiPhy::SetCcaMode1Threshold (double threshold)
+WifiPhy::SetRxSensitivity (double threshold)
 {
   NS_LOG_FUNCTION (this << threshold);
-  m_ccaMode1ThresholdW = DbmToW (threshold);
+  m_rxSensitivityW = DbmToW (threshold);
 }
 
 double
-WifiPhy::GetCcaMode1Threshold (void) const
+WifiPhy::GetRxSensitivity (void) const
 {
-  return WToDbm (m_ccaMode1ThresholdW);
+  return WToDbm (m_rxSensitivityW);
+}
+
+void
+WifiPhy::SetCcaEdThreshold (double threshold)
+{
+  NS_LOG_FUNCTION (this << threshold);
+  m_ccaEdThresholdW = DbmToW (threshold);
+}
+
+double
+WifiPhy::GetCcaEdThreshold (void) const
+{
+  return WToDbm (m_ccaEdThresholdW);
 }
 
 void
@@ -581,41 +666,33 @@ WifiPhy::GetRxGain (void) const
 }
 
 void
-WifiPhy::SetLdpc (bool ldpc)
-{
-  NS_LOG_FUNCTION (this << ldpc);
-  m_ldpc = ldpc;
-}
-
-bool
-WifiPhy::GetLdpc (void) const
-{
-  return m_ldpc;
-}
-
-void
-WifiPhy::SetStbc (bool stbc)
-{
-  NS_LOG_FUNCTION (this << stbc);
-  m_stbc = stbc;
-}
-
-bool
-WifiPhy::GetStbc (void) const
-{
-  return m_stbc;
-}
-
-void
 WifiPhy::SetGreenfield (bool greenfield)
 {
   NS_LOG_FUNCTION (this << greenfield);
+  Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+  if (device)
+    {
+      Ptr<HtConfiguration> htConfiguration = device->GetHtConfiguration ();
+      if (htConfiguration)
+        {
+          htConfiguration->SetGreenfieldSupported (greenfield);
+        }
+    }
   m_greenfield = greenfield;
 }
 
 bool
 WifiPhy::GetGreenfield (void) const
 {
+  Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+  if (device)
+    {
+      Ptr<HtConfiguration> htConfiguration = device->GetHtConfiguration ();
+      if (htConfiguration)
+        {
+          return htConfiguration->GetGreenfieldSupported ();
+        }
+    }
   return m_greenfield;
 }
 
@@ -623,12 +700,30 @@ void
 WifiPhy::SetShortGuardInterval (bool shortGuardInterval)
 {
   NS_LOG_FUNCTION (this << shortGuardInterval);
+  Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+  if (device)
+    {
+      Ptr<HtConfiguration> htConfiguration = device->GetHtConfiguration ();
+      if (htConfiguration)
+        {
+          htConfiguration->SetShortGuardIntervalSupported (shortGuardInterval);
+        }
+    }
   m_shortGuardInterval = shortGuardInterval;
 }
 
 bool
 WifiPhy::GetShortGuardInterval (void) const
 {
+  Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+  if (device)
+    {
+      Ptr<HtConfiguration> htConfiguration = device->GetHtConfiguration ();
+      if (htConfiguration)
+        {
+          return htConfiguration->GetShortGuardIntervalSupported ();
+        }
+    }
   return m_shortGuardInterval;
 }
 
@@ -637,24 +732,42 @@ WifiPhy::SetGuardInterval (Time guardInterval)
 {
   NS_LOG_FUNCTION (this << guardInterval);
   NS_ASSERT (guardInterval == NanoSeconds (800) || guardInterval == NanoSeconds (1600) || guardInterval == NanoSeconds (3200));
+  Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+  if (device)
+    {
+      Ptr<HeConfiguration> heConfiguration = device->GetHeConfiguration ();
+      if (heConfiguration)
+        {
+          heConfiguration->SetGuardInterval (guardInterval);
+        }
+    }
   m_guardInterval = guardInterval;
 }
 
 Time
 WifiPhy::GetGuardInterval (void) const
 {
+  Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+  if (device)
+    {
+      Ptr<HeConfiguration> heConfiguration = device->GetHeConfiguration ();
+      if (heConfiguration)
+        {
+          return heConfiguration->GetGuardInterval ();
+        }
+    }
   return m_guardInterval;
 }
 
 void
-WifiPhy::SetShortPlcpPreambleSupported (bool enable)
+WifiPhy::SetShortPhyPreambleSupported (bool enable)
 {
   NS_LOG_FUNCTION (this << enable);
   m_shortPreamble = enable;
 }
 
 bool
-WifiPhy::GetShortPlcpPreambleSupported (void) const
+WifiPhy::GetShortPhyPreambleSupported (void) const
 {
   return m_shortPreamble;
 }
@@ -663,6 +776,18 @@ void
 WifiPhy::SetDevice (const Ptr<NetDevice> device)
 {
   m_device = device;
+  //TODO: to be removed once deprecated API is cleaned up
+  Ptr<HtConfiguration> htConfiguration = DynamicCast<WifiNetDevice> (device)->GetHtConfiguration ();
+  if (htConfiguration)
+    {
+      htConfiguration->SetShortGuardIntervalSupported (m_shortGuardInterval);
+      htConfiguration->SetGreenfieldSupported (m_greenfield);
+    }
+  Ptr<HeConfiguration> heConfiguration = DynamicCast<WifiNetDevice> (device)->GetHeConfiguration ();
+  if (heConfiguration)
+    {
+      heConfiguration->SetGuardInterval (m_guardInterval);
+    }
 }
 
 Ptr<NetDevice>
@@ -697,10 +822,11 @@ WifiPhy::SetErrorRateModel (const Ptr<ErrorRateModel> rate)
   m_interference.SetNumberOfReceiveAntennas (GetNumberOfAntennas ());
 }
 
-Ptr<ErrorRateModel>
-WifiPhy::GetErrorRateModel (void) const
+void
+WifiPhy::SetPostReceptionErrorModel (const Ptr<ErrorModel> em)
 {
-  return m_interference.GetErrorRateModel ();
+  NS_LOG_FUNCTION (this << em);
+  m_postReceptionErrorModel = em;
 }
 
 void
@@ -710,10 +836,10 @@ WifiPhy::SetFrameCaptureModel (const Ptr<FrameCaptureModel> model)
   m_frameCaptureModel->SetWifiPhy (this);
 }
 
-Ptr<FrameCaptureModel>
-WifiPhy::GetFrameCaptureModel (void) const
+void
+WifiPhy::SetPreambleDetectionModel (const Ptr<PreambleDetectionModel> model)
 {
-  return m_frameCaptureModel;
+  m_preambleDetectionModel = model;
 }
 
 void
@@ -806,12 +932,15 @@ WifiPhy::ConfigureDefaultsForStandard (WifiPhyStandard standard)
       // Channel number should be aligned by SetFrequency () to 36
       NS_ASSERT (GetChannelNumber () == 36);
       break;
+    //// WIGIG ////
     case WIFI_PHY_STANDARD_80211ad:
+    case WIFI_PHY_STANDARD_80211ay:
       SetChannelWidth (2160);
       SetFrequency (58320);
-      // Channel number should be aligned by SetFrequency () to 36
+      // Channel number should be aligned by SetFrequency () to 1
       NS_ASSERT (GetChannelNumber () == 1);
       break;
+    //// WIGIG ////
     case WIFI_PHY_STANDARD_80211ac:
       SetChannelWidth (80);
       SetFrequency (5210);
@@ -831,10 +960,8 @@ WifiPhy::ConfigureDefaultsForStandard (WifiPhyStandard standard)
       NS_ASSERT (GetChannelNumber () == 42);
       break;
     case WIFI_PHY_STANDARD_UNSPECIFIED:
-      NS_LOG_WARN ("Configuring unspecified standard; performing no action");
-      break;
     default:
-      NS_ASSERT (false);
+      NS_LOG_WARN ("Configuring unspecified standard; performing no action");
       break;
     }
 }
@@ -924,6 +1051,31 @@ WifiPhy::ConfigureHolland (void)
 }
 
 void
+WifiPhy::PushMcs (WifiMode mode)
+{
+  NS_LOG_FUNCTION (this << mode);
+
+  WifiModulationClass modulation = mode.GetModulationClass ();
+  NS_ASSERT (modulation == WIFI_MOD_CLASS_HT || modulation == WIFI_MOD_CLASS_VHT
+             || modulation == WIFI_MOD_CLASS_HE);
+
+  m_mcsIndexMap[modulation][mode.GetMcsValue ()] = m_deviceMcsSet.size ();
+  m_deviceMcsSet.push_back (mode);
+}
+
+void
+WifiPhy::RebuildMcsMap (void)
+{
+  NS_LOG_FUNCTION (this);
+  m_mcsIndexMap.clear ();
+  uint8_t index = 0;
+  for (auto& mode : m_deviceMcsSet)
+    {
+      m_mcsIndexMap[mode.GetModulationClass ()][mode.GetMcsValue ()] = index++;
+    }
+}
+
+void
 WifiPhy::ConfigureHtDeviceMcsSet (void)
 {
   NS_LOG_FUNCTION (this);
@@ -940,7 +1092,7 @@ WifiPhy::ConfigureHtDeviceMcsSet (void)
   if (htFound)
     {
       // erase all HtMcs modes from deviceMcsSet
-      size_t index = m_deviceMcsSet.size () - 1;
+      std::size_t index = m_deviceMcsSet.size () - 1;
       for (std::vector<WifiMode>::reverse_iterator rit = m_deviceMcsSet.rbegin (); rit != m_deviceMcsSet.rend (); ++rit, --index)
         {
           if (m_deviceMcsSet[index].GetModulationClass () == WIFI_MOD_CLASS_HT)
@@ -948,46 +1100,47 @@ WifiPhy::ConfigureHtDeviceMcsSet (void)
               m_deviceMcsSet.erase (m_deviceMcsSet.begin () + index);
             }
         }
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs0 ());
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs1 ());
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs2 ());
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs3 ());
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs4 ());
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs5 ());
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs6 ());
-      m_deviceMcsSet.push_back (WifiPhy::GetHtMcs7 ());
+      RebuildMcsMap ();
+      PushMcs (WifiPhy::GetHtMcs0 ());
+      PushMcs (WifiPhy::GetHtMcs1 ());
+      PushMcs (WifiPhy::GetHtMcs2 ());
+      PushMcs (WifiPhy::GetHtMcs3 ());
+      PushMcs (WifiPhy::GetHtMcs4 ());
+      PushMcs (WifiPhy::GetHtMcs5 ());
+      PushMcs (WifiPhy::GetHtMcs6 ());
+      PushMcs (WifiPhy::GetHtMcs7 ());
       if (GetMaxSupportedTxSpatialStreams () > 1)
         {
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs8 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs9 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs10 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs11 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs12 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs13 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs14 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs15 ());
+          PushMcs (WifiPhy::GetHtMcs8 ());
+          PushMcs (WifiPhy::GetHtMcs9 ());
+          PushMcs (WifiPhy::GetHtMcs10 ());
+          PushMcs (WifiPhy::GetHtMcs11 ());
+          PushMcs (WifiPhy::GetHtMcs12 ());
+          PushMcs (WifiPhy::GetHtMcs13 ());
+          PushMcs (WifiPhy::GetHtMcs14 ());
+          PushMcs (WifiPhy::GetHtMcs15 ());
         }
       if (GetMaxSupportedTxSpatialStreams () > 2)
         {
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs16 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs17 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs18 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs19 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs20 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs21 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs22 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs23 ());
+          PushMcs (WifiPhy::GetHtMcs16 ());
+          PushMcs (WifiPhy::GetHtMcs17 ());
+          PushMcs (WifiPhy::GetHtMcs18 ());
+          PushMcs (WifiPhy::GetHtMcs19 ());
+          PushMcs (WifiPhy::GetHtMcs20 ());
+          PushMcs (WifiPhy::GetHtMcs21 ());
+          PushMcs (WifiPhy::GetHtMcs22 ());
+          PushMcs (WifiPhy::GetHtMcs23 ());
         }
       if (GetMaxSupportedTxSpatialStreams () > 3)
         {
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs24 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs25 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs26 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs27 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs28 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs29 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs30 ());
-          m_deviceMcsSet.push_back (WifiPhy::GetHtMcs31 ());
+          PushMcs (WifiPhy::GetHtMcs24 ());
+          PushMcs (WifiPhy::GetHtMcs25 ());
+          PushMcs (WifiPhy::GetHtMcs26 ());
+          PushMcs (WifiPhy::GetHtMcs27 ());
+          PushMcs (WifiPhy::GetHtMcs28 ());
+          PushMcs (WifiPhy::GetHtMcs29 ());
+          PushMcs (WifiPhy::GetHtMcs30 ());
+          PushMcs (WifiPhy::GetHtMcs31 ());
         }
     }
 }
@@ -1015,16 +1168,16 @@ WifiPhy::Configure80211ac (void)
   NS_LOG_FUNCTION (this);
   Configure80211n ();
 
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs0 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs1 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs2 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs3 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs4 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs5 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs6 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs7 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs8 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetVhtMcs9 ());
+  PushMcs (WifiPhy::GetVhtMcs0 ());
+  PushMcs (WifiPhy::GetVhtMcs1 ());
+  PushMcs (WifiPhy::GetVhtMcs2 ());
+  PushMcs (WifiPhy::GetVhtMcs3 ());
+  PushMcs (WifiPhy::GetVhtMcs4 ());
+  PushMcs (WifiPhy::GetVhtMcs5 ());
+  PushMcs (WifiPhy::GetVhtMcs6 ());
+  PushMcs (WifiPhy::GetVhtMcs7 ());
+  PushMcs (WifiPhy::GetVhtMcs8 ());
+  PushMcs (WifiPhy::GetVhtMcs9 ());
 
   m_bssMembershipSelectorSet.push_back (VHT_PHY);
 }
@@ -1033,23 +1186,27 @@ void
 WifiPhy::Configure80211ax (void)
 {
   NS_LOG_FUNCTION (this);
-  Configure80211n ();
   if (Is5Ghz (GetFrequency ()))
     {
       Configure80211ac ();
     }
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs0 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs1 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs2 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs3 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs4 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs5 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs6 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs7 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs8 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs9 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs10 ());
-  m_deviceMcsSet.push_back (WifiPhy::GetHeMcs11 ());
+  else
+    {
+      Configure80211n ();
+    }
+
+  PushMcs (WifiPhy::GetHeMcs0 ());
+  PushMcs (WifiPhy::GetHeMcs1 ());
+  PushMcs (WifiPhy::GetHeMcs2 ());
+  PushMcs (WifiPhy::GetHeMcs3 ());
+  PushMcs (WifiPhy::GetHeMcs4 ());
+  PushMcs (WifiPhy::GetHeMcs5 ());
+  PushMcs (WifiPhy::GetHeMcs6 ());
+  PushMcs (WifiPhy::GetHeMcs7 ());
+  PushMcs (WifiPhy::GetHeMcs8 ());
+  PushMcs (WifiPhy::GetHeMcs9 ());
+  PushMcs (WifiPhy::GetHeMcs10 ());
+  PushMcs (WifiPhy::GetHeMcs11 ());
 
   m_bssMembershipSelectorSet.push_back (HE_PHY);
 }
@@ -1057,7 +1214,7 @@ WifiPhy::Configure80211ax (void)
 bool
 WifiPhy::DefineChannelNumber (uint8_t channelNumber, WifiPhyStandard standard, uint16_t frequency, uint16_t channelWidth)
 {
-  NS_LOG_FUNCTION (this << +channelNumber << standard << frequency << +channelWidth);
+  NS_LOG_FUNCTION (this << +channelNumber << standard << frequency << channelWidth);
   ChannelNumberStandardPair p = std::make_pair (channelNumber, standard);
   ChannelToFrequencyWidthMap::const_iterator it;
   it = m_channelToFrequencyWidth.find (p);
@@ -1196,8 +1353,6 @@ WifiPhy::DoConfigureStandard (void)
       ConfigureHolland ();
       break;
     case WIFI_PHY_STANDARD_80211n_2_4GHZ:
-      Configure80211n ();
-      break;
     case WIFI_PHY_STANDARD_80211n_5GHZ:
       Configure80211n ();
       break;
@@ -1205,11 +1360,10 @@ WifiPhy::DoConfigureStandard (void)
       Configure80211ac ();
       break;
     case WIFI_PHY_STANDARD_80211ax_2_4GHZ:
-      Configure80211ax ();
-      break;
     case WIFI_PHY_STANDARD_80211ax_5GHZ:
       Configure80211ax ();
       break;
+    case WIFI_PHY_STANDARD_UNSPECIFIED:
     default:
       NS_ASSERT (false);
       break;
@@ -1286,13 +1440,18 @@ WifiPhy::GetFrequency (void) const
 }
 
 void
-WifiPhy::SetChannelWidth (uint16_t channelwidth)
+WifiPhy::SetChannelWidth (uint16_t channelWidth)
 {
-  NS_LOG_FUNCTION (this << channelwidth);
-  NS_ASSERT_MSG (channelwidth == 5 || channelwidth == 10 || channelwidth == 20 || channelwidth == 22 || channelwidth == 40 || channelwidth == 80 || channelwidth == 160 || channelwidth == 2160, "wrong channel width value");
-  bool changed = (m_channelWidth == channelwidth);
-  m_channelWidth = channelwidth;
-  AddSupportedChannelWidth (channelwidth);
+  NS_LOG_FUNCTION (this << channelWidth);
+  //// WIGIG ////
+  NS_ASSERT_MSG (channelWidth == 5 || channelWidth == 10 || channelWidth == 20 || channelWidth == 22
+                 || channelWidth == 40 || channelWidth == 80 || channelWidth == 160
+                 || channelWidth == 2160 || channelWidth == 4320 || channelWidth == 6480 || channelWidth == 8640,
+                 "wrong channel width value");
+  //// WIGIG ////
+  bool changed = (m_channelWidth != channelWidth);
+  m_channelWidth = channelWidth;
+  AddSupportedChannelWidth (channelWidth);
   if (changed && !m_capabilitiesChangedCallback.IsNull ())
     {
       m_capabilitiesChangedCallback ();
@@ -1323,7 +1482,7 @@ void
 WifiPhy::SetMaxSupportedTxSpatialStreams (uint8_t streams)
 {
   NS_ASSERT (streams <= GetNumberOfAntennas ());
-  bool changed = (m_txSpatialStreams == streams);
+  bool changed = (m_txSpatialStreams != streams);
   m_txSpatialStreams = streams;
   ConfigureHtDeviceMcsSet ();
   if (changed && !m_capabilitiesChangedCallback.IsNull ())
@@ -1342,7 +1501,7 @@ void
 WifiPhy::SetMaxSupportedRxSpatialStreams (uint8_t streams)
 {
   NS_ASSERT (streams <= GetNumberOfAntennas ());
-  bool changed = (m_rxSpatialStreams == streams);
+  bool changed = (m_rxSpatialStreams != streams);
   m_rxSpatialStreams = streams;
   if (changed && !m_capabilitiesChangedCallback.IsNull ())
     {
@@ -1359,63 +1518,13 @@ WifiPhy::GetMaxSupportedRxSpatialStreams (void) const
 uint8_t
 WifiPhy::GetNBssMembershipSelectors (void) const
 {
-  return m_bssMembershipSelectorSet.size ();
+  return static_cast<uint8_t> (m_bssMembershipSelectorSet.size ());
 }
 
 uint8_t
 WifiPhy::GetBssMembershipSelector (uint8_t selector) const
 {
   return m_bssMembershipSelectorSet[selector];
-}
-
-WifiModeList
-WifiPhy::GetMembershipSelectorModes (uint32_t selector)
-{
-  uint32_t id = GetBssMembershipSelector (selector);
-  WifiModeList supportedmodes;
-  if (id == HT_PHY || id == VHT_PHY || id == HE_PHY)
-    {
-      //mandatory MCS 0 to 7
-      supportedmodes.push_back (WifiPhy::GetHtMcs0 ());
-      supportedmodes.push_back (WifiPhy::GetHtMcs1 ());
-      supportedmodes.push_back (WifiPhy::GetHtMcs2 ());
-      supportedmodes.push_back (WifiPhy::GetHtMcs3 ());
-      supportedmodes.push_back (WifiPhy::GetHtMcs4 ());
-      supportedmodes.push_back (WifiPhy::GetHtMcs5 ());
-      supportedmodes.push_back (WifiPhy::GetHtMcs6 ());
-      supportedmodes.push_back (WifiPhy::GetHtMcs7 ());
-    }
-  if (id == VHT_PHY || id == HE_PHY)
-    {
-      //mandatory MCS 0 to 9
-      supportedmodes.push_back (WifiPhy::GetVhtMcs0 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs1 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs2 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs3 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs4 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs5 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs6 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs7 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs8 ());
-      supportedmodes.push_back (WifiPhy::GetVhtMcs9 ());
-    }
-  if (id == HE_PHY)
-    {
-      //mandatory MCS 0 to 11
-      supportedmodes.push_back (WifiPhy::GetHeMcs0 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs1 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs2 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs3 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs4 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs5 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs6 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs7 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs8 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs9 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs10 ());
-      supportedmodes.push_back (WifiPhy::GetHeMcs11 ());
-    }
-  return supportedmodes;
 }
 
 void
@@ -1497,7 +1606,7 @@ WifiPhy::SetChannelNumber (uint8_t nch)
     }
   else
     {
-      NS_FATAL_ERROR ("Frequency not found for channel number " << nch);
+      NS_FATAL_ERROR ("Frequency not found for channel number " << +nch);
     }
 }
 
@@ -1507,36 +1616,11 @@ WifiPhy::GetChannelNumber (void) const
   return m_channelNumber;
 }
 
-void
-WifiPhy::AddOperationalChannel (uint16_t channelNumber)
-{
-  m_operationalChannelList.push_back (channelNumber);
-}
-
-std::vector<uint16_t>
-WifiPhy::GetOperationalChannelList () const
-{
-  std::vector<uint16_t> channelList;
-  channelList.push_back (m_channelNumber);
-  for (std::vector<uint16_t>::size_type i = 0; i != m_operationalChannelList.size (); i++)
-    {
-      if (m_operationalChannelList[i] != m_channelNumber)
-        {
-          channelList.push_back (m_channelNumber);
-        }
-    }
-  return channelList;
-}
-
-void
-WifiPhy::ClearOperationalChannelList ()
-{
-  m_operationalChannelList.clear ();
-}
-
 bool
 WifiPhy::DoChannelSwitch (uint8_t nch)
 {
+  m_powerRestricted = false;
+  m_channelAccessRequested = false;
   if (!IsInitialized ())
     {
       //this is not channel switch, this is initialization
@@ -1549,8 +1633,9 @@ WifiPhy::DoChannelSwitch (uint8_t nch)
     {
     case WifiPhyState::RX:
       NS_LOG_DEBUG ("drop packet because of channel switching while reception");
-      m_endPlcpRxEvent.Cancel ();
+      m_endPhyRxEvent.Cancel ();
       m_endRxEvent.Cancel ();
+      m_endPreambleDetectionEvent.Cancel ();
       goto switchChannel;
       break;
     case WifiPhyState::TX:
@@ -1559,6 +1644,11 @@ WifiPhy::DoChannelSwitch (uint8_t nch)
       break;
     case WifiPhyState::CCA_BUSY:
     case WifiPhyState::IDLE:
+      if (m_endPreambleDetectionEvent.IsRunning ())
+        {
+          m_endPreambleDetectionEvent.Cancel ();
+          m_endRxEvent.Cancel ();
+        }
       goto switchChannel;
       break;
     case WifiPhyState::SLEEP:
@@ -1589,6 +1679,8 @@ switchChannel:
 bool
 WifiPhy::DoFrequencySwitch (uint16_t frequency)
 {
+  m_powerRestricted = false;
+  m_channelAccessRequested = false;
   if (!IsInitialized ())
     {
       //this is not channel switch, this is initialization
@@ -1601,8 +1693,9 @@ WifiPhy::DoFrequencySwitch (uint16_t frequency)
     {
     case WifiPhyState::RX:
       NS_LOG_DEBUG ("drop packet because of channel/frequency switching while reception");
-      m_endPlcpRxEvent.Cancel ();
+      m_endPhyRxEvent.Cancel ();
       m_endRxEvent.Cancel ();
+      m_endPreambleDetectionEvent.Cancel ();
       goto switchFrequency;
       break;
     case WifiPhyState::TX:
@@ -1611,6 +1704,11 @@ WifiPhy::DoFrequencySwitch (uint16_t frequency)
       break;
     case WifiPhyState::CCA_BUSY:
     case WifiPhyState::IDLE:
+      if (m_endPreambleDetectionEvent.IsRunning ())
+        {
+          m_endPreambleDetectionEvent.Cancel ();
+          m_endRxEvent.Cancel ();
+        }
       goto switchFrequency;
       break;
     case WifiPhyState::SLEEP:
@@ -1642,6 +1740,8 @@ void
 WifiPhy::SetSleepMode (void)
 {
   NS_LOG_FUNCTION (this);
+  m_powerRestricted = false;
+  m_channelAccessRequested = false;
   switch (m_state->GetState ())
     {
     case WifiPhyState::TX:
@@ -1674,22 +1774,13 @@ void
 WifiPhy::SetOffMode (void)
 {
   NS_LOG_FUNCTION (this);
-  switch (m_state->GetState ())
-    {
-    case WifiPhyState::RX:
-      m_endPlcpRxEvent.Cancel ();
-      m_endRxEvent.Cancel ();
-    case WifiPhyState::TX:
-    case WifiPhyState::SWITCHING:
-    case WifiPhyState::CCA_BUSY:
-    case WifiPhyState::IDLE:
-    case WifiPhyState::SLEEP:
-      m_state->SwitchToOff ();
-      break;
-    default:
-      NS_ASSERT (false);
-      break;
-    }
+  m_powerRestricted = false;
+  m_channelAccessRequested = false;
+  m_endPhyRxEvent.Cancel ();
+  m_endRxEvent.Cancel ();
+  m_endPreambleDetectionEvent.Cancel ();
+  m_endTxEvent.Cancel ();
+  m_state->SwitchToOff ();
 }
 
 void
@@ -1710,7 +1801,7 @@ WifiPhy::ResumeFromSleep (void)
     case WifiPhyState::SLEEP:
       {
         NS_LOG_DEBUG ("resuming from sleep mode");
-        Time delayUntilCcaEnd = m_interference.GetEnergyDuration (DbmToW (GetCcaMode1Threshold ()));
+        Time delayUntilCcaEnd = m_interference.GetEnergyDuration (m_ccaEdThresholdW);
         m_state->SwitchFromSleep (delayUntilCcaEnd);
         break;
       }
@@ -1741,7 +1832,7 @@ WifiPhy::ResumeFromOff (void)
     case WifiPhyState::OFF:
       {
         NS_LOG_DEBUG ("resuming from off mode");
-        Time delayUntilCcaEnd = m_interference.GetEnergyDuration (DbmToW (GetCcaMode1Threshold ()));
+        Time delayUntilCcaEnd = m_interference.GetEnergyDuration (m_ccaEdThresholdW);
         m_state->SwitchFromOff (delayUntilCcaEnd);
         break;
       }
@@ -1754,25 +1845,31 @@ WifiPhy::ResumeFromOff (void)
 }
 
 WifiMode
-WifiPhy::GetHtPlcpHeaderMode ()
+WifiPhy::GetHtPhyHeaderMode ()
 {
   return WifiPhy::GetHtMcs0 ();
 }
 
 WifiMode
-WifiPhy::GetVhtPlcpHeaderMode ()
+WifiPhy::GetVhtPhyHeaderMode ()
 {
   return WifiPhy::GetVhtMcs0 ();
 }
 
 WifiMode
-WifiPhy::GetHePlcpHeaderMode ()
+WifiPhy::GetHePhyHeaderMode ()
 {
   return WifiPhy::GetHeMcs0 ();
 }
 
 Time
-WifiPhy::GetPlcpTrainingSymbolDuration (WifiTxVector txVector)
+WifiPhy::GetPreambleDetectionDuration (void)
+{
+  return MicroSeconds (4);
+}
+
+Time
+WifiPhy::GetPhyTrainingSymbolDuration (WifiTxVector txVector)
 {
   uint8_t Ndltf, Neltf;
   //We suppose here that STBC = 0.
@@ -1809,9 +1906,11 @@ WifiPhy::GetPlcpTrainingSymbolDuration (WifiTxVector txVector)
       return MicroSeconds (4 + (4 * Ndltf) + (4 * Neltf));
     case WIFI_PREAMBLE_HT_GF:
       return MicroSeconds ((4 * Ndltf) + (4 * Neltf));
-    case WIFI_PREAMBLE_VHT:
+    case WIFI_PREAMBLE_VHT_SU:
+    case WIFI_PREAMBLE_VHT_MU:
       return MicroSeconds (4 + (4 * Ndltf));
     case WIFI_PREAMBLE_HE_SU:
+    case WIFI_PREAMBLE_HE_MU:
       return MicroSeconds (4 + (8 * Ndltf));
     default:
       return MicroSeconds (0);
@@ -1819,7 +1918,7 @@ WifiPhy::GetPlcpTrainingSymbolDuration (WifiTxVector txVector)
 }
 
 Time
-WifiPhy::GetPlcpHtSigHeaderDuration (WifiPreamble preamble)
+WifiPhy::GetPhyHtSigHeaderDuration (WifiPreamble preamble)
 {
   switch (preamble)
     {
@@ -1834,12 +1933,14 @@ WifiPhy::GetPlcpHtSigHeaderDuration (WifiPreamble preamble)
 }
 
 Time
-WifiPhy::GetPlcpSigA1Duration (WifiPreamble preamble)
+WifiPhy::GetPhySigA1Duration (WifiPreamble preamble)
 {
   switch (preamble)
     {
-    case WIFI_PREAMBLE_VHT:
+    case WIFI_PREAMBLE_VHT_SU:
     case WIFI_PREAMBLE_HE_SU:
+    case WIFI_PREAMBLE_VHT_MU:
+    case WIFI_PREAMBLE_HE_MU:
       //VHT-SIG-A1 and HE-SIG-A1
       return MicroSeconds (4);
     default:
@@ -1849,12 +1950,14 @@ WifiPhy::GetPlcpSigA1Duration (WifiPreamble preamble)
 }
 
 Time
-WifiPhy::GetPlcpSigA2Duration (WifiPreamble preamble)
+WifiPhy::GetPhySigA2Duration (WifiPreamble preamble)
 {
   switch (preamble)
     {
-    case WIFI_PREAMBLE_VHT:
+    case WIFI_PREAMBLE_VHT_SU:
     case WIFI_PREAMBLE_HE_SU:
+    case WIFI_PREAMBLE_VHT_MU:
+    case WIFI_PREAMBLE_HE_MU:
       //VHT-SIG-A2 and HE-SIG-A2
       return MicroSeconds (4);
     default:
@@ -1864,16 +1967,13 @@ WifiPhy::GetPlcpSigA2Duration (WifiPreamble preamble)
 }
 
 Time
-WifiPhy::GetPlcpSigBDuration (WifiPreamble preamble)
+WifiPhy::GetPhySigBDuration (WifiPreamble preamble)
 {
   switch (preamble)
     {
-    case WIFI_PREAMBLE_VHT:
-      //VHT-SIG-B
+    case WIFI_PREAMBLE_VHT_MU:
+    case WIFI_PREAMBLE_HE_MU:
       return MicroSeconds (4);
-    case WIFI_PREAMBLE_HE_SU:
-      //HE-SIG-B: MU not supported so HE-SIG-B not used
-      return MicroSeconds (0);
     default:
       // no SIG-B
       return MicroSeconds (0);
@@ -1881,186 +1981,664 @@ WifiPhy::GetPlcpSigBDuration (WifiPreamble preamble)
 }
 
 WifiMode
-WifiPhy::GetPlcpHeaderMode (WifiTxVector txVector)
+WifiPhy::GetPhyHeaderMode (WifiTxVector txVector)
 {
-  switch (txVector.GetMode ().GetModulationClass ())
+  WifiPreamble preamble = txVector.GetPreambleType ();
+  switch (preamble)
     {
-    case WIFI_MOD_CLASS_OFDM:
-    case WIFI_MOD_CLASS_HT:
-    case WIFI_MOD_CLASS_VHT:
-    case WIFI_MOD_CLASS_HE:
-      switch (txVector.GetChannelWidth ())
-        {
-        case 5:
-          return WifiPhy::GetOfdmRate1_5MbpsBW5MHz ();
-        case 10:
-          return WifiPhy::GetOfdmRate3MbpsBW10MHz ();
-        case 20:
-        case 40:
-        case 80:
-        case 160:
-        default:
-          //(Section 18.3.2 "PLCP frame format"; IEEE Std 802.11-2012)
-          //actually this is only the first part of the PlcpHeader,
-          //because the last 16 bits of the PlcpHeader are using the
-          //same mode of the payload
-          return WifiPhy::GetOfdmRate6Mbps ();
-        }
-    case WIFI_MOD_CLASS_ERP_OFDM:
-      return WifiPhy::GetErpOfdmRate6Mbps ();
-    case WIFI_MOD_CLASS_DSSS:
-    case WIFI_MOD_CLASS_HR_DSSS:
-      if (txVector.GetPreambleType () == WIFI_PREAMBLE_LONG || txVector.GetMode () == WifiPhy::GetDsssRate1Mbps ())
-        {
-          //(Section 16.2.3 "PLCP field definitions" and Section 17.2.2.2 "Long PPDU format"; IEEE Std 802.11-2012)
-          return WifiPhy::GetDsssRate1Mbps ();
-        }
-      else //WIFI_PREAMBLE_SHORT
-        {
-          //(Section 17.2.2.3 "Short PPDU format"; IEEE Std 802.11-2012)
-          return WifiPhy::GetDsssRate2Mbps ();
-        }
+    //// WIGIG ////
+    case WIFI_PREAMBLE_DMG_CTRL:
+      return DmgWifiPhy::GetDMG_MCS0 ();
+    case WIFI_PREAMBLE_DMG_SC:
+      return DmgWifiPhy::GetDMG_MCS1 ();
+    case WIFI_PREAMBLE_DMG_OFDM:
+      return DmgWifiPhy::GetDMG_MCS13 ();
+    case WIFI_PREAMBLE_EDMG_CTRL:
+      return DmgWifiPhy::GetEDMG_MCS0 ();
+    case WIFI_PREAMBLE_EDMG_SC:
+      return DmgWifiPhy::GetEDMG_SC_MCS1 ();
+    case WIFI_PREAMBLE_EDMG_OFDM:
+      return DmgWifiPhy::GetEDMG_OFDM_MCS1 ();
+    //// WIGIG ////
+    case WIFI_PREAMBLE_LONG:
+    case WIFI_PREAMBLE_SHORT:
+      {
+        switch (txVector.GetMode ().GetModulationClass ())
+          {
+            case WIFI_MOD_CLASS_OFDM:
+              {
+                switch (txVector.GetChannelWidth ())
+                  {
+                    case 5:
+                      return WifiPhy::GetOfdmRate1_5MbpsBW5MHz ();
+                    case 10:
+                      return WifiPhy::GetOfdmRate3MbpsBW10MHz ();
+                    case 20:
+                    default:
+                      //(Section 17.3.2 "PPDU frame format"; IEEE Std 802.11-2016)
+                      //actually this is only the first part of the PhyHeader,
+                      //because the last 16 bits of the PhyHeader are using the
+                      //same mode of the payload
+                      return WifiPhy::GetOfdmRate6Mbps ();
+                  }
+              }
+            case WIFI_MOD_CLASS_ERP_OFDM:
+              return WifiPhy::GetErpOfdmRate6Mbps ();
+            case WIFI_MOD_CLASS_DSSS:
+            case WIFI_MOD_CLASS_HR_DSSS:
+              {
+                if (preamble == WIFI_PREAMBLE_LONG || txVector.GetMode () == WifiPhy::GetDsssRate1Mbps ())
+                  {
+                    //(Section 16.2.3 "PPDU field definitions" and Section 16.2.2.2 "Long PPDU format"; IEEE Std 802.11-2016)
+                    return WifiPhy::GetDsssRate1Mbps ();
+                  }
+                else
+                  {
+                    //(Section 16.2.2.3 "Short PPDU format"; IEEE Std 802.11-2016)
+                    return WifiPhy::GetDsssRate2Mbps ();
+                  }
+              }
+            default:
+              NS_FATAL_ERROR ("unsupported modulation class");
+              return WifiMode ();
+          }
+      }
+    case WIFI_PREAMBLE_HT_MF:
+    case WIFI_PREAMBLE_HT_GF:
+    case WIFI_PREAMBLE_VHT_SU:
+    case WIFI_PREAMBLE_VHT_MU:
+    case WIFI_PREAMBLE_HE_SU:
+    case WIFI_PREAMBLE_HE_ER_SU:
+    case WIFI_PREAMBLE_HE_MU:
+    case WIFI_PREAMBLE_HE_TB:
+      return WifiPhy::GetOfdmRate6Mbps ();
     default:
-      NS_FATAL_ERROR ("unsupported modulation class");
+      NS_FATAL_ERROR ("unsupported preamble type");
       return WifiMode ();
     }
 }
 
 Time
-WifiPhy::GetPlcpHeaderDuration (WifiTxVector txVector)
+WifiPhy::GetPhyHeaderDuration (WifiTxVector txVector)
 {
   WifiPreamble preamble = txVector.GetPreambleType ();
-  if (preamble == WIFI_PREAMBLE_NONE)
+  switch (txVector.GetPreambleType ())
     {
-      return MicroSeconds (0);
-    }
-  switch (txVector.GetMode ().GetModulationClass ())
-    {
-    case WIFI_MOD_CLASS_OFDM:
+    //// WIGIG ////
+    case WIFI_PREAMBLE_DMG_CTRL:
+      /* From Annex L (L.5.2.5) */
+      return NanoSeconds (4654);
+    case WIFI_PREAMBLE_DMG_SC:
+      /* From Table 21-4 in 802.11ad spec 21.3.4 */
+      return NanoSeconds (582);
+    case WIFI_PREAMBLE_DMG_OFDM:
+      /* From Table 21-4 in 802.11ad spec 21.3.4 */
+      return NanoSeconds (242);
+    case WIFI_PREAMBLE_EDMG_CTRL:
+      /* From Annex L (L.5.2.5) */
+      /* For EDMG STAs: the L-Header + EDMG-Header-A1 get encoded in the first LDCP codeword - same duration as L-Header (4654).
+       * EDMG-Header-A2 + bits from the payload get encoded in the second LDCP codeword - calculated by GetEDMG_HeaderA_Duration */
+      return NanoSeconds (4654) + GetEDMG_HeaderA_Duration (txVector);
+    case WIFI_PREAMBLE_EDMG_SC:
+      /* From Table 21-4 in 802.11ad spec 21.3.4 */
+      return NanoSeconds (582) + GetEDMG_HeaderA_Duration (txVector) + GetEDMG_HeaderB_Duration (txVector);
+    case WIFI_PREAMBLE_EDMG_OFDM:
+      /* From Table 21-4 in 802.11ad spec 21.3.4 */
+      return NanoSeconds (242) + GetEDMG_HeaderA_Duration (txVector) + GetEDMG_HeaderB_Duration (txVector);
+    //// WIGIG ////
+    case WIFI_PREAMBLE_LONG:
+    case WIFI_PREAMBLE_SHORT:
       {
-        switch (txVector.GetChannelWidth ())
+        switch (txVector.GetMode ().GetModulationClass ())
           {
-          case 20:
-          default:
-            //(Section 18.3.3 "PLCP preamble (SYNC))" and Figure 18-4 "OFDM training structure"; IEEE Std 802.11-2012)
-            //also (Section 18.3.2.4 "Timing related parameters" Table 18-5 "Timing-related parameters"; IEEE Std 802.11-2012)
-            //We return the duration of the SIGNAL field only, since the
-            //SERVICE field (which strictly speaking belongs to the PLCP
-            //header, see Section 18.3.2 and Figure 18-1) is sent using the
-            //payload mode.
+          case WIFI_MOD_CLASS_OFDM:
+            {
+              switch (txVector.GetChannelWidth ())
+                {
+                case 20:
+                default:
+                  //(Section 17.3.3 "PHY preamble (SYNC))" and Figure 17-4 "OFDM training structure"; IEEE Std 802.11-2016)
+                  //also (Section 17.3.2.4 "Timing related parameters" Table 17-5 "Timing-related parameters"; IEEE Std 802.11-2016)
+                  //We return the duration of the SIGNAL field only, since the
+                  //SERVICE field (which strictly speaking belongs to the PHY
+                  //header, see Section 17.3.2 and Figure 17-1) is sent using the
+                  //payload mode.
+                  return MicroSeconds (4);
+                case 10:
+                  //(Section 17.3.2.4 "Timing related parameters" Table 17-5 "Timing-related parameters"; IEEE Std 802.11-2016)
+                  return MicroSeconds (8);
+                case 5:
+                  //(Section 17.3.2.4 "Timing related parameters" Table 17-5 "Timing-related parameters"; IEEE Std 802.11-2016)
+                  return MicroSeconds (16);
+                }
+            }
+          case WIFI_MOD_CLASS_ERP_OFDM:
             return MicroSeconds (4);
-          case 10:
-            //(Section 18.3.2.4 "Timing related parameters" Table 18-5 "Timing-related parameters"; IEEE Std 802.11-2012)
-            return MicroSeconds (8);
-          case 5:
-            //(Section 18.3.2.4 "Timing related parameters" Table 18-5 "Timing-related parameters"; IEEE Std 802.11-2012)
-            return MicroSeconds (16);
-          }
-      }
-    case WIFI_MOD_CLASS_HT:
-      {
-        //L-SIG
-        //IEEE 802.11n Figure 20.1
-        switch (preamble)
-          {
-          case WIFI_PREAMBLE_HT_MF:
+          case WIFI_MOD_CLASS_DSSS:
+          case WIFI_MOD_CLASS_HR_DSSS:
+            {
+              if ((preamble == WIFI_PREAMBLE_SHORT) && (txVector.GetMode ().GetDataRate (22) > 1000000))
+                {
+                  //(Section 16.2.2.3 "Short PPDU format" and Figure 16-2 "Short PPDU format"; IEEE Std 802.11-2016)
+                  return MicroSeconds (24);
+                }
+              else
+                {
+                  //(Section 16.2.2.2 "Long PPDU format" and Figure 16-1 "Short PPDU format"; IEEE Std 802.11-2016)
+                  return MicroSeconds (48);
+                }
+            }
           default:
-            return MicroSeconds (4);
-          case WIFI_PREAMBLE_HT_GF:
+            NS_FATAL_ERROR ("modulation class is not matching the preamble type");
             return MicroSeconds (0);
           }
       }
-    case WIFI_MOD_CLASS_ERP_OFDM:
-    case WIFI_MOD_CLASS_VHT:
+    case WIFI_PREAMBLE_HT_MF:
+    case WIFI_PREAMBLE_VHT_SU:
+    case WIFI_PREAMBLE_VHT_MU:
       //L-SIG
       return MicroSeconds (4);
-    case WIFI_MOD_CLASS_HE:
+    case WIFI_PREAMBLE_HE_SU:
+    case WIFI_PREAMBLE_HE_ER_SU:
+    case WIFI_PREAMBLE_HE_MU:
+    case WIFI_PREAMBLE_HE_TB:
       //LSIG + R-LSIG
       return MicroSeconds (8);
-    case WIFI_MOD_CLASS_DSSS:
-    case WIFI_MOD_CLASS_HR_DSSS:
-      if ((preamble == WIFI_PREAMBLE_SHORT) && (txVector.GetMode ().GetDataRate (22) > 1000000))
-        {
-          //(Section 17.2.2.3 "Short PPDU format" and Figure 17-2 "Short PPDU format"; IEEE Std 802.11-2012)
-          return MicroSeconds (24);
-        }
-      else //WIFI_PREAMBLE_LONG
-        {
-          //(Section 17.2.2.2 "Long PPDU format" and Figure 17-1 "Short PPDU format"; IEEE Std 802.11-2012)
-          return MicroSeconds (48);
-        }
+    case WIFI_PREAMBLE_HT_GF:
+      return MicroSeconds (0);
     default:
-      NS_FATAL_ERROR ("unsupported modulation class");
+      NS_FATAL_ERROR ("unsupported preamble type");
       return MicroSeconds (0);
     }
 }
 
 Time
-WifiPhy::GetPlcpPreambleDuration (WifiTxVector txVector)
+WifiPhy::GetStartOfPacketDuration (WifiTxVector txVector)
+{
+  return MicroSeconds (4);
+}
+
+Time
+WifiPhy::GetPhyPreambleDuration (WifiTxVector txVector)
 {
   WifiPreamble preamble = txVector.GetPreambleType ();
-  if (preamble == WIFI_PREAMBLE_NONE)
+  switch (txVector.GetPreambleType ())
     {
-      return MicroSeconds (0);
-    }
-  switch (txVector.GetMode ().GetModulationClass ())
-    {
-    case WIFI_MOD_CLASS_OFDM:
+    //// WIGIG ////
+    case WIFI_PREAMBLE_DMG_CTRL:
+    case WIFI_PREAMBLE_EDMG_CTRL:
+      // CTRL Preamble = (6400 + 1152) Samples * Tc (Chip Time for SC), Tc = Tccp = 0.57ns.
+      // CTRL Preamble = 4.291 micro seconds.
+      return NanoSeconds (4291);
+
+    case WIFI_PREAMBLE_DMG_SC:
+      // SC Preamble = 3328 Samples (STF: 2176 + CEF: 1152) * Tc (Chip Time for SC), Tc = 0.57ns.
+      // SC Preamble = 1.89 micro seconds.
+      return NanoSeconds (1891);
+
+    case WIFI_PREAMBLE_DMG_OFDM:
+      // OFDM Preamble = 4992 Samples (STF: 2176 + CEF: 1152) * Ts (Chip Time for OFDM), Tc = 0.38ns.
+      // OFDM Preamble = 1.89 micro seconds.
+      return NanoSeconds (1891);
+
+    case WIFI_PREAMBLE_EDMG_SC:
+      // SC Preamble = 3328 Samples (STF: 2176 + CEF: 1152) * Tc (Chip Time for SC), Tc = 0.57ns.
+      // SC Preamble = 1.89 micro seconds.
+      return NanoSeconds (1891) + GetEDMGPreambleDuration (txVector);
+
+    case WIFI_PREAMBLE_EDMG_OFDM:
+      // OFDM Preamble = 4992 Samples (STF: 2176 + CEF: 1152) * Ts (Chip Time for OFDM), Tc = 0.38ns.
+      // OFDM Preamble = 1.89 micro seconds.
+      return NanoSeconds (1891) + GetEDMGPreambleDuration (txVector);
+    //// WIGIG ////
+    case WIFI_PREAMBLE_LONG:
+    case WIFI_PREAMBLE_SHORT:
       {
-        switch (txVector.GetChannelWidth ())
+        switch (txVector.GetMode ().GetModulationClass ())
           {
-          case 20:
-          default:
-            //(Section 18.3.3 "PLCP preamble (SYNC))" Figure 18-4 "OFDM training structure"
-            //also Section 18.3.2.3 "Modulation-dependent parameters" Table 18-4 "Modulation-dependent parameters"; IEEE Std 802.11-2012)
-            return MicroSeconds (16);
-          case 10:
-            //(Section 18.3.3 "PLCP preamble (SYNC))" Figure 18-4 "OFDM training structure"
-            //also Section 18.3.2.3 "Modulation-dependent parameters" Table 18-4 "Modulation-dependent parameters"; IEEE Std 802.11-2012)
-            return MicroSeconds (32);
-          case 5:
-            //(Section 18.3.3 "PLCP preamble (SYNC))" Figure 18-4 "OFDM training structure"
-            //also Section 18.3.2.3 "Modulation-dependent parameters" Table 18-4 "Modulation-dependent parameters"; IEEE Std 802.11-2012)
-            return MicroSeconds (64);
+            case WIFI_MOD_CLASS_OFDM:
+              {
+                switch (txVector.GetChannelWidth ())
+                  {
+                    case 20:
+                    default:
+                      //(Section 17.3.3 "PHY preamble (SYNC))" Figure 17-4 "OFDM training structure"
+                      //also Section 17.3.2.3 "Modulation-dependent parameters" Table 17-4 "Modulation-dependent parameters"; IEEE Std 802.11-2016)
+                      return MicroSeconds (16);
+                    case 10:
+                      //(Section 17.3.3 "PHY preamble (SYNC))" Figure 17-4 "OFDM training structure"
+                      //also Section 17.3.2.3 "Modulation-dependent parameters" Table 17-4 "Modulation-dependent parameters"; IEEE Std 802.11-2016)
+                      return MicroSeconds (32);
+                    case 5:
+                      //(Section 17.3.3 "PHY preamble (SYNC))" Figure 17-4 "OFDM training structure"
+                      //also Section 17.3.2.3 "Modulation-dependent parameters" Table 17-4 "Modulation-dependent parameters"; IEEE Std 802.11-2016)
+                      return MicroSeconds (64);
+                  }
+              }
+            case WIFI_MOD_CLASS_ERP_OFDM:
+              return MicroSeconds (16);
+            case WIFI_MOD_CLASS_DSSS:
+            case WIFI_MOD_CLASS_HR_DSSS:
+              {
+                if ((preamble == WIFI_PREAMBLE_SHORT) && (txVector.GetMode ().GetDataRate (22) > 1000000))
+                  {
+                    //(Section 17.2.2.3 "Short PPDU format)" Figure 17-2 "Short PPDU format"; IEEE Std 802.11-2012)
+                    return MicroSeconds (72);
+                  }
+                else
+                  {
+                    //(Section 17.2.2.2 "Long PPDU format)" Figure 17-1 "Long PPDU format"; IEEE Std 802.11-2012)
+                    return MicroSeconds (144);
+                  }
+              }
+            default:
+              NS_FATAL_ERROR ("modulation class is not matching the preamble type");
+              return MicroSeconds (0);
           }
       }
-    case WIFI_MOD_CLASS_HT:
-    case WIFI_MOD_CLASS_VHT:
-    case WIFI_MOD_CLASS_HE:
+    case WIFI_PREAMBLE_HT_MF:
+    case WIFI_PREAMBLE_VHT_SU:
+    case WIFI_PREAMBLE_VHT_MU:
+    case WIFI_PREAMBLE_HE_SU:
+    case WIFI_PREAMBLE_HE_ER_SU:
+    case WIFI_PREAMBLE_HE_MU:
+    case WIFI_PREAMBLE_HE_TB:
       //L-STF + L-LTF
       return MicroSeconds (16);
-    case WIFI_MOD_CLASS_ERP_OFDM:
+    case WIFI_PREAMBLE_HT_GF:
+      //HT-GF-STF + HT-LTF1
       return MicroSeconds (16);
-    case WIFI_MOD_CLASS_DSSS:
-    case WIFI_MOD_CLASS_HR_DSSS:
-      if ((preamble == WIFI_PREAMBLE_SHORT) && (txVector.GetMode ().GetDataRate (22) > 1000000))
-        {
-          //(Section 17.2.2.3 "Short PPDU format)" Figure 17-2 "Short PPDU format"; IEEE Std 802.11-2012)
-          return MicroSeconds (72);
-        }
-      else //WIFI_PREAMBLE_LONG
-        {
-          //(Section 17.2.2.2 "Long PPDU format)" Figure 17-1 "Long PPDU format"; IEEE Std 802.11-2012)
-          return MicroSeconds (144);
-        }
     default:
-      NS_FATAL_ERROR ("unsupported modulation class");
+      NS_FATAL_ERROR ("unsupported preamble type");
       return MicroSeconds (0);
     }
 }
 
 Time
-WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency)
+WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency, MpduType mpdutype)
 {
-  return GetPayloadDuration (size, txVector, frequency, NORMAL_MPDU, 0);
+  uint32_t totalAmpduSize;
+  double totalAmpduNumSymbols;
+  return GetPayloadDuration (size, txVector, frequency, mpdutype, false, totalAmpduSize, totalAmpduNumSymbols);
 }
 
 Time
-WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency, MpduType mpdutype, uint8_t incFlag)
+WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency, MpduType mpdutype,
+                             bool incFlag, uint32_t &totalAmpduSize, double &totalAmpduNumSymbols)
 {
   WifiMode payloadMode = txVector.GetMode ();
-  WifiPreamble preamble = txVector.GetPreambleType ();
   NS_LOG_FUNCTION (size << payloadMode);
+
+  if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_DMG_CTRL)
+    {
+      uint32_t Ncw;                       /* Number of LDPC codewords. */
+      uint32_t Ldpcw;                     /* Number of bits in the second and any subsequent codeword except the last. */
+      uint32_t Ldplcw;                    /* Number of bits in the last codeword. */
+      uint32_t DencodedSymmbols;          /* Number of differentailly encoded payload symbols. */
+      uint32_t Chips;                     /* Number of chips (After spreading using Ga32 Golay Sequence). */
+      uint32_t Nbits = (size - 8) * 8;    /* Number of bits in the payload part. */
+
+      Ncw = 1 + (uint32_t) ceil ((double (size) - 6) * 8/168);
+      Ldpcw = (uint32_t) ceil ((double (size) - 6) * 8/(Ncw - 1));
+      Ldplcw = (size - 6) * 8 - (Ncw - 2) * Ldpcw;
+      DencodedSymmbols = (672 - (504 - Ldpcw)) * (Ncw - 2) + (672 - (504 - Ldplcw));
+      //      DencodedSymmbols = (Ldpcw + 168) * (Ncw-2) + Ldplcw + 168;
+      Chips = DencodedSymmbols * 32;
+      /* Make sure the result is in nanoseconds. */
+      double ret = double (Chips)/1.76;
+      NS_LOG_DEBUG ("bits " << Nbits << " Diff encoded Symmbols " << DencodedSymmbols << " rate " << payloadMode.GetDataRate() << " Payload Time " << ret << " ns");
+
+      return NanoSeconds (ceil (ret));
+    }
+  else if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_DMG_LP_SC)
+    {
+      //        uint32_t Nbits = (size * 8);  /* Number of bits in the payload part. */
+      //        uint32_t Nrsc;                /* The total number of Reed Solomon codewords */
+      //        uint32_t Nrses;               /* The total number of Reed Solomon encoded symbols */
+      //        Nrsc = (uint32_t) ceil(Nbits/208);
+      //        Nrses = Nbits + Nrsc * 16;
+
+      //        uint32_t Nsbc;                 /* Short Block code Size */
+      //        if (payloadMode.GetCodeRate() == WIFI_CODE_RATE_13_28)
+      //          Nsbc = 16;
+      //        else if (payloadMode.GetCodeRate() == WIFI_CODE_RATE_13_21)
+      //          Nsbc = 12;
+      //        else if (payloadMode.GetCodeRate() == WIFI_CODE_RATE_52_63)
+      //          Nsbc = 9;
+      //        else if (payloadMode.GetCodeRate() == WIFI_CODE_RATE_13_14)
+      //          Nsbc = 8;
+      //        else
+      //          NS_FATAL_ERROR("unsupported code rate");
+
+      //        uint32_t Ncbps;               /* Ncbps = Number of coded bits per symbol. Check Table 21-21 for different constellations. */
+      //        if (payloadMode.GetConstellationSize() == 2)
+      //          Ncbps = 336;
+      //        else if (payloadMode.GetConstellationSize() == 4)
+      //          Ncbps = 2 * 336;
+      //          NS_FATAL_ERROR("unsupported constellation size");
+
+      //        uint32_t Neb;                 /* Total number of encoded bits */
+      //        uint32_t Nblks;               /* Total number of 512 blocks containing 392 data symbols */
+      //        Neb = Nsbc * Nrses;
+      //        Nblks = (uint32_t) ceil(neb/());
+      return NanoSeconds (0);
+    }
+  else if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_DMG_SC)
+    {
+      /* 21.3.4 Timeing Related Parameters, Table 21-4 TData = (Nblks * 512 + 64) * Tc. */
+      /* 21.6.3.2.3.3 (4), Compute Nblks = The number of symbol blocks. */
+
+      uint32_t Ncbpb; // Ncbpb = Number of coded bits per symbol block. Check Table 21-20 for different constellations.
+      if (payloadMode.GetConstellationSize () == 2)
+        Ncbpb = 448;
+      else if (payloadMode.GetConstellationSize () == 4)
+        Ncbpb = 2 * 448;
+      else if (payloadMode.GetConstellationSize () == 16)
+        Ncbpb = 4 * 448;
+      else if (payloadMode.GetConstellationSize () == 64)
+        Ncbpb = 6 * 448;
+      else
+        NS_FATAL_ERROR ("unsupported constellation size");
+
+      uint32_t Nbits = (size * 8); /* Nbits = Number of bits in the payload part. */
+      uint32_t Ncbits;             /* Ncbits = Number of coded bits in the payload part. */
+
+      if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_1_4)
+        Ncbits = Nbits * 4;
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_1_2)
+        Ncbits = Nbits * 2;
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_13_16)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 16.0 / 13);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_3_4)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 4.0 / 3);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_5_8)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 8.0 / 5);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_7_8)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 8.0 / 7);
+      else
+        NS_FATAL_ERROR ("unsupported code rate");
+
+      uint16_t Lcw; /* The LDPC codeword length. */
+      if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_7_8)
+        Lcw = 624;
+      else
+        Lcw = 672;
+
+      uint32_t Ncw = (uint32_t) ceil (double (Ncbits) / double (Lcw));  /* Ncw = The number of LDPC codewords. */
+      uint32_t Nblks = (uint32_t) ceil (double (Ncw) * double (Lcw) / Ncbpb);  /* Nblks = The number of symbol blocks. */
+
+      /* Make sure the result is in nanoseconds. */
+      uint32_t tData = lrint (ceil ((double (Nblks) * 512 + 64) / 1.76)); /* The duration of the data part */
+      NS_LOG_DEBUG ("bits " << Nbits << " cbits " << Ncbits
+                    << " Ncw " << Ncw
+                    << " Nblks " << Nblks
+                    << " rate " << payloadMode.GetDataRate() << " Payload Time " << tData << " ns");
+
+      if (txVector.GetTrainngFieldLength () != 0)
+        {
+          if (tData < OFDMSCMin)
+            tData = OFDMSCMin;
+        }
+      return NanoSeconds (tData);
+    }
+  else if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_DMG_OFDM)
+    {
+      /* 21.3.4 Timeing Related Parameters, Table 21-4 TData = Nsym * Tsys(OFDM) */
+      /* 21.5.3.2.3.3 (5), Compute Nsym = Number of OFDM Symbols */
+
+      uint32_t Ncbps; // Ncbps = Number of coded bits per symbol. Check Table 21-20 for different constellations.
+      if (payloadMode.GetConstellationSize () == 2)
+        Ncbps = 336;
+      else if (payloadMode.GetConstellationSize () == 4)
+        Ncbps = 2 * 336;
+      else if (payloadMode.GetConstellationSize () == 16)
+        Ncbps = 4 * 336;
+      else if (payloadMode.GetConstellationSize () == 64)
+        Ncbps = 6 * 336;
+      else
+        NS_FATAL_ERROR ("unsupported constellation size");
+
+      uint32_t Nbits = (size * 8); /* Nbits = Number of bits in the payload part. */
+      uint32_t Ncbits;             /* Ncbits = Number of coded bits in the payload part. */
+
+      if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_1_4)
+        Ncbits = Nbits * 4;
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_1_2)
+        Ncbits = Nbits * 2;
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_13_16)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 16.0 / 13);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_3_4)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 4.0 / 3);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_5_8)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 8.0 / 5);
+      else
+        NS_FATAL_ERROR ("unsupported code rate");
+
+      uint32_t Ncw = (uint32_t) ceil (double (Ncbits) / 672.0);         /* Ncw = The number of LDPC codewords.  */
+      uint32_t Nsym = (uint32_t) ceil (double (Ncw * 672.0) / Ncbps);   /* Nsym = Number of OFDM Symbols. */
+
+      /* Make sure the result is in nanoseconds */
+      uint32_t tData;       /* The duration of the data part */
+      tData = Nsym * 242;   /* Tsys(OFDM) = 242ns */
+      NS_LOG_DEBUG ("bits " << Nbits << " cbits " << Ncbits << " rate " << payloadMode.GetDataRate() << " Payload Time " << tData << " ns");
+
+      if (txVector.GetTrainngFieldLength () != 0)
+        {
+          if (tData < OFDMBRPMin)
+            tData = OFDMBRPMin;
+        }
+      return NanoSeconds (tData);
+    }
+  else if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_CTRL)
+    {
+      uint32_t Ncw;                       /* Number of LDPC codewords. */
+      uint32_t Ldpcw;                     /* Number of bits in the second and any subsequent codeword except the last. */
+      uint32_t Ldplcw;                    /* Number of bits in the last codeword. */
+      uint32_t DencodedSymmbols;          /* Number of differentailly encoded payload symbols. */
+      uint32_t Chips;                     /* Number of chips (After spreading using Ga32 Golay Sequence). */
+      uint32_t Nbits = (size - 8) * 8;    /* Number of bits in the payload part. */
+
+      Ncw = 1 + (uint32_t) ceil ((double (size) + L_EDMG_Header_A2) * 8/168);
+      Ldpcw = (uint32_t) ceil ((double (size) + L_EDMG_Header_A2) * 8/(Ncw - 1));
+      Ldplcw = (size + L_EDMG_Header_A2) * 8 - (Ncw - 2) * Ldpcw;
+      //DencodedSymmbols = (672 - (504 - Ldpcw)) * (Ncw - 3) + (672 - (504 - Ldplcw));
+      // Change to Ncw-3 once the duration of Header A is calculated properly
+      DencodedSymmbols = (Ldpcw + 168) * (Ncw-2) + (Ldplcw +168);
+      Chips = DencodedSymmbols * 32;
+
+      /* Make sure the result is in nanoseconds. */
+      double ret = double (Chips)/1.76;
+      NS_LOG_DEBUG ("bits " << Nbits << " Diff encoded Symmbols " << DencodedSymmbols << " rate " << payloadMode.GetDataRate() << " Payload Time " << ret << " ns");
+
+      return NanoSeconds (ceil (ret));
+    }
+  else if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_SC)
+    {
+      /* 29.12.3.3 TXTIME calculation for EDMG SC mode, TData = (Nblks * 512 + Ngi) * Tc. */
+      /* 29.5.9.4 (d4), Compute Nblks = The number of symbol blocks. */
+
+      //Once multiple users are enabled - calculate Nblcks for each user - then set Nblks to the maximum Nblks from all users - for loop for all users
+      uint16_t Nspb;  /* Number of symbols per SC symbol block for GI length. */
+
+      if (txVector.GetGaurdIntervalType () == GI_SHORT)
+        Nspb = 480 * txVector.GetNCB ();
+      else if (txVector.GetGaurdIntervalType () == GI_NORMAL)
+        Nspb = 448 * txVector.GetNCB ();
+      else if (txVector.GetGaurdIntervalType () == GI_LONG)
+        Nspb = 384 * txVector.GetNCB ();
+      else
+        NS_FATAL_ERROR ("Unsupported guard interval length");
+
+      // For now we are assuming that the same MCS is used for all STS
+      uint32_t Ncbps; // Ncbps = Number of coded bits per symbol. Check Table 21-20 for different constellations.
+      if (payloadMode.GetConstellationSize () == 2)
+        Ncbps = 1;
+      else if (payloadMode.GetConstellationSize () == 4)
+        Ncbps = 2;
+      else if (payloadMode.GetConstellationSize () == 16)
+        Ncbps = 4;
+      else if (payloadMode.GetConstellationSize () == 64)
+        Ncbps = 6;
+      else
+        NS_FATAL_ERROR ("unsupported constellation size");
+
+      Ncbps = Ncbps * txVector.Get_NUM_STS ();
+
+      uint32_t Nbits = (size * 8); /* Nbits = Number of bits in the payload part. */
+      uint32_t Ncbits;             /* Ncbits = Number of coded bits in the payload part. */
+
+      if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_1_4)
+        Ncbits = Nbits * 4;
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_1_2)
+        Ncbits = Nbits * 2;
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_13_16)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 16.0 / 13);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_3_4)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 4.0 / 3);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_5_8)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 8.0 / 5);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_7_8)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 8.0 / 7);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_2_3)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 3.0 / 2);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_5_6)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 6.0 / 5);
+      else
+        NS_FATAL_ERROR ("unsupported code rate");
+
+      uint16_t Lcw; /* The LDPC codeword length. */
+
+      if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_2_3 || payloadMode.GetCodeRate () == WIFI_CODE_RATE_5_6)
+        Lcw = 504;
+      else
+        Lcw = 672;
+      if (txVector.GetLdcpCwLength ())
+        {
+          Lcw = Lcw * 2;
+        }
+
+      uint32_t Ncw = (uint32_t) ceil (double (Ncbits) / double (Lcw));  /* Ncw = The number of LDPC codewords. */
+      uint32_t Nblks = (uint32_t) ceil ((double (Ncw) * double (Lcw)) / (Ncbps * Nspb));  /* Nblks = The number of symbol blocks. */
+
+      if (txVector.GetEDMGTrainingFieldLength () != 0)
+        {
+          if (Nblks < aBRPminSCblocks)
+            Nblks = aBRPminSCblocks;
+        }
+
+      uint8_t Ngi = 0; /* the size of the guard interval */
+
+      if (txVector.GetGaurdIntervalType () == GI_LONG)
+        Ngi = 128;
+      else if (txVector.GetGaurdIntervalType () == GI_NORMAL)
+        Ngi = 64;
+      else if (txVector.GetGaurdIntervalType () == GI_SHORT)
+        {
+          if ((txVector.GetNumUsers () == 1) && ((txVector.GetTransmitMask () != CH_BANDWIDTH_216) || (txVector.Get_NUM_STS () != 1)))
+            Ngi = 32;
+          else
+            Ngi = 64;
+        }
+
+      /* Make sure the result is in nanoseconds. */
+      uint32_t tData = lrint (ceil ((double (Nblks) * 512 + Ngi) / 1.76)); /* The duration of the data part */
+      NS_LOG_DEBUG ("bits " << Nbits << " cbits " << Ncbits
+                    << " Ncw " << Ncw
+                    << " Nblks " << Nblks
+                    << " rate " << payloadMode.GetDataRate() << " Payload Time " << tData << " ns");
+
+      return NanoSeconds (tData);
+    }
+  else if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_OFDM)
+    {
+      /* 29.12.3.4 TXTIME calculation for EDMG OFDM mode, TData = (Nsym * (512 + Ngi)) * Ts */
+      /* 21.5.3.2.3.3 (5), Compute Nsym = Number of OFDM Symbols */
+
+      //Once multiple users are enabled - calculate Nsym for each user - then set Nsym to the maximum Nsym from all users - for loop for all users
+
+      uint32_t Nsd; // Nsd = Number of data subcarriers.
+      if (txVector.GetNCB () == 1)
+        Nsd = 336;
+      else if (txVector.GetNCB () == 2)
+        Nsd = 734;
+      else if (txVector.GetNCB () == 3)
+        Nsd = 1134;
+      else if (txVector.GetNCB () == 4)
+        Nsd = 1532;
+      else
+        NS_FATAL_ERROR("Unsupported number of continous channels");
+
+      // Once multimple space-time streams are enabled - sum the Nbpsc for all space-time streams.
+      uint32_t Nbpsc; // Nbpsc = Number of coded bits per constellation point Check Table 115 (ayD4) for different constellations.
+      if (payloadMode.GetConstellationSize () == 2)
+        Nbpsc = 1;
+      else if (payloadMode.GetConstellationSize () == 4)
+        Nbpsc = 2;
+      else if (payloadMode.GetConstellationSize () == 16)
+        Nbpsc = 4;
+      else if (payloadMode.GetConstellationSize () == 64)
+        Nbpsc = 6;
+      else
+        NS_FATAL_ERROR ("unsupported constellation size");
+
+      // For MIMO case
+      Nbpsc = Nbpsc * txVector.Get_NUM_STS ();
+
+      uint32_t Ncbps; // Ncbps = Number of coded bits per symbol. Check Table 21-20 for different constellations.
+      Ncbps = Nsd * Nbpsc;
+
+      uint32_t Nbits = (size * 8); /* Nbits = Number of bits in the payload part. */
+      uint32_t Ncbits;             /* Ncbits = Number of coded bits in the payload part. */
+
+      if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_1_2)
+        Ncbits = Nbits * 2;
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_7_8)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 8.0 / 7);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_13_16)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 16.0 / 13);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_3_4)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 4.0 / 3);
+      else if (payloadMode.GetCodeRate () == WIFI_CODE_RATE_5_8)
+        Ncbits = (uint32_t) ceil (double (Nbits) * 8.0 / 5);
+      else
+        NS_FATAL_ERROR ("unsupported code rate");
+
+      uint16_t Lcw; /* The LDPC codeword length. */
+      Lcw = 672;
+      if (txVector.GetLdcpCwLength ())
+        {
+          Lcw = Lcw * 2;
+        }
+
+      uint32_t Ncw = (uint32_t) ceil (double (Ncbits) / double (Lcw)); /* Ncw = The number of LDPC codewords.  */
+      uint32_t Nsym = (uint32_t) ceil (double (Ncw * Lcw) / Ncbps);    /* Nsym = Number of OFDM Symbols. */
+
+      if (txVector.GetEDMGTrainingFieldLength () != 0)
+        {
+          if (Nsym < aBRPminOFDMblocks)
+            Nsym = aBRPminOFDMblocks;
+        }
+
+      uint8_t Ngi = 0; /* the size of the guard interval */
+      if (txVector.GetGaurdIntervalType () == GI_LONG)
+        Ngi = 192;
+      else if (txVector.GetGaurdIntervalType () == GI_NORMAL)
+        Ngi = 96;
+      else if (txVector.GetGaurdIntervalType () == GI_SHORT)
+        Ngi = 48;
+
+      /* Make sure the result is in nanoseconds */
+      uint32_t tData;       /* The duration of the data part */
+      tData = lrint (ceil ((double (Nsym * (512 + Ngi)) / 2.64))); /* The duration of the data part */
+      NS_LOG_DEBUG ("bits " << Nbits << " cbits " << Ncbits << " rate " << payloadMode.GetDataRate() << " Payload Time " << tData << " ns");
+
+      if (txVector.GetTrainngFieldLength () != 0)
+        {
+          if (tData < OFDMBRPMin)
+            tData = OFDMBRPMin;
+        }
+      return NanoSeconds (tData);
+    }
 
   double stbc = 1;
   if (txVector.IsStbc ()
@@ -2073,13 +2651,13 @@ WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t freq
   double Nes = 1;
   //todo: improve logic to reduce the number of if cases
   //todo: extend to NSS > 4 for VHT rates
-  if (payloadMode.GetUniqueName () == "HtMcs21"
-      || payloadMode.GetUniqueName () == "HtMcs22"
-      || payloadMode.GetUniqueName () == "HtMcs23"
-      || payloadMode.GetUniqueName () == "HtMcs28"
-      || payloadMode.GetUniqueName () == "HtMcs29"
-      || payloadMode.GetUniqueName () == "HtMcs30"
-      || payloadMode.GetUniqueName () == "HtMcs31")
+  if (payloadMode == GetHtMcs21 ()
+      || payloadMode == GetHtMcs22 ()
+      || payloadMode == GetHtMcs23 ()
+      || payloadMode == GetHtMcs28 ()
+      || payloadMode == GetHtMcs29 ()
+      || payloadMode == GetHtMcs30 ()
+      || payloadMode == GetHtMcs31 ())
     {
       Nes = 2;
     }
@@ -2209,7 +2787,7 @@ WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t freq
     case WIFI_MOD_CLASS_VHT:
       {
         //if short GI data rate is used then symbol duration is 3.6us else symbol duration is 4us
-        //In the future has to create a stationmanager that only uses these data rates if sender and receiver support GI
+        //In the future has to create a station manager that only uses these data rates if sender and receiver support GI
         uint16_t gi = txVector.GetGuardInterval ();
         NS_ASSERT (gi == 400 || gi == 800);
         symbolDuration = NanoSeconds (3200 + gi);
@@ -2218,7 +2796,7 @@ WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t freq
     case WIFI_MOD_CLASS_HE:
       {
         //if short GI data rate is used then symbol duration is 3.6us else symbol duration is 4us
-        //In the future has to create a stationmanager that only uses these data rates if sender and receiver support GI
+        //In the future has to create a station manager that only uses these data rates if sender and receiver support GI
         uint16_t gi = txVector.GetGuardInterval ();
         NS_ASSERT (gi == 800 || gi == 1600 || gi == 3200);
         symbolDuration = NanoSeconds (12800 + gi);
@@ -2231,47 +2809,49 @@ WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t freq
   double numDataBitsPerSymbol = payloadMode.GetDataRate (txVector) * symbolDuration.GetNanoSeconds () / 1e9;
 
   double numSymbols = 0;
-  if (mpdutype == MPDU_IN_AGGREGATE && preamble != WIFI_PREAMBLE_NONE)
+  if (mpdutype == FIRST_MPDU_IN_AGGREGATE)
     {
       //First packet in an A-MPDU
       numSymbols = (stbc * (16 + size * 8.0 + 6 * Nes) / (stbc * numDataBitsPerSymbol));
       if (incFlag == 1)
         {
-          m_totalAmpduSize += size;
-          m_totalAmpduNumSymbols += numSymbols;
+          totalAmpduSize += size;
+          totalAmpduNumSymbols += numSymbols;
         }
     }
-  else if (mpdutype == MPDU_IN_AGGREGATE && preamble == WIFI_PREAMBLE_NONE)
+  else if (mpdutype == MIDDLE_MPDU_IN_AGGREGATE)
     {
       //consecutive packets in an A-MPDU
       numSymbols = (stbc * size * 8.0) / (stbc * numDataBitsPerSymbol);
       if (incFlag == 1)
         {
-          m_totalAmpduSize += size;
-          m_totalAmpduNumSymbols += numSymbols;
+          totalAmpduSize += size;
+          totalAmpduNumSymbols += numSymbols;
         }
     }
-  else if (mpdutype == LAST_MPDU_IN_AGGREGATE && preamble == WIFI_PREAMBLE_NONE)
+  else if (mpdutype == LAST_MPDU_IN_AGGREGATE)
     {
       //last packet in an A-MPDU
-      uint32_t totalAmpduSize = m_totalAmpduSize + size;
-      numSymbols = lrint (stbc * ceil ((16 + totalAmpduSize * 8.0 + 6 * Nes) / (stbc * numDataBitsPerSymbol)));
-      NS_ASSERT (m_totalAmpduNumSymbols <= numSymbols);
-      numSymbols -= m_totalAmpduNumSymbols;
+      uint32_t totalSize = totalAmpduSize + size;
+      numSymbols = lrint (stbc * ceil ((16 + totalSize * 8.0 + 6 * Nes) / (stbc * numDataBitsPerSymbol)));
+      NS_ASSERT (totalAmpduNumSymbols <= numSymbols);
+      numSymbols -= totalAmpduNumSymbols;
       if (incFlag == 1)
         {
-          m_totalAmpduSize = 0;
-          m_totalAmpduNumSymbols = 0;
+          totalAmpduSize = 0;
+          totalAmpduNumSymbols = 0;
         }
     }
-  else if (mpdutype == NORMAL_MPDU && preamble != WIFI_PREAMBLE_NONE)
+  else if (mpdutype == NORMAL_MPDU || mpdutype == SINGLE_MPDU)
     {
-      //Not an A-MPDU
+      //Not an A-MPDU or single MPDU (i.e. the current payload contains both service and padding)
+      //The number of OFDM symbols in the data field when BCC encoding
+      //is used is given in equation 19-32 of the IEEE 802.11-2016 standard.
       numSymbols = lrint (stbc * ceil ((16 + size * 8.0 + 6.0 * Nes) / (stbc * numDataBitsPerSymbol)));
     }
   else
     {
-      NS_FATAL_ERROR ("Wrong combination of preamble and packet type");
+      NS_FATAL_ERROR ("Unknown MPDU type");
     }
 
   switch (payloadMode.GetModulationClass ())
@@ -2282,38 +2862,36 @@ WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t freq
         //Add signal extension for ERP PHY
         if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_ERP_OFDM)
           {
-            return FemtoSeconds (numSymbols * symbolDuration.GetFemtoSeconds ()) + MicroSeconds (6);
+            return FemtoSeconds (static_cast<uint64_t> (numSymbols * symbolDuration.GetFemtoSeconds ())) + MicroSeconds (6);
           }
         else
           {
-            return FemtoSeconds (numSymbols * symbolDuration.GetFemtoSeconds ());
+            return FemtoSeconds (static_cast<uint64_t> (numSymbols * symbolDuration.GetFemtoSeconds ()));
           }
       }
     case WIFI_MOD_CLASS_HT:
     case WIFI_MOD_CLASS_VHT:
       {
         if (payloadMode.GetModulationClass () == WIFI_MOD_CLASS_HT && Is2_4Ghz (frequency)
-            && ((mpdutype == NORMAL_MPDU && preamble != WIFI_PREAMBLE_NONE)
-                || (mpdutype == LAST_MPDU_IN_AGGREGATE && preamble == WIFI_PREAMBLE_NONE))) //at 2.4 GHz
+            && (mpdutype == NORMAL_MPDU || mpdutype == SINGLE_MPDU || mpdutype == LAST_MPDU_IN_AGGREGATE)) //at 2.4 GHz
           {
-            return FemtoSeconds (numSymbols * symbolDuration.GetFemtoSeconds ()) + MicroSeconds (6);
+            return FemtoSeconds (static_cast<uint64_t> (numSymbols * symbolDuration.GetFemtoSeconds ())) + MicroSeconds (6);
           }
         else //at 5 GHz
           {
-            return FemtoSeconds (numSymbols * symbolDuration.GetFemtoSeconds ());
+            return FemtoSeconds (static_cast<uint64_t> (numSymbols * symbolDuration.GetFemtoSeconds ()));
           }
       }
     case WIFI_MOD_CLASS_HE:
       {
         if (Is2_4Ghz (frequency)
-            && ((mpdutype == NORMAL_MPDU && preamble != WIFI_PREAMBLE_NONE)
-                || (mpdutype == LAST_MPDU_IN_AGGREGATE && preamble == WIFI_PREAMBLE_NONE))) //at 2.4 GHz
+            && ((mpdutype == NORMAL_MPDU || mpdutype == SINGLE_MPDU || mpdutype == LAST_MPDU_IN_AGGREGATE))) //at 2.4 GHz
           {
-            return FemtoSeconds (numSymbols * symbolDuration.GetFemtoSeconds ()) + MicroSeconds (6);
+            return FemtoSeconds (static_cast<uint64_t> (numSymbols * symbolDuration.GetFemtoSeconds ())) + MicroSeconds (6);
           }
         else //at 5 GHz
           {
-            return FemtoSeconds (numSymbols * symbolDuration.GetFemtoSeconds ());
+            return FemtoSeconds (static_cast<uint64_t> (numSymbols * symbolDuration.GetFemtoSeconds ()));
           }
       }
     case WIFI_MOD_CLASS_DSSS:
@@ -2322,13 +2900,102 @@ WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t freq
     default:
       NS_FATAL_ERROR ("unsupported modulation class");
       return MicroSeconds (0);
-  }
+    }
 }
 
-uint64_t
-WifiPhy::GetTotalTransmittedBits () const
+//// WIGIG ////
+Time
+WifiPhy::GetEDMGPreambleDuration (WifiTxVector txVector)
 {
-  return m_totalBits;
+  switch (txVector.GetMode ().GetModulationClass ())
+    {
+    case WIFI_MOD_CLASS_EDMG_SC:
+      if ((txVector.GetNumUsers () == 1) && (txVector.GetTransmitMask () == CH_BANDWIDTH_216) && (txVector.Get_NUM_STS () == 1))
+        {
+          return NanoSeconds (0);
+        }
+      else if ((txVector.GetNumUsers () >= 1) && ((txVector.GetTransmitMask () != CH_BANDWIDTH_216) || (txVector.Get_NUM_STS () != 1)))
+        {
+          return NanoSeconds (1380 + (1152 + 1280 * (txVector.Get_SC_EDMG_CEF () - 1))/1.76);
+        }
+
+    case WIFI_MOD_CLASS_EDMG_OFDM:
+      // OFDM Preamble = 4992 Samples (STF: 2176 + CEF: 1152) * Ts (Chip Time for OFDM), Tc = 0.38ns.
+      // OFDM Preamble = 1.89 micro seconds.
+      return NanoSeconds (1450 + (704 * txVector.Get_OFDM_EDMG_CEF ())/1.76);
+
+    default:
+      NS_FATAL_ERROR ("Unsupported EDMG preamble");
+      return MicroSeconds (0);
+    }
+}
+
+Time
+WifiPhy::GetEDMG_HeaderA_Duration (WifiTxVector txVector)
+{
+  WifiPreamble preamble = txVector.GetPreambleType ();
+  switch (preamble)
+    {
+    case WIFI_PREAMBLE_EDMG_CTRL:
+      {
+//        uint32_t Ncw;                       /* Number of LDPC codewords. */
+//        uint32_t Ldpcw;                     /* Number of bits in the second and any subsequent codeword except the last. */
+//        Ncw = 1 + (uint32_t) ceil ((double (size) + L_EDMG_Header_A2) * 8/168);
+//        Ldpcw = (uint32_t) ceil ((double (size) + L_EDMG_Header_A2) * 8/(Ncw - 1));
+//        double ret = double ((Ldpcw + 168) * 32)/1.76;
+//        return NanoSeconds (ceil (ret));
+        return NanoSeconds (0);
+      }
+
+    case WIFI_PREAMBLE_EDMG_SC:
+      if ((txVector.GetNumUsers () == 1) && (txVector.GetTransmitMask () == CH_BANDWIDTH_216) && (txVector.Get_NUM_STS () == 1))
+        {
+          return NanoSeconds (580);
+        }
+      else if ((txVector.GetNumUsers () >= 1) && ((txVector.GetTransmitMask () != CH_BANDWIDTH_216) || (txVector.Get_NUM_STS () != 1)))
+        {
+          return NanoSeconds (620);
+        }
+
+    case WIFI_PREAMBLE_EDMG_OFDM:
+      return NanoSeconds (620);
+
+    default:
+      NS_FATAL_ERROR ("Unsupported EDMG preamble for Header-A");
+      return MicroSeconds (0);
+    }
+}
+
+Time
+WifiPhy::GetEDMG_HeaderB_Duration (WifiTxVector txVector)
+{
+  WifiPreamble preamble = txVector.GetPreambleType ();
+  switch (preamble)
+    {
+    case WIFI_PREAMBLE_EDMG_SC:
+      if (txVector.GetNumUsers () == 1)
+        {
+          return NanoSeconds (0);
+        }
+      else if (txVector.GetNumUsers () >= 1)
+        {
+          return NanoSeconds (290);
+        }
+
+    case WIFI_PREAMBLE_EDMG_OFDM:
+      if (txVector.GetNumUsers () == 1)
+        {
+          return NanoSeconds (0);
+        }
+      else if (txVector.GetNumUsers () >= 1)
+        {
+          return NanoSeconds ((512 + txVector.GetGuardInterval ())/2.64);
+        }
+
+    default:
+      NS_FATAL_ERROR ("Unsupported EDMG preamble for Header-B");
+      return MicroSeconds (0);
+    }
 }
 
 Time
@@ -2336,99 +3003,158 @@ WifiPhy::GetLastRxDuration (void) const
 {
   return m_rxDuration;
 }
+//// WIGIG ////
 
 Time
-WifiPhy::CalculatePlcpPreambleAndHeaderDuration (WifiTxVector txVector)
+WifiPhy::CalculatePhyPreambleAndHeaderDuration (WifiTxVector txVector)
 {
   WifiPreamble preamble = txVector.GetPreambleType ();
-  Time duration = GetPlcpPreambleDuration (txVector)
-    + GetPlcpHeaderDuration (txVector)
-    + GetPlcpHtSigHeaderDuration (preamble)
-    + GetPlcpSigA1Duration (preamble)
-    + GetPlcpSigA2Duration (preamble)
-    + GetPlcpTrainingSymbolDuration (txVector)
-    + GetPlcpSigBDuration (preamble);
-  return duration;
-}
-
-Time
-WifiPhy::CalculateTxDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency, MpduType mpdutype, uint8_t incFlag)
-{
-  Time duration = CalculatePlcpPreambleAndHeaderDuration (txVector)
-    + GetPayloadDuration (size, txVector, frequency, mpdutype, incFlag);
+  Time duration = GetPhyPreambleDuration (txVector)
+    + GetPhyHeaderDuration (txVector)
+    + GetPhyHtSigHeaderDuration (preamble)
+    + GetPhySigA1Duration (preamble)
+    + GetPhySigA2Duration (preamble)
+    + GetPhyTrainingSymbolDuration (txVector)
+    + GetPhySigBDuration (preamble);
   return duration;
 }
 
 Time
 WifiPhy::CalculateTxDuration (uint32_t size, WifiTxVector txVector, uint16_t frequency)
 {
-  return CalculateTxDuration (size, txVector, frequency, NORMAL_MPDU, 0);
+  Time duration = CalculatePhyPreambleAndHeaderDuration (txVector)
+    + GetPayloadDuration (size, txVector, frequency);
+  return duration;
 }
 
 void
-WifiPhy::NotifyTxBegin (Ptr<const Packet> packet)
+WifiPhy::NotifyTxBegin (Ptr<const WifiPsdu> psdu, double txPowerW)
 {
-  m_phyTxBeginTrace (packet);
+  for (auto& mpdu : *PeekPointer (psdu))
+    {
+      m_phyTxBeginTrace (mpdu->GetProtocolDataUnit (), txPowerW);
+    }
 }
 
 void
-WifiPhy::NotifyTxEnd (Ptr<const Packet> packet)
+WifiPhy::NotifyTxEnd (Ptr<const WifiPsdu> psdu)
 {
-  m_phyTxEndTrace (packet);
+  for (auto& mpdu : *PeekPointer (psdu))
+    {
+      m_phyTxEndTrace (mpdu->GetProtocolDataUnit ());
+    }
 }
 
 void
-WifiPhy::NotifyTxDrop (Ptr<const Packet> packet)
+WifiPhy::NotifyTxDrop (Ptr<const WifiPsdu> psdu)
 {
-  m_phyTxDropTrace (packet);
+  for (auto& mpdu : *PeekPointer (psdu))
+    {
+      m_phyTxDropTrace (mpdu->GetProtocolDataUnit ());
+    }
 }
 
 void
-WifiPhy::NotifyRxBegin (Ptr<const Packet> packet)
+WifiPhy::NotifyRxBegin (Ptr<const WifiPsdu> psdu)
 {
-  m_phyRxBeginTrace (packet);
+  for (auto& mpdu : *PeekPointer (psdu))
+    {
+      m_phyRxBeginTrace (mpdu->GetProtocolDataUnit ());
+    }
 }
 
 void
-WifiPhy::NotifyRxEnd (Ptr<const Packet> packet)
+WifiPhy::NotifyRxEnd (Ptr<const WifiPsdu> psdu)
 {
-  m_phyRxEndTrace (packet);
+  for (auto& mpdu : *PeekPointer (psdu))
+    {
+      m_phyRxEndTrace (mpdu->GetProtocolDataUnit ());
+    }
 }
 
 void
-WifiPhy::NotifyRxDrop (Ptr<const Packet> packet)
+WifiPhy::NotifyRxDrop (Ptr<const WifiPsdu> psdu, WifiPhyRxfailureReason reason)
 {
-  m_phyRxDropTrace (packet);
+  for (auto& mpdu : *PeekPointer (psdu))
+    {
+      m_phyRxDropTrace (mpdu->GetProtocolDataUnit (), reason);
+    }
 }
 
 void
-WifiPhy::NotifyMonitorSniffRx (Ptr<const Packet> packet, uint16_t channelFreqMhz, WifiTxVector txVector, MpduInfo aMpdu, SignalNoiseDbm signalNoise)
+WifiPhy::NotifyMonitorSniffRx (Ptr<const WifiPsdu> psdu, uint16_t channelFreqMhz, WifiTxVector txVector,
+                               SignalNoiseDbm signalNoise, std::vector<bool> statusPerMpdu)
 {
-  m_phyMonitorSniffRxTrace (packet, channelFreqMhz, txVector, aMpdu, signalNoise);
+  MpduInfo aMpdu;
+  if (psdu->IsAggregate ())
+    {
+      //Expand A-MPDU
+      NS_ASSERT_MSG (txVector.IsAggregation (), "TxVector with aggregate flag expected here according to PSDU");
+      aMpdu.mpduRefNumber = ++m_rxMpduReferenceNumber;
+      size_t nMpdus = psdu->GetNMpdus ();
+      NS_ASSERT_MSG (statusPerMpdu.size () == nMpdus, "Should have one reception status per MPDU");
+      aMpdu.type = (psdu->IsSingle ()) ? SINGLE_MPDU: FIRST_MPDU_IN_AGGREGATE;
+      for (size_t i = 0; i < nMpdus;)
+        {
+          if (statusPerMpdu.at (i)) //packet received without error, hand over to sniffer
+            {
+              m_phyMonitorSniffRxTrace (psdu->GetAmpduSubframe (i), channelFreqMhz, txVector, aMpdu, signalNoise);
+            }
+          ++i;
+          aMpdu.type = (i == (nMpdus - 1)) ? LAST_MPDU_IN_AGGREGATE : MIDDLE_MPDU_IN_AGGREGATE;
+        }
+    }
+  else
+    {
+      aMpdu.type = NORMAL_MPDU;
+      NS_ASSERT_MSG (statusPerMpdu.size () == 1, "Should have one reception status for normal MPDU");
+      m_phyMonitorSniffRxTrace (psdu->GetPacket (), channelFreqMhz, txVector, aMpdu, signalNoise);
+    }
 }
 
 void
-WifiPhy::NotifyMonitorSniffTx (Ptr<const Packet> packet, uint16_t channelFreqMhz, WifiTxVector txVector, MpduInfo aMpdu)
+WifiPhy::NotifyMonitorSniffTx (Ptr<const WifiPsdu> psdu, uint16_t channelFreqMhz, WifiTxVector txVector)
 {
-  m_phyMonitorSniffTxTrace (packet, channelFreqMhz, txVector, aMpdu);
+  MpduInfo aMpdu;
+  if (psdu->IsAggregate ())
+    {
+      //Expand A-MPDU
+      NS_ASSERT_MSG (txVector.IsAggregation (), "TxVector with aggregate flag expected here according to PSDU");
+      aMpdu.mpduRefNumber = ++m_rxMpduReferenceNumber;
+      size_t nMpdus = psdu->GetNMpdus ();
+      aMpdu.type = (psdu->IsSingle ()) ? SINGLE_MPDU: FIRST_MPDU_IN_AGGREGATE;
+      for (size_t i = 0; i < nMpdus;)
+        {
+          m_phyMonitorSniffTxTrace (psdu->GetAmpduSubframe (i), channelFreqMhz, txVector, aMpdu);
+          ++i;
+          aMpdu.type = (i == (nMpdus - 1)) ? LAST_MPDU_IN_AGGREGATE : MIDDLE_MPDU_IN_AGGREGATE;
+        }
+    }
+  else
+    {
+      aMpdu.type = NORMAL_MPDU;
+      m_phyMonitorSniffTxTrace (psdu->GetPacket (), channelFreqMhz, txVector, aMpdu);
+    }
 }
 
 void
-WifiPhy::SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, Time txDuration, MpduType mpdutype)
+WifiPhy::NotifyEndOfHePreamble (HePreambleParameters params)
 {
-  NS_LOG_FUNCTION (this << packet << txVector.GetMode ()
-                        << txVector.GetMode ().GetDataRate (txVector)
-                        << txVector.GetPreambleType ()
-                        << static_cast<uint16_t> (txVector.GetTxPowerLevel ())
-                        << txDuration
-                        << static_cast<uint16_t> (mpdutype));
+  m_phyEndOfHePreambleTrace (params);
+}
+
+void
+WifiPhy::Send (Ptr<const WifiPsdu> psdu, WifiTxVector txVector)
+{
+  NS_LOG_FUNCTION (this << *psdu << txVector);
   /* Transmission can happen if:
-   *  - we are syncing on a packet. It is the responsability of the
+   *  - we are syncing on a packet. It is the responsibility of the
    *    MAC layer to avoid doing this but the PHY does nothing to
    *    prevent it.
    *  - we are idle
    */
   NS_ASSERT (!m_state->IsStateTx () && !m_state->IsStateSwitching ());
+  NS_ASSERT (m_endTxEvent.IsExpired ());
 
   if (txVector.GetNss () > GetMaxSupportedTxSpatialStreams ())
     {
@@ -2438,177 +3164,273 @@ WifiPhy::SendPacket (Ptr<const Packet> packet, WifiTxVector txVector, Time txDur
   if (m_state->IsStateSleep ())
     {
       NS_LOG_DEBUG ("Dropping packet because in sleep mode");
-      NotifyTxDrop (packet);
+      NotifyTxDrop (psdu);
       return;
     }
 
+  Time txDuration = CalculateTxDuration (psdu->GetSize (), txVector, GetFrequency ());
   NS_ASSERT (txDuration.IsStrictlyPositive ());
 
-  if (m_state->IsStateRx ())
+  if ((m_currentEvent != 0) && (m_currentEvent->GetEndTime () > (Simulator::Now () + m_state->GetDelayUntilIdle ())))
     {
-      m_endPlcpRxEvent.Cancel ();
-      m_endRxEvent.Cancel ();
-      m_interference.NotifyRxEnd ();
+      //that packet will be noise _after_ the transmission.
+      MaybeCcaBusyDuration ();
     }
-  NotifyTxBegin (packet);
-  if ((mpdutype == MPDU_IN_AGGREGATE) && (txVector.GetPreambleType () != WIFI_PREAMBLE_NONE))
-    {
-      //send the first MPDU in an MPDU
-      m_txMpduReferenceNumber++;
-    }
-  MpduInfo aMpdu;
-  aMpdu.type = mpdutype;
-  aMpdu.mpduRefNumber = m_txMpduReferenceNumber;
-  NotifyMonitorSniffTx (packet, GetFrequency (), txVector, aMpdu);
-  m_state->SwitchToTx (txDuration, packet, GetPowerDbm (txVector.GetTxPowerLevel ()), txVector);
 
-  Ptr<Packet> newPacket = packet->Copy (); // obtain non-const Packet
-  WifiPhyTag oldtag;
-  newPacket->RemovePacketTag (oldtag);
+  if (m_currentEvent != 0)
+    {
+      AbortCurrentReception (RECEPTION_ABORTED_BY_TX);
+    }
+
+  if (m_powerRestricted)
+    {
+      NS_LOG_DEBUG ("Transmitting with power restriction");
+    }
+  else
+    {
+      NS_LOG_DEBUG ("Transmitting without power restriction");
+    }
+
   if (m_state->GetState () == WifiPhyState::OFF)
     {
       NS_LOG_DEBUG ("Transmission canceled because device is OFF");
       return;
     }
-  uint8_t isFrameComplete = 1;
+
+  double txPowerW = DbmToW (GetTxPowerForTransmission (txVector) + GetTxGain ());
+  NotifyTxBegin (psdu, txPowerW);
+  m_phyTxPsduBeginTrace (psdu, txVector, txPowerW);
+  NotifyMonitorSniffTx (psdu, GetFrequency (), txVector);
+  m_state->SwitchToTx (txDuration, psdu->GetPacket (), GetPowerDbm (txVector.GetTxPowerLevel ()), txVector);
+
+  Ptr<WifiPpdu> ppdu = Create<WifiPpdu> (psdu, txVector, txDuration, GetFrequency ());
+
   if (m_wifiRadioEnergyModel != 0 && m_wifiRadioEnergyModel->GetMaximumTimeInState (WifiPhyState::TX) < txDuration)
     {
-      isFrameComplete = 0;
+      ppdu->SetTruncatedTx ();
     }
-  WifiPhyTag tag (txVector, mpdutype, isFrameComplete);
-  newPacket->AddPacketTag (tag);
 
-  StartTx (newPacket, txVector, txDuration);
+  m_endTxEvent = Simulator::Schedule (txDuration, &WifiPhy::NotifyTxEnd, this, psdu);
 
-  /* Record duration of the current transmission */
-  m_lastTxDuration = txDuration;
-  /* New Trace for Tx End */
-  Simulator::Schedule (txDuration, &WifiPhy::NotifyTxEnd, this, packet);
+  StartTx (ppdu);
+
+  m_channelAccessRequested = false;
+  m_powerRestricted = false;
 }
 
 void
-WifiPhy::StartReceivePreambleAndHeader (Ptr<Packet> packet, double rxPowerW, Time rxDuration)
+WifiPhy::StartReceiveHeader (Ptr<Event> event)
 {
-  WifiPhyTag tag;
-  bool found = packet->RemovePacketTag (tag);
-  if (!found)
+  NS_LOG_FUNCTION (this << *event);
+  NS_ASSERT (!IsStateRx ());
+  NS_ASSERT (m_endPhyRxEvent.IsExpired ());
+  NS_ASSERT (m_currentEvent != 0);
+  NS_ASSERT (event->GetStartTime () == m_currentEvent->GetStartTime ());
+  NS_ASSERT (event->GetEndTime () == m_currentEvent->GetEndTime ());
+
+  InterferenceHelper::SnrPer snrPer = m_interference.CalculateNonHtPhyHeaderSnrPer (event);
+  double snr = snrPer.snr;
+  NS_LOG_DEBUG ("snr(dB)=" << RatioToDb (snrPer.snr) << ", per=" << snrPer.per);
+
+  if (!m_preambleDetectionModel || (m_preambleDetectionModel->IsPreambleDetected (event->GetRxPowerW (), snr, m_channelWidth)))
     {
-      NS_FATAL_ERROR ("Received Wi-Fi Signal with no WifiPhyTag");
-      return;
+      NotifyRxBegin (event->GetPsdu ());
+
+      m_timeLastPreambleDetected = Simulator::Now ();
+      WifiTxVector txVector = event->GetTxVector ();
+
+      if ((txVector.GetMode ().GetModulationClass () == WIFI_MOD_CLASS_HT) && (txVector.GetPreambleType () == WIFI_PREAMBLE_HT_GF))
+        {
+          //No non-HT PHY header for HT GF
+          Time remainingPreambleHeaderDuration = CalculatePhyPreambleAndHeaderDuration (txVector) - GetPreambleDetectionDuration ();
+          m_state->SwitchMaybeToCcaBusy (remainingPreambleHeaderDuration);
+          m_endPhyRxEvent = Simulator::Schedule (remainingPreambleHeaderDuration, &WifiPhy::StartReceivePayload, this, event);
+        }
+      else
+        {
+          //Schedule end of non-HT PHY header
+          Time remainingPreambleAndNonHtHeaderDuration = GetPhyPreambleDuration (txVector) + GetPhyHeaderDuration (txVector) - GetPreambleDetectionDuration ();
+          m_state->SwitchMaybeToCcaBusy (remainingPreambleAndNonHtHeaderDuration);
+          m_endPhyRxEvent = Simulator::Schedule (remainingPreambleAndNonHtHeaderDuration, &WifiPhy::ContinueReceiveHeader, this, event);
+        }
     }
+  else
+    {
+      NS_LOG_DEBUG ("Drop packet because PHY preamble detection failed");
+      NotifyRxDrop (event->GetPsdu (), PREAMBLE_DETECT_FAILURE);
+      m_interference.NotifyRxEnd ();
+      m_currentEvent = 0;
 
-  WifiTxVector txVector = tag.GetWifiTxVector ();
-  Ptr<Event> event;
-  event = m_interference.Add (packet,
-                              txVector,
-                              rxDuration,
-                              rxPowerW);
+      // Like CCA-SD, CCA-ED is governed by the 4μs CCA window to flag CCA-BUSY
+      // for any received signal greater than the CCA-ED threshold.
+      if (event->GetEndTime () > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
+        {
+          MaybeCcaBusyDuration ();
+        }
+    }
+}
 
-  //This function should be later split to check separately whether plcp preamble and plcp header can be successfully received.
-  //Note: plcp preamble reception is not yet modeled.
+void
+WifiPhy::ContinueReceiveHeader (Ptr<Event> event)
+{
+  NS_LOG_FUNCTION (this << *event);
+  NS_ASSERT (m_endPhyRxEvent.IsExpired ());
+
+  InterferenceHelper::SnrPer snrPer;
+  snrPer = m_interference.CalculateNonHtPhyHeaderSnrPer (event);
+
+  if (m_random->GetValue () > snrPer.per) //non-HT PHY header reception succeeded
+    {
+      NS_LOG_DEBUG ("Received non-HT PHY header");
+      WifiTxVector txVector = event->GetTxVector ();
+      Time remainingRxDuration = event->GetEndTime () - Simulator::Now ();
+      m_state->SwitchMaybeToCcaBusy (remainingRxDuration);
+      Time remainingPreambleHeaderDuration = CalculatePhyPreambleAndHeaderDuration (txVector) - GetPhyPreambleDuration (txVector) - GetPhyHeaderDuration (txVector);
+      m_endPhyRxEvent = Simulator::Schedule (remainingPreambleHeaderDuration, &WifiPhy::StartReceivePayload, this, event);
+    }
+  else //non-HT PHY header reception failed
+    {
+      NS_LOG_DEBUG ("Abort reception because non-HT PHY header reception failed");
+      AbortCurrentReception (L_SIG_FAILURE);
+      if (event->GetEndTime () > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
+        {
+          MaybeCcaBusyDuration ();
+        }
+    }
+}
+
+void
+WifiPhy::StartReceivePreamble (Ptr<WifiPpdu> ppdu, double rxPowerW)
+{
+  NS_LOG_FUNCTION (this << *ppdu << rxPowerW);
+  WifiTxVector txVector = ppdu->GetTxVector ();
+  Time rxDuration = ppdu->GetTxDuration ();
+  Ptr<const WifiPsdu> psdu = ppdu->GetPsdu ();
+  Ptr<Event> event = m_interference.Add (ppdu, txVector, rxDuration, rxPowerW);
+  Time endRx = Simulator::Now () + rxDuration;
+
   if (m_state->GetState () == WifiPhyState::OFF)
     {
       NS_LOG_DEBUG ("Cannot start RX because device is OFF");
-      return;
-    }
-
-  NS_LOG_FUNCTION (this << packet << WToDbm (rxPowerW) << rxDuration);
-
-  if (tag.GetFrameComplete () == 0)
-    {
-      NS_LOG_DEBUG ("drop packet because of incomplete frame");
-      NotifyRxDrop (packet);
-      m_plcpSuccess = false;
-      return;
-    }
-
-  if (txVector.GetMode ().GetModulationClass () == WIFI_MOD_CLASS_HT
-      && (txVector.GetNss () != (1 + (txVector.GetMode ().GetMcsValue () / 8))))
-    {
-      NS_FATAL_ERROR ("MCS value does not match NSS value: MCS = " << +txVector.GetMode ().GetMcsValue () << ", NSS = " << +txVector.GetNss ());
-    }
-
-  Time endRx = Simulator::Now () + rxDuration;
-  if (txVector.GetNss () > GetMaxSupportedRxSpatialStreams ())
-    {
-      NS_LOG_DEBUG ("drop packet because not enough RX antennas");
-      NotifyRxDrop (packet);
-      m_plcpSuccess = false;
-      if (endRx > Simulator::Now () + m_state->GetDelayUntilIdle ())
+      if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
         {
-          //that packet will be noise _after_ the transmission of the
-          //currently-transmitted packet.
           MaybeCcaBusyDuration ();
-          return;
         }
+      return;
     }
 
-  MpduType mpdutype = tag.GetMpduType ();
+  if (ppdu->IsTruncatedTx ())
+    {
+      NS_LOG_DEBUG ("Packet reception stopped because transmitter has been switched off");
+      if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
+        {
+          MaybeCcaBusyDuration ();
+        }
+      return;
+    }
+
+  if (!txVector.GetModeInitialized ())
+    {
+      //If SetRate method was not called above when filling in txVector, this means the PHY does support the rate indicated in PHY SIG headers
+      NS_LOG_DEBUG ("drop packet because of unsupported RX mode");
+      NotifyRxDrop (psdu, UNSUPPORTED_SETTINGS);
+      if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
+        {
+          MaybeCcaBusyDuration ();
+        }
+      return;
+    }
+
   switch (m_state->GetState ())
     {
     case WifiPhyState::SWITCHING:
       NS_LOG_DEBUG ("drop packet because of channel switching");
-      NotifyRxDrop (packet);
-      m_plcpSuccess = false;
+      NotifyRxDrop (psdu, CHANNEL_SWITCHING);
       /*
        * Packets received on the upcoming channel are added to the event list
        * during the switching state. This way the medium can be correctly sensed
        * when the device listens to the channel for the first time after the
        * switching e.g. after channel switching, the channel may be sensed as
-       * busy due to other devices' tramissions started before the end of
+       * busy due to other devices' transmissions started before the end of
        * the switching.
        */
-      if (endRx > Simulator::Now () + m_state->GetDelayUntilIdle ())
+      if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
         {
-          //that packet will be noise _after_ the completion of the
-          //channel switching.
+          //that packet will be noise _after_ the completion of the channel switching.
           MaybeCcaBusyDuration ();
-          return;
         }
       break;
     case WifiPhyState::RX:
       NS_ASSERT (m_currentEvent != 0);
       if (m_frameCaptureModel != 0
+          && m_frameCaptureModel->IsInCaptureWindow (m_timeLastPreambleDetected)
           && m_frameCaptureModel->CaptureNewFrame (m_currentEvent, event))
         {
-          AbortCurrentReception ();
+          AbortCurrentReception (FRAME_CAPTURE_PACKET_SWITCH);
           NS_LOG_DEBUG ("Switch to new packet");
-          StartRx (packet, txVector, mpdutype, rxPowerW, rxDuration, event);
+          StartRx (event, rxPowerW);
         }
       else
         {
-          NS_LOG_DEBUG ("drop packet because already in Rx (power=" <<
+          NS_LOG_DEBUG ("Drop packet because already in Rx (power=" <<
                         rxPowerW << "W)");
-          NotifyRxDrop (packet);
-          if (endRx > Simulator::Now () + m_state->GetDelayUntilIdle ())
+          NotifyRxDrop (psdu, RXING);
+          if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
             {
-              //that packet will be noise _after_ the reception of the
-              //currently-received packet.
+              //that packet will be noise _after_ the reception of the currently-received packet.
               MaybeCcaBusyDuration ();
-              return;
             }
         }
       break;
     case WifiPhyState::TX:
-      NS_LOG_DEBUG ("drop packet because already in Tx (power=" <<
+      NS_LOG_DEBUG ("Drop packet because already in Tx (power=" <<
                     rxPowerW << "W)");
-      NotifyRxDrop (packet);
-      if (endRx > Simulator::Now () + m_state->GetDelayUntilIdle ())
+      NotifyRxDrop (psdu, TXING);
+      if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
         {
-          //that packet will be noise _after_ the transmission of the
-          //currently-transmitted packet.
+          //that packet will be noise _after_ the transmission of the currently-transmitted packet.
           MaybeCcaBusyDuration ();
-          return;
         }
       break;
     case WifiPhyState::CCA_BUSY:
+      if (m_currentEvent != 0)
+        {
+          if (m_frameCaptureModel != 0
+              && m_frameCaptureModel->IsInCaptureWindow (m_timeLastPreambleDetected)
+              && m_frameCaptureModel->CaptureNewFrame (m_currentEvent, event))
+            {
+              AbortCurrentReception (FRAME_CAPTURE_PACKET_SWITCH);
+              NS_LOG_DEBUG ("Switch to new packet");
+              StartRx (event, rxPowerW);
+            }
+          else
+            {
+              NS_LOG_DEBUG ("Drop packet because already in Rx (power=" <<
+                            rxPowerW << "W)");
+              NotifyRxDrop (psdu, RXING);
+              if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
+                {
+                  //that packet will be noise _after_ the reception of the currently-received packet.
+                  MaybeCcaBusyDuration ();
+                }
+            }
+        }
+      else
+        {
+          StartRx (event, rxPowerW);
+        }
+      break;
     case WifiPhyState::IDLE:
-      StartRx (packet, txVector, mpdutype, rxPowerW, rxDuration, event);
+      StartRx (event, rxPowerW);
       break;
     case WifiPhyState::SLEEP:
-      NS_LOG_DEBUG ("drop packet because in sleep mode");
-      NotifyRxDrop (packet);
-      m_plcpSuccess = false;
+      NS_LOG_DEBUG ("Drop packet because in sleep mode");
+      NotifyRxDrop (psdu, SLEEPING);
+      if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
+        {
+          //that packet will be noise _after_ the sleep period.
+          MaybeCcaBusyDuration ();
+        }
       break;
     default:
       NS_FATAL_ERROR ("Invalid WifiPhy state.");
@@ -2624,7 +3446,7 @@ WifiPhy::MaybeCcaBusyDuration ()
   //In this model, CCA becomes busy when the aggregation of all signals as
   //tracked by the InterferenceHelper class is higher than the CcaBusyThreshold
 
-  Time delayUntilCcaEnd = m_interference.GetEnergyDuration (DbmToW (GetCcaMode1Threshold ()));
+  Time delayUntilCcaEnd = m_interference.GetEnergyDuration (m_ccaEdThresholdW);
   if (!delayUntilCcaEnd.IsZero ())
     {
       NS_LOG_DEBUG ("In CCA Busy State for " << delayUntilCcaEnd);
@@ -2637,102 +3459,208 @@ WifiPhy::MaybeCcaBusyDuration ()
 }
 
 void
-WifiPhy::StartReceivePacket (Ptr<Packet> packet,
-                             WifiTxVector txVector,
-                             MpduType mpdutype,
-                             Ptr<Event> event)
+WifiPhy::StartReceivePayload (Ptr<Event> event)
 {
-  NS_LOG_FUNCTION (this << packet << txVector.GetMode () << txVector.GetPreambleType () << +mpdutype);
-  NS_ASSERT (IsStateRx ());
-  NS_ASSERT (m_endPlcpRxEvent.IsExpired ());
+  NS_LOG_FUNCTION (this << *event);
+  NS_ASSERT (m_endPhyRxEvent.IsExpired ());
+  NS_ASSERT (m_endRxEvent.IsExpired ());
+  WifiTxVector txVector = event->GetTxVector ();
   WifiMode txMode = txVector.GetMode ();
-
-  InterferenceHelper::SnrPer snrPer;
-  snrPer = m_interference.CalculatePlcpHeaderSnrPer (event);
-
-  NS_LOG_DEBUG ("snr(dB)=" << RatioToDb (snrPer.snr) << ", per=" << snrPer.per);
-
-  if (m_random->GetValue () > snrPer.per) //plcp reception succeeded
+  bool canReceivePayload;
+  if (txMode.GetModulationClass () >= WIFI_MOD_CLASS_HT)
     {
-      if (IsModeSupported (txMode) || IsMcsSupported (txMode))
-        {
-          NS_LOG_DEBUG ("receiving plcp payload"); //endReceive is already scheduled
-          m_plcpSuccess = true;
-        }
-      else //mode is not allowed
-        {
-          NS_LOG_DEBUG ("drop packet because it was sent using an unsupported mode (" << txMode << ")");
-          NotifyRxDrop (packet);
-          m_plcpSuccess = false;
-        }
+      InterferenceHelper::SnrPer snrPer;
+      snrPer = m_interference.CalculateHtPhyHeaderSnrPer (event);
+      NS_LOG_DEBUG ("snr(dB)=" << RatioToDb (snrPer.snr) << ", per=" << snrPer.per);
+      canReceivePayload = (m_random->GetValue () > snrPer.per);
     }
-  else //plcp reception failed
+  else
     {
-      NS_LOG_DEBUG ("drop packet because plcp preamble/header reception failed");
-      NotifyRxDrop (packet);
-      m_plcpSuccess = false;
+      //If we are here, this means non-HT PHY header was already successfully received
+      canReceivePayload = true;
     }
-}
-
-void
-WifiPhy::EndPsduReceive (Ptr<Packet> packet, WifiPreamble preamble, MpduType mpdutype, Ptr<Event> event)
-{
-  NS_LOG_FUNCTION (this << packet << event);
-  NS_ASSERT (IsStateRx ());
-  NS_ASSERT (event->GetEndTime () == Simulator::Now ());
-
-  InterferenceHelper::SnrPer snrPer;
-  snrPer = m_interference.CalculatePlcpPayloadSnrPer (event);
-  m_interference.NotifyRxEnd ();
-  m_currentEvent = 0;
-
-  if (m_plcpSuccess == true)
+  Time payloadDuration = event->GetEndTime () - event->GetStartTime () - CalculatePhyPreambleAndHeaderDuration (txVector);
+  if (canReceivePayload) //PHY reception succeeded
     {
-      NS_LOG_DEBUG ("mode=" << (event->GetPayloadMode ().GetDataRate (event->GetTxVector ())) <<
-                    ", snr(dB)=" << RatioToDb (snrPer.snr) << ", per=" << snrPer.per << ", size=" << packet->GetSize ());
-      double rnd = m_random->GetValue ();
-      if (rnd > snrPer.per)
+      if (txVector.GetNss () > GetMaxSupportedRxSpatialStreams ())
         {
-          NotifyRxEnd (packet);
-          SignalNoiseDbm signalNoise;
-          signalNoise.signal = RatioToDb (event->GetRxPowerW ()) + 30;
-          signalNoise.noise = RatioToDb (event->GetRxPowerW () / snrPer.snr) + 30;
-          MpduInfo aMpdu;
-          aMpdu.type = mpdutype;
-          aMpdu.mpduRefNumber = m_rxMpduReferenceNumber;
-          NotifyMonitorSniffRx (packet, GetFrequency (), event->GetTxVector (), aMpdu, signalNoise);
-          m_state->SwitchFromRxEndOk (packet, snrPer.snr, event->GetTxVector ());
+          NS_LOG_DEBUG ("Packet reception could not be started because not enough RX antennas");
+          NotifyRxDrop (event->GetPsdu (), UNSUPPORTED_SETTINGS);
+        }
+      else if ((txVector.GetChannelWidth () >= 40) && (txVector.GetChannelWidth () > GetChannelWidth ()))
+        {
+          NS_LOG_DEBUG ("Packet reception could not be started because not enough channel width");
+          NotifyRxDrop (event->GetPsdu (), UNSUPPORTED_SETTINGS);
+        }
+      else if (!IsModeSupported (txMode) && !IsMcsSupported (txMode))
+        {
+          NS_LOG_DEBUG ("Drop packet because it was sent using an unsupported mode (" << txMode << ")");
+          NotifyRxDrop (event->GetPsdu (), UNSUPPORTED_SETTINGS);
         }
       else
         {
-          /* failure. */
-          NS_LOG_DEBUG ("drop packet because the probability to receive it = " << rnd << " is lower than " << snrPer.per);
-          NotifyRxDrop (packet);
-          m_state->SwitchFromRxEndError (packet, snrPer.snr);
+          m_state->SwitchToRx (payloadDuration);
+          m_endRxEvent = Simulator::Schedule (payloadDuration, &WifiPhy::EndReceive, this, event);
+          NS_LOG_DEBUG ("Receiving PSDU");
+          m_phyRxPayloadBeginTrace (txVector, payloadDuration); //this callback (equivalent to PHY-RXSTART primitive) is triggered only if headers have been correctly decoded and that the mode within is supported
+          if (txMode.GetModulationClass () == WIFI_MOD_CLASS_HE)
+            {
+              HePreambleParameters params;
+              params.rssiW = event->GetRxPowerW ();
+              params.bssColor = event->GetTxVector ().GetBssColor ();
+              NotifyEndOfHePreamble (params);
+            }
+          return;
+        }
+    }
+  else //PHY reception failed
+    {
+      NS_LOG_DEBUG ("Drop packet because HT PHY header reception failed");
+      NotifyRxDrop (event->GetPsdu (), SIG_A_FAILURE);
+    }
+  m_endRxEvent = Simulator::Schedule (payloadDuration, &WifiPhy::ResetReceive, this, event);
+}
+
+void
+WifiPhy::EndReceive (Ptr<Event> event)
+{
+  Time psduDuration = event->GetEndTime () - event->GetStartTime ();
+  NS_LOG_FUNCTION (this << *event << psduDuration);
+  NS_ASSERT (GetLastRxEndTime () == Simulator::Now ());
+  NS_ASSERT (event->GetEndTime () == Simulator::Now ());
+
+  double snr = m_interference.CalculateSnr (event);
+  std::vector<bool> statusPerMpdu;
+  SignalNoiseDbm signalNoise;
+
+  Ptr<const WifiPsdu> psdu = event->GetPsdu ();
+  Time relativeStart = NanoSeconds (0);
+  bool receptionOkAtLeastForOneMpdu = false;
+  std::pair<bool, SignalNoiseDbm> rxInfo;
+  WifiTxVector txVector = event->GetTxVector ();
+  size_t nMpdus = psdu->GetNMpdus ();
+  if (nMpdus > 1)
+    {
+      //Extract all MPDUs of the A-MPDU to compute per-MPDU PER stats
+      Time remainingAmpduDuration = psduDuration;
+      MpduType mpdutype = FIRST_MPDU_IN_AGGREGATE;
+      auto mpdu = psdu->begin ();
+      uint32_t totalAmpduSize = 0;
+      double totalAmpduNumSymbols = 0.0;
+      for (size_t i = 0; i < nMpdus && mpdu != psdu->end (); ++mpdu)
+        {
+          Time mpduDuration = GetPayloadDuration (psdu->GetAmpduSubframeSize (i), txVector,
+                                                  GetFrequency (), mpdutype, true, totalAmpduSize, totalAmpduNumSymbols);
+          remainingAmpduDuration -= mpduDuration;
+          if (i == (nMpdus - 1) && !remainingAmpduDuration.IsZero ()) //no more MPDU coming
+            {
+              mpduDuration += remainingAmpduDuration; //apply a correction just in case rounding had induced slight shift
+            }
+          rxInfo = GetReceptionStatus (Create<WifiPsdu> (*mpdu, false),
+                                       event, relativeStart, mpduDuration);
+          NS_LOG_DEBUG ("Extracted MPDU #" << i << ": duration: " << mpduDuration.GetNanoSeconds () << "ns" <<
+                        ", correct reception: " << rxInfo.first <<
+                        ", Signal/Noise: " << rxInfo.second.signal << "/" << rxInfo.second.noise << "dBm");
+          signalNoise = rxInfo.second; //same information for all MPDUs
+          statusPerMpdu.push_back (rxInfo.first);
+          receptionOkAtLeastForOneMpdu |= rxInfo.first;
+
+          //Prepare next iteration
+          ++i;
+          relativeStart += mpduDuration;
+          mpdutype = (i == (nMpdus - 1)) ? LAST_MPDU_IN_AGGREGATE : MIDDLE_MPDU_IN_AGGREGATE;
         }
     }
   else
     {
-      m_state->SwitchFromRxEndError (packet, snrPer.snr);
+      rxInfo = GetReceptionStatus (psdu, event, relativeStart, psduDuration);
+      signalNoise = rxInfo.second; //same information for all MPDUs
+      statusPerMpdu.push_back (rxInfo.first);
+      receptionOkAtLeastForOneMpdu = rxInfo.first;
     }
 
-  if (preamble == WIFI_PREAMBLE_NONE && mpdutype == LAST_MPDU_IN_AGGREGATE)
+  NotifyRxEnd (psdu);
+
+  if (receptionOkAtLeastForOneMpdu)
     {
-      m_plcpSuccess = false;
+      NotifyMonitorSniffRx (psdu, GetFrequency (), txVector, signalNoise, statusPerMpdu);
+      m_state->SwitchFromRxEndOk (Copy (psdu), snr, txVector, statusPerMpdu);
+    }
+  else
+    {
+      m_state->SwitchFromRxEndError (Copy (psdu), snr);
+    }
+
+  m_interference.NotifyRxEnd ();
+  m_currentEvent = 0;
+  MaybeCcaBusyDuration ();
+}
+
+std::pair<bool, SignalNoiseDbm>
+WifiPhy::GetReceptionStatus (Ptr<const WifiPsdu> psdu, Ptr<Event> event, Time relativeMpduStart, Time mpduDuration)
+{
+  NS_LOG_FUNCTION (this << *psdu << *event << relativeMpduStart << mpduDuration);
+  InterferenceHelper::SnrPer snrPer;
+  snrPer = m_interference.CalculatePayloadSnrPer (event, std::make_pair (relativeMpduStart, relativeMpduStart + mpduDuration));
+
+  NS_LOG_DEBUG ("mode=" << (event->GetTxVector ().GetMode ().GetDataRate (event->GetTxVector ())) <<
+                ", snr(dB)=" << RatioToDb (snrPer.snr) << ", per=" << snrPer.per << ", size=" << psdu->GetSize () <<
+                ", relativeStart = " << relativeMpduStart.GetNanoSeconds () << "ns, duration = " << mpduDuration.GetNanoSeconds () << "ns");
+
+  // There are two error checks: PER and receive error model check.
+  // PER check models is typical for Wi-Fi and is based on signal modulation;
+  // Receive error model is optional, if we have an error model and
+  // it indicates that the packet is corrupt, drop the packet.
+  SignalNoiseDbm signalNoise;
+  signalNoise.signal = WToDbm (event->GetRxPowerW ());
+  signalNoise.noise = WToDbm (event->GetRxPowerW () / snrPer.snr);
+  if (m_random->GetValue () > snrPer.per &&
+      !(m_postReceptionErrorModel && m_postReceptionErrorModel->IsCorrupt (psdu->GetPacket ()->Copy ())))
+    {
+      NS_LOG_DEBUG ("Reception succeeded: " << psdu);
+      return std::make_pair (true, signalNoise);
+    }
+  else
+    {
+      NS_LOG_DEBUG ("Reception failed: " << psdu);
+      return std::make_pair (false, signalNoise);
     }
 }
 
 void
-WifiPhy::PacketTxEnd (Ptr<Packet> packet)
+WifiPhy::EndReceiveInterBss (void)
 {
-  m_lastTxDuration = NanoSeconds (0);
-  NotifyTxEnd (packet);
+  NS_LOG_FUNCTION (this);
+  if (!m_channelAccessRequested)
+    {
+      m_powerRestricted = false;
+    }
 }
 
-Time
-WifiPhy::GetLastTxDuration (void) const
+void
+WifiPhy::ResetReceive (Ptr<Event> event)
 {
-  return m_lastTxDuration;
+  NS_LOG_FUNCTION (this << *event);
+  NS_ASSERT (event->GetEndTime () == Simulator::Now ());
+  NS_ASSERT (!IsStateRx ());
+  m_interference.NotifyRxEnd ();
+  m_currentEvent = 0;
+  MaybeCcaBusyDuration ();
+}
+
+//// WIGIG ////
+void
+WifiPhy::EndAllocationPeriod (void)
+{
+  NS_ABORT_MSG ("Should not be called for normal WifiPhy");
+}
+//// WIGIG ////
+
+void
+WifiPhy::NotifyChannelAccessRequested (void)
+{
+  NS_LOG_FUNCTION (this);
+  m_channelAccessRequested = true;
 }
 
 // Clause 15 rates (DSSS)
@@ -3640,20 +4568,33 @@ WifiPhy::IsModeSupported (WifiMode mode) const
 bool
 WifiPhy::IsMcsSupported (WifiMode mcs) const
 {
-  for (uint8_t i = 0; i < GetNMcs (); i++)
+  WifiModulationClass modulation = mcs.GetModulationClass ();
+  if (modulation == WIFI_MOD_CLASS_HT || modulation == WIFI_MOD_CLASS_VHT
+      || modulation == WIFI_MOD_CLASS_HE)
     {
-      if (mcs == GetMcs (i))
-        {
-          return true;
-        }
+      return IsMcsSupported (modulation, mcs.GetMcsValue ());
     }
   return false;
+}
+
+bool
+WifiPhy::IsMcsSupported (WifiModulationClass mc, uint8_t mcs) const
+{
+  if (m_mcsIndexMap.find (mc) == m_mcsIndexMap.end ())
+    {
+      return false;
+    }
+  if (m_mcsIndexMap.at (mc).find (mcs) == m_mcsIndexMap.at (mc).end ())
+    {
+      return false;
+    }
+  return true;
 }
 
 uint8_t
 WifiPhy::GetNModes (void) const
 {
-  return m_deviceRateSet.size ();
+  return static_cast<uint8_t> (m_deviceRateSet.size ());
 }
 
 WifiMode
@@ -3665,13 +4606,43 @@ WifiPhy::GetMode (uint8_t mode) const
 uint8_t
 WifiPhy::GetNMcs (void) const
 {
-  return m_deviceMcsSet.size ();
+  return static_cast<uint8_t> (m_deviceMcsSet.size ());
 }
 
 WifiMode
 WifiPhy::GetMcs (uint8_t mcs) const
 {
   return m_deviceMcsSet[mcs];
+}
+
+WifiMode
+WifiPhy::GetMcs (WifiModulationClass modulation, uint8_t mcs) const
+{
+  NS_ASSERT_MSG (IsMcsSupported (modulation, mcs), "Unsupported MCS");
+  uint8_t index = m_mcsIndexMap.at (modulation).at (mcs);
+  NS_ASSERT (index < m_deviceMcsSet.size ());
+  WifiMode mode = m_deviceMcsSet[index];
+  NS_ASSERT (mode.GetModulationClass () == modulation);
+  NS_ASSERT (mode.GetMcsValue () == mcs);
+  return mode;
+}
+
+WifiMode
+WifiPhy::GetHtMcs (uint8_t mcs) const
+{
+  return GetMcs (WIFI_MOD_CLASS_HT, mcs);
+}
+
+WifiMode
+WifiPhy::GetVhtMcs (uint8_t mcs) const
+{
+  return GetMcs (WIFI_MOD_CLASS_VHT, mcs);
+}
+
+WifiMode
+WifiPhy::GetHeMcs (uint8_t mcs) const
+{
+  return GetMcs (WIFI_MOD_CLASS_HE, mcs);
 }
 
 bool
@@ -3716,12 +4687,6 @@ WifiPhy::IsStateOff (void) const
   return m_state->IsStateOff ();
 }
 
-WifiPhyState
-WifiPhy::GetPhyState (void) const
-{
-  return m_state->GetState ();
-}
-
 Time
 WifiPhy::GetDelayUntilIdle (void)
 {
@@ -3734,6 +4699,12 @@ WifiPhy::GetLastRxStartTime (void) const
   return m_state->GetLastRxStartTime ();
 }
 
+Time
+WifiPhy::GetLastRxEndTime (void) const
+{
+  return m_state->GetLastRxEndTime ();
+}
+
 void
 WifiPhy::SwitchMaybeToCcaBusy (void)
 {
@@ -3743,7 +4714,7 @@ WifiPhy::SwitchMaybeToCcaBusy (void)
   //In this model, CCA becomes busy when the aggregation of all signals as
   //tracked by the InterferenceHelper class is higher than the CcaBusyThreshold
 
-  Time delayUntilCcaEnd = m_interference.GetEnergyDuration (DbmToW (GetCcaMode1Threshold ()));
+  Time delayUntilCcaEnd = m_interference.GetEnergyDuration (m_ccaEdThresholdW);
   if (!delayUntilCcaEnd.IsZero ())
     {
       NS_LOG_DEBUG ("Calling SwitchMaybeToCcaBusy for " << delayUntilCcaEnd.As (Time::S));
@@ -3752,97 +4723,95 @@ WifiPhy::SwitchMaybeToCcaBusy (void)
 }
 
 void
-WifiPhy::AbortCurrentReception ()
+WifiPhy::AbortCurrentReception (WifiPhyRxfailureReason reason)
 {
-  NS_LOG_FUNCTION (this);
-  if (m_endPlcpRxEvent.IsRunning ())
+  NS_LOG_FUNCTION (this << reason);
+  if (m_endPreambleDetectionEvent.IsRunning ())
     {
-      m_endPlcpRxEvent.Cancel ();
+      m_endPreambleDetectionEvent.Cancel ();
+    }
+  if (m_endPhyRxEvent.IsRunning ())
+    {
+      m_endPhyRxEvent.Cancel ();
     }
   if (m_endRxEvent.IsRunning ())
     {
       m_endRxEvent.Cancel ();
     }
-  NotifyRxDrop (m_currentEvent->GetPacket ());
+  NotifyRxDrop (m_currentEvent->GetPsdu (), reason);
   m_interference.NotifyRxEnd ();
-  m_state->SwitchFromRxAbort ();
+  if (reason == OBSS_PD_CCA_RESET)
+    {
+      m_state->SwitchFromRxAbort ();
+    }
   m_currentEvent = 0;
 }
 
 void
-WifiPhy::StartRx (Ptr<Packet> packet, WifiTxVector txVector, MpduType mpdutype, double rxPowerW, Time rxDuration, Ptr<Event> event)
+WifiPhy::ResetCca (bool powerRestricted, double txPowerMaxSiso, double txPowerMaxMimo)
 {
-  NS_LOG_FUNCTION (this << packet << txVector << +mpdutype << rxPowerW << rxDuration);
-  if (rxPowerW > GetEdThresholdW ()) //checked here, no need to check in the payload reception (current implementation assumes constant rx power over the packet duration)
+  NS_LOG_FUNCTION (this << powerRestricted << txPowerMaxSiso << txPowerMaxMimo);
+  m_powerRestricted = powerRestricted;
+  m_txPowerMaxSiso = txPowerMaxSiso;
+  m_txPowerMaxMimo = txPowerMaxMimo;
+  NS_ASSERT ((m_currentEvent->GetEndTime () - Simulator::Now ()).IsPositive ());
+  Simulator::Schedule (m_currentEvent->GetEndTime () - Simulator::Now (), &WifiPhy::EndReceiveInterBss, this);
+  AbortCurrentReception (OBSS_PD_CCA_RESET);
+}
+
+double
+WifiPhy::GetTxPowerForTransmission (WifiTxVector txVector) const
+{
+  NS_LOG_FUNCTION (this << m_powerRestricted);
+  if (!m_powerRestricted)
     {
-      AmpduTag ampduTag;
-      WifiPreamble preamble = txVector.GetPreambleType ();
-      if (preamble == WIFI_PREAMBLE_NONE && (m_mpdusNum == 0 || m_plcpSuccess == false))
-        {
-          m_plcpSuccess = false;
-          m_mpdusNum = 0;
-          NS_LOG_DEBUG ("drop packet because no PLCP preamble/header has been received");
-          NotifyRxDrop (packet);
-          MaybeCcaBusyDuration ();
-          return;
-        }
-      else if (preamble != WIFI_PREAMBLE_NONE && packet->PeekPacketTag (ampduTag) && m_mpdusNum == 0)
-        {
-          //received the first MPDU in an MPDU
-          m_mpdusNum = ampduTag.GetRemainingNbOfMpdus ();
-          m_rxMpduReferenceNumber++;
-        }
-      else if (preamble == WIFI_PREAMBLE_NONE && packet->PeekPacketTag (ampduTag) && m_mpdusNum > 0)
-        {
-          //received the other MPDUs that are part of the A-MPDU
-          if (ampduTag.GetRemainingNbOfMpdus () < (m_mpdusNum - 1))
-            {
-              NS_LOG_DEBUG ("Missing MPDU from the A-MPDU " << m_mpdusNum - ampduTag.GetRemainingNbOfMpdus ());
-              m_mpdusNum = ampduTag.GetRemainingNbOfMpdus ();
-            }
-          else
-            {
-              m_mpdusNum--;
-            }
-        }
-      else if (preamble != WIFI_PREAMBLE_NONE && packet->PeekPacketTag (ampduTag) && m_mpdusNum > 0)
-        {
-          NS_LOG_DEBUG ("New A-MPDU started while " << m_mpdusNum << " MPDUs from previous are lost");
-          m_mpdusNum = ampduTag.GetRemainingNbOfMpdus ();
-        }
-      else if (preamble != WIFI_PREAMBLE_NONE && m_mpdusNum > 0 )
-        {
-          NS_LOG_DEBUG ("Didn't receive the last MPDUs from an A-MPDU " << m_mpdusNum);
-          m_mpdusNum = 0;
-        }
-
-      NS_LOG_DEBUG ("sync to signal (power=" << rxPowerW << "W)");
-      m_currentEvent = event;
-      m_state->SwitchToRx (rxDuration);
-      NS_ASSERT (m_endPlcpRxEvent.IsExpired ());
-      NotifyRxBegin (packet);
-      m_interference.NotifyRxStart ();
-
-      if (preamble != WIFI_PREAMBLE_NONE)
-        {
-          NS_ASSERT (m_endPlcpRxEvent.IsExpired ());
-          Time preambleAndHeaderDuration = CalculatePlcpPreambleAndHeaderDuration (txVector);
-          m_endPlcpRxEvent = Simulator::Schedule (preambleAndHeaderDuration, &WifiPhy::StartReceivePacket, this,
-                                                  packet, txVector, mpdutype, event);
-        }
-
-      NS_ASSERT (m_endRxEvent.IsExpired ());
-      m_endRxEvent = Simulator::Schedule (rxDuration, &WifiPhy::EndPsduReceive, this,
-                                          packet, preamble, mpdutype, event);
+      return GetPowerDbm (txVector.GetTxPowerLevel ());
     }
   else
     {
-      NS_LOG_DEBUG ("drop packet because signal power too Small (" <<
-                    rxPowerW << "<" << GetEdThresholdW () << ")");
-      NotifyRxDrop (packet);
-      m_plcpSuccess = false;
-      MaybeCcaBusyDuration ();
+      if (txVector.GetNss () > 1)
+        {
+          return std::min (m_txPowerMaxMimo, GetPowerDbm (txVector.GetTxPowerLevel ()));
+        }
+      else
+        {
+          return std::min (m_txPowerMaxSiso, GetPowerDbm (txVector.GetTxPowerLevel ()));
+        }
     }
+}
+
+void
+WifiPhy::StartRx (Ptr<Event> event, double rxPowerW)
+{
+  NS_LOG_FUNCTION (this << *event << rxPowerW);
+
+  NS_LOG_DEBUG ("sync to signal (power=" << rxPowerW << "W)");
+  m_interference.NotifyRxStart (); //We need to notify it now so that it starts recording events
+
+  if (!m_endPreambleDetectionEvent.IsRunning ())
+    {
+      Time startOfPreambleDuration = GetPreambleDetectionDuration ();
+      Time remainingRxDuration = event->GetDuration () - startOfPreambleDuration;
+      m_endPreambleDetectionEvent = Simulator::Schedule (startOfPreambleDuration, &WifiPhy::StartReceiveHeader, this, event);
+    }
+  else if ((m_frameCaptureModel != 0) && (rxPowerW > m_currentEvent->GetRxPowerW ()))
+    {
+      NS_LOG_DEBUG ("Received a stronger signal during preamble detection: drop current packet and switch to new packet");
+      NotifyRxDrop (m_currentEvent->GetPsdu (), PREAMBLE_DETECTION_PACKET_SWITCH);
+      m_interference.NotifyRxEnd ();
+      m_endPreambleDetectionEvent.Cancel ();
+      m_interference.NotifyRxStart ();
+      Time startOfPreambleDuration = GetPreambleDetectionDuration ();
+      Time remainingRxDuration = event->GetDuration () - startOfPreambleDuration;
+      m_endPreambleDetectionEvent = Simulator::Schedule (startOfPreambleDuration, &WifiPhy::StartReceiveHeader, this, event);
+    }
+  else
+    {
+      NS_LOG_DEBUG ("Drop packet because RX is already decoding preamble");
+      NotifyRxDrop (event->GetPsdu (), BUSY_DECODING_PREAMBLE);
+      return;
+    }
+  m_currentEvent = event;
 }
 
 int64_t
@@ -3851,30 +4820,6 @@ WifiPhy::AssignStreams (int64_t stream)
   NS_LOG_FUNCTION (this << stream);
   m_random->SetStream (stream);
   return 1;
-}
-
-std::ostream& operator<< (std::ostream& os, WifiPhyState state)
-{
-  switch (state)
-    {
-    case WifiPhyState::IDLE:
-      return (os << "IDLE");
-    case WifiPhyState::CCA_BUSY:
-      return (os << "CCA_BUSY");
-    case WifiPhyState::TX:
-      return (os << "TX");
-    case WifiPhyState::RX:
-      return (os << "RX");
-    case WifiPhyState::SWITCHING:
-      return (os << "SWITCHING");
-    case WifiPhyState::SLEEP:
-      return (os << "SLEEP");
-    case WifiPhyState::OFF:
-      return (os << "OFF");
-    default:
-      NS_FATAL_ERROR ("Invalid WifiPhy state");
-      return (os << "INVALID");
-    }
 }
 
 } //namespace ns3

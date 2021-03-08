@@ -28,16 +28,17 @@
  * NSF grant CNS-1050226 (Multilayer Network Resilience Analysis and Experimentation on GENI),
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
+
+#include <iostream>
+#include <cmath>
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/config-store-module.h"
-#include "ns3/wifi-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/dsdv-helper.h"
-#include <iostream>
-#include <cmath>
+#include "ns3/yans-wifi-helper.h"
 
 using namespace ns3;
 
@@ -151,7 +152,7 @@ int main (int argc, char **argv)
   bool printRoutingTable = true;
   std::string CSVfileName = "DsdvManetExample.csv";
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("nWifis", "Number of wifi nodes[Default:30]", nWifis);
   cmd.AddValue ("nSinks", "Number of wifi sink nodes[Default:10]", nSinks);
   cmd.AddValue ("totalTime", "Total Simulation time[Default:100]", totalTime);

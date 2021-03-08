@@ -11,6 +11,8 @@ import re
 import shlex
 import subprocess
 import textwrap
+import fileinput
+import glob
 
 from utils import read_config_file
 
@@ -30,19 +32,16 @@ modules_enabled  = ['all_modules']
 examples_enabled = False
 tests_enabled    = False
 
-# Compiler warning suppressions
-
-# Bug 1868:  be conservative about -Wstrict-overflow for optimized builds
-# on older compilers; it can generate spurious warnings.  
-gcc_version_warn_strict_overflow = ('4', '8', '2')
+# GCC minimum version requirements for C++11 support
+gcc_min_version = (4, 9, 2)
 
 # Bug 2181:  clang warnings about unused local typedefs and potentially
 # evaluated expressions affecting darwin clang/LLVM version 7.0.0 (Xcode 7)
 # or clang/LLVM version 3.6 or greater.  We must make this platform-specific.
-darwin_clang_version_warn_unused_local_typedefs = ('7', '0', '0')
-darwin_clang_version_warn_potentially_evaluated = ('7', '0', '0')
-clang_version_warn_unused_local_typedefs = ('3', '6', '0')
-clang_version_warn_potentially_evaluated = ('3', '6', '0')
+darwin_clang_version_warn_unused_local_typedefs = (7, 0, 0)
+darwin_clang_version_warn_potentially_evaluated = (7, 0, 0)
+clang_version_warn_unused_local_typedefs = (3, 6, 0)
+clang_version_warn_potentially_evaluated = (3, 6, 0)
 
 # Get the information out of the NS-3 configuration file.
 config_file_exists = False
@@ -111,20 +110,12 @@ def dist_hook():
 
 # Print the sorted list of module names in columns.
 def print_module_names(names):
-    # Sort the list of module names.
-    names.sort()
-
-    # Print the list of module names in 3 columns.
-    i = 1
-    for name in names:
-        print(name.ljust(25), end=' ')
-        if i == 3:
-                print()
-                i = 0
-        i = i+1
-
-    if i != 1:
-        print()
+    """Print the list of module names in 3 columns."""
+    for i, name in enumerate(sorted(names)):
+        if i % 3 == 2 or i == len(names) - 1:
+          print(name)
+        else:
+          print(name.ljust(25), end=' ')
 
 # return types of some APIs differ in Python 2/3 (type string vs class bytes)
 # This method will decode('utf-8') a byte object in Python 3, 
@@ -141,6 +132,7 @@ def maybe_decode(input):
 
 def options(opt):
     # options provided by the modules
+    opt.load('md5_tstamp')
     opt.load('compiler_c')
     opt.load('compiler_cxx')
     opt.load('cflags')
@@ -172,14 +164,24 @@ def options(opt):
 
     opt.add_option('--lcov-report',
                    help=('Generate a code coverage report '
-                         '(use this option at build time, not in configure)'),
+                         '(use this option after configuring with --enable-gcov and running a program)'),
                    action="store_true", default=False,
                    dest='lcov_report')
+
+    opt.add_option('--lcov-zerocounters',
+                   help=('Zero the lcov counters'
+                         '(use this option before rerunning a program, when generating repeated lcov reports)'),
+                   action="store_true", default=False,
+                   dest='lcov_zerocounters')
 
     opt.add_option('--run',
                    help=('Run a locally built program; argument can be a program name,'
                          ' or a command starting with the program name.'),
                    type="string", default='', dest='run')
+    opt.add_option('--run-no-build',
+                   help=('Run a locally built program without rebuilding the project; argument can be a program name,'
+                         ' or a command starting with the program name.'),
+                   type="string", default='', dest='run_no_build')
     opt.add_option('--visualize',
                    help=('Modify --run arguments to enable the visualizer'),
                    action="store_true", default=False, dest='visualize')
@@ -193,6 +195,11 @@ def options(opt):
                          ' argument is the path to the python program, optionally followed'
                          ' by command-line options that are passed to the program.'),
                    type="string", default='', dest='pyrun')
+    opt.add_option('--pyrun-no-build',
+                   help=('Run a python program using locally built ns3 python module without rebuilding the project;'
+                         ' argument is the path to the python program, optionally followed'
+                         ' by command-line options that are passed to the program.'),
+                   type="string", default='', dest='pyrun_no_build')
     opt.add_option('--valgrind',
                    help=('Change the default command template to run programs and unit tests with valgrind'),
                    action="store_true", default=False,
@@ -237,6 +244,10 @@ def options(opt):
                          'but do not wait for ns-3 to finish the full build.'),
                    action="store_true", default=False,
                    dest='doxygen_no_build')
+    opt.add_option('--docset',
+                   help=('Create Docset, without building. This requires the docsetutil tool from Xcode 9.2 or earlier. See Bugzilla 2196 for more details.'),
+                   action="store_true", default=False,
+                   dest="docset_build")
     opt.add_option('--enable-des-metrics',
                    help=('Log all events in a json file with the name of the executable (which must call CommandLine::Parse(argc, argv)'),
                    action="store_true", default=False,
@@ -391,6 +402,11 @@ def configure(conf):
     env['APPNAME'] = wutils.APPNAME
     env['VERSION'] = wutils.VERSION
 
+    if conf.env['CXX_NAME'] in ['gcc']:
+        if tuple(map(int, conf.env['CC_VERSION'])) < gcc_min_version:
+            conf.fatal('gcc version %s older than minimum supported version %s' %
+                       ('.'.join(conf.env['CC_VERSION']), '.'.join(map(str, gcc_min_version))))
+
     if conf.env['CXX_NAME'] in ['gcc', 'icc']:
         if Options.options.build_profile == 'release': 
             env.append_value('CXXFLAGS', '-fomit-frame-pointer') 
@@ -398,7 +414,7 @@ def configure(conf):
             if conf.check_compilation_flag('-march=native'):
                 env.append_value('CXXFLAGS', '-march=native') 
             env.append_value('CXXFLAGS', '-fstrict-overflow')
-            if conf.env['CC_VERSION'] >= gcc_version_warn_strict_overflow:
+            if conf.env['CXX_NAME'] in ['gcc']:
                 env.append_value('CXXFLAGS', '-Wstrict-overflow=2')
 
         if sys.platform == 'win32':
@@ -415,25 +431,25 @@ def configure(conf):
         if libstdcxx_location:
             conf.env.append_value('NS3_MODULE_PATH', libstdcxx_location)
 
-        if Options.platform in ['linux']:
+        if Utils.unversioned_sys_platform() in ['linux']:
             if conf.check_compilation_flag('-Wl,--soname=foo'):
                 env['WL_SONAME_SUPPORTED'] = True
 
     # bug 2181 on clang warning suppressions
     if conf.env['CXX_NAME'] in ['clang']:
-        if Options.platform == 'darwin':
-            if conf.env['CC_VERSION'] >= darwin_clang_version_warn_unused_local_typedefs:
+        if Utils.unversioned_sys_platform() == 'darwin':
+            if tuple(map(int, conf.env['CC_VERSION'])) >= darwin_clang_version_warn_unused_local_typedefs:
                 env.append_value('CXXFLAGS', '-Wno-unused-local-typedefs')
-            if conf.env['CC_VERSION'] >= darwin_clang_version_warn_potentially_evaluated: 
+            if tuple(map(int, conf.env['CC_VERSION'])) >= darwin_clang_version_warn_potentially_evaluated:
                 env.append_value('CXXFLAGS', '-Wno-potentially-evaluated-expression')
         else:
-            if conf.env['CC_VERSION'] >= clang_version_warn_unused_local_typedefs:
+            if tuple(map(int, conf.env['CC_VERSION'])) >= clang_version_warn_unused_local_typedefs:
                 env.append_value('CXXFLAGS', '-Wno-unused-local-typedefs')
-            if conf.env['CC_VERSION'] >= clang_version_warn_potentially_evaluated: 
+            if tuple(map(int, conf.env['CC_VERSION'])) >= clang_version_warn_potentially_evaluated:
                 env.append_value('CXXFLAGS', '-Wno-potentially-evaluated-expression')
     env['ENABLE_STATIC_NS3'] = False
     if Options.options.enable_static:
-        if Options.platform == 'darwin':
+        if Utils.unversioned_sys_platform() == 'darwin':
             if conf.check_compilation_flag(flag=[], linkflags=['-Wl,-all_load']):
                 conf.report_optional_feature("static", "Static build", True, '')
                 env['ENABLE_STATIC_NS3'] = True
@@ -454,6 +470,19 @@ def configure(conf):
         env.append_value('CXXFLAGS', Options.options.cxx_standard)
     else:
         Logs.warn("CXX Standard flag " + Options.options.cxx_standard + " was not recognized, using compiler's default")
+
+    # Find Boost libraries by modules
+    conf.env['REQUIRED_BOOST_LIBS'] = []
+    for modules_dir in ['src', 'contrib']:
+        conf.recurse (modules_dir, name="get_required_boost_libs", mandatory=False)
+
+    if conf.env['REQUIRED_BOOST_LIBS'] is not []:
+        conf.load('boost')
+        conf.check_boost(lib=' '.join (conf.env['REQUIRED_BOOST_LIBS']), mandatory=False)
+        if not conf.env['LIB_BOOST']:
+            conf.check_boost(lib=' '.join (conf.env['REQUIRED_BOOST_LIBS']), libpath="/usr/lib64", mandatory=False)
+            if not conf.env['LIB_BOOST']:
+                conf.env['LIB_BOOST'] = []
 
     # Set this so that the lists won't be printed at the end of this
     # configure command.
@@ -615,10 +644,10 @@ def configure(conf):
                                  conf.env['ENABLE_GSL'],
                                  "GSL not found")
 
-    conf.find_program('libgcrypt-config', var='LIBGCRYPT_CONFIG', msg="python-config", mandatory=False)
+    conf.find_program('libgcrypt-config', var='LIBGCRYPT_CONFIG', msg="libgcrypt-config", mandatory=False)
     if env.LIBGCRYPT_CONFIG:
         conf.check_cfg(path=env.LIBGCRYPT_CONFIG, msg="Checking for libgcrypt", args='--cflags --libs', package='',
-                                     define_name="HAVE_CRYPTO", global_define=True, uselib_store='GCRYPT', mandatory=False)
+                                     define_name="HAVE_GCRYPT", global_define=True, uselib_store='GCRYPT', mandatory=False)
     conf.report_optional_feature("libgcrypt", "Gcrypt library",
                                  conf.env.HAVE_GCRYPT, "libgcrypt not found: you can use libgcrypt-config to find its location.")
 
@@ -641,7 +670,6 @@ def configure(conf):
             if conf.check_compilation_flag(flag, mode='cc'):
                 env.append_value('CCFLAGS', flag)
 
-    add_gcc_flag('-Wno-error=deprecated-declarations')
     add_gcc_flag('-fstrict-aliasing')
     add_gcc_flag('-Wstrict-aliasing')
 
@@ -665,7 +693,7 @@ def configure(conf):
 class SuidBuild_task(Task.Task):
     """task that makes a binary Suid
     """
-    after = 'link'
+    after = ['cxxprogram', 'cxxshlib', 'cxxstlib']
     def __init__(self, *args, **kwargs):
         super(SuidBuild_task, self).__init__(*args, **kwargs)
         self.m_display = 'build-suid'
@@ -706,7 +734,7 @@ def create_suid_program(bld, name):
     program.target = "%s%s-%s%s" % (wutils.APPNAME, wutils.VERSION, name, bld.env.BUILD_SUFFIX)
 
     if bld.env['ENABLE_SUDO']:
-        program.create_task("SuidBuild")
+        program.create_task("SuidBuild_task")
 
     bld.set_group(grp)
 
@@ -807,21 +835,20 @@ def _find_ns3_module(self, name):
 
 # Parse the waf lockfile generated by latest 'configure' operation
 def get_build_profile(env=None):
-    if env == None:
-        lockfile = os.environ.get('WAFLOCK', '.lock-waf_%s_build' % sys.platform)
-        profile = "not found"
-        with open(lockfile, "r") as f:
-            for line in f:
-                if line.startswith("options ="):
-                    key, val = line.split('=')
-                    arr = val.split(',')
-                    for x in arr:
-                        optkey,optval = x.split(':')
-                        if (optkey.lstrip() == '\'build_profile\''):
-                            profile = str(optval.lstrip()).replace("'","")
-    else:
-        profile = Options.options.build_profile
-    return profile
+    if env:
+        return Options.options.build_profile
+
+    lockfile = os.environ.get('WAFLOCK', '.lock-waf_%s_build' % sys.platform)
+    with open(lockfile, "r") as f:
+        for line in f:
+            if line.startswith("options ="):
+                _, val = line.split('=', 1)
+                for x in val.split(','):
+                    optkey, optval = x.split(':')
+                    if (optkey.lstrip() == '\'build_profile\''):
+                        return str(optval.lstrip()).replace("'","")
+
+    return "not found"
 
 def build(bld):
     env = bld.env
@@ -893,9 +920,16 @@ def build(bld):
                     if not dep.startswith('ns3-'):
                         continue
                     if dep not in modules and dep not in contribModules:
-                        if dep in env['NS3_MODULES']: modules.append(dep)
-                        elif dep in env['NS3_CONTRIBUTED_MODULES']: contribModules.append(dep)
-                        changed = True
+                        if dep in env['NS3_MODULES']: 
+                            modules.append(dep)
+                            changed = True
+                        elif dep in env['NS3_CONTRIBUTED_MODULES']: 
+                            contribModules.append(dep)
+                            changed = True
+                        else:
+                            Logs.error("Error:  Cannot find dependency \'" + dep[4:] + "\' of module \'"
+                                       + module[4:] + "\'; check the module wscript for errors.")
+                            raise SystemExit(1)
 
         env['NS3_ENABLED_MODULES'] = modules
 
@@ -1026,7 +1060,19 @@ def build(bld):
         bld.env['PRINT_BUILT_MODULES_AT_END'] = False 
 
     if Options.options.doxygen_no_build:
-        _doxygen(bld)
+        _doxygen(bld, skip_pid=True)
+        raise SystemExit(0)
+
+    if Options.options.run_no_build:
+        # Check that the requested program name is valid
+        program_name, dummy_program_argv = wutils.get_run_program(Options.options.run_no_build, wutils.get_command_template(bld.env))
+        # Run the program
+        wutils.run_program(Options.options.run_no_build, bld.env, wutils.get_command_template(bld.env), visualize=Options.options.visualize)
+        raise SystemExit(0)
+
+    if Options.options.pyrun_no_build:
+        wutils.run_python_program(Options.options.pyrun_no_build, bld.env,
+                                  visualize=Options.options.visualize)
         raise SystemExit(0)
 
 def _cleandir(name):
@@ -1041,7 +1087,6 @@ def _cleandocs():
     _cleandir('doc/manual/build')
     _cleandir('doc/manual/source-temp')
     _cleandir('doc/tutorial/build')
-    _cleandir('doc/tutorial-pt-br/build')
     _cleandir('doc/models/build')
     _cleandir('doc/models/source-temp')
 
@@ -1086,7 +1131,7 @@ def shutdown(ctx):
     # Write the build status file.
     build_status_file = os.path.join(bld.out_dir, 'build-status.py')
     out = open(build_status_file, 'w')
-    out.write('#! /usr/bin/env python\n')
+    out.write('#! /usr/bin/env python3\n')
     out.write('\n')
     out.write('# Programs that are runnable.\n')
     out.write('ns3_runnable_programs = ' + str(env['NS3_RUNNABLE_PROGRAMS']) + '\n')
@@ -1098,6 +1143,9 @@ def shutdown(ctx):
 
     if Options.options.lcov_report:
         lcov_report(bld)
+
+    if Options.options.lcov_zerocounters:
+        lcov_zerocounters(bld)
 
     if Options.options.run:
         wutils.run_program(Options.options.run, env, wutils.get_command_template(env),
@@ -1131,65 +1179,6 @@ class CheckContext(Context.Context):
         
         wutils.bld = bld
         wutils.run_python_program("test.py -n -c core", bld.env)
-
-
-class print_introspected_doxygen_task(Task.TaskBase):
-    after = 'cxx link'
-    color = 'BLUE'
-
-    def __init__(self, bld):
-        self.bld = bld
-        super(print_introspected_doxygen_task, self).__init__(generator=self)
-        
-    def __str__(self):
-        return 'print-introspected-doxygen\n'
-
-    def runnable_status(self):
-        return Task.RUN_ME
-
-    def run(self):
-        ## generate the trace sources list docs
-        env = wutils.bld.env
-        proc_env = wutils.get_proc_env()
-        try:
-            program_obj = wutils.find_program('print-introspected-doxygen', env)
-        except ValueError: # could happen if print-introspected-doxygen is
-                           # not built because of waf configure
-                           # --enable-modules=xxx
-            pass
-        else:
-            prog = program_obj.path.find_or_declare(ccroot.get_target_name(program_obj)).get_bld().abspath(env)
-
-            # Create a header file with the introspected information.
-            doxygen_out = open(os.path.join('doc', 'introspected-doxygen.h'), 'w')
-            if subprocess.Popen([prog], stdout=doxygen_out, env=proc_env).wait():
-                raise SystemExit(1)
-            doxygen_out.close()
-        
-            # Create a text file with the introspected information.
-            text_out = open(os.path.join('doc', 'ns3-object.txt'), 'w')
-            if subprocess.Popen([prog, '--output-text'], stdout=text_out, env=proc_env).wait():
-                raise SystemExit(1)
-            text_out.close()
-
-class run_python_unit_tests_task(Task.TaskBase):
-    after = 'cxx link'
-    color = 'BLUE'
-
-    def __init__(self, bld):
-        self.bld = bld
-        super(run_python_unit_tests_task, self).__init__(generator=self)
-        
-    def __str__(self):
-        return 'run-python-unit-tests\n'
-
-    def runnable_status(self):
-        return Task.RUN_ME
-
-    def run(self):
-        proc_env = wutils.get_proc_env()
-        wutils.run_argv([self.bld.env['PYTHON'], os.path.join("..", "utils", "python-unit-tests.py")],
-                        self.bld.env, proc_env, force_no_valgrind=True)
 
 def check_shell(bld):
     if ('NS3_MODULE_PATH' not in os.environ) or ('NS3_EXECUTABLE_PATH' not in os.environ):
@@ -1240,15 +1229,9 @@ class Ns3ShellContext(Context.Context):
         wutils.run_argv([shell], env, os_env)
 
 
-def _doxygen(bld):
+def _print_introspected_doxygen(bld):
     env = wutils.bld.env
     proc_env = wutils.get_proc_env()
-
-    if not env['DOXYGEN']:
-        Logs.error("waf configure did not detect doxygen in the system -> cannot build api docs.")
-        raise SystemExit(1)
-        return
-
     try:
         program_obj = wutils.find_program('print-introspected-doxygen', env)
     except ValueError: 
@@ -1264,6 +1247,8 @@ def _doxygen(bld):
                    "generating doxygen docs...")
         raise SystemExit(1)
 
+    Logs.info("Running print-introspected-doxygen")
+
     # Create a header file with the introspected information.
     doxygen_out = open(os.path.join('doc', 'introspected-doxygen.h'), 'w')
     if subprocess.Popen([prog], stdout=doxygen_out, env=proc_env).wait():
@@ -1276,12 +1261,115 @@ def _doxygen(bld):
         raise SystemExit(1)
     text_out.close()
 
+    # Gather the CommandLine doxy
+    # test.py appears not to create or keep the output directory
+    # if no real tests are run, so we just stuff all the
+    # .command-line output files into testpy-output/
+    # NS_COMMANDLINE_INTROSPECTION=".." test.py --nowaf --constrain=example
+    Logs.info("Running CommandLine introspection")
+    proc_env['NS_COMMANDLINE_INTROSPECTION'] = '..'
+    subprocess.run(["test.py", "--nowaf", "--constrain=example"],
+                   env=proc_env, stdout=subprocess.DEVNULL)
+    
+    doxygen_out = os.path.join('doc', 'introspected-command-line.h')
+    try:
+        os.remove(doxygen_out)
+    except OSError as e:
+        pass
+
+    with open(doxygen_out, 'w') as out_file:
+        lines="""
+/* This file is automatically generated by
+CommandLine::PrintDoxygenUsage() from the CommandLine configuration
+in various example programs.  Do not edit this file!  Edit the
+CommandLine configuration in those files instead.
+*/\n
+"""
+        out_file.write(lines)
+    out_file.close()
+
+    with open(doxygen_out,'a') as outfile:
+        for in_file in glob.glob('testpy-output/*.command-line'):
+            with open(in_file,'r') as infile:
+                outfile.write(infile.read())
+                
+def _doxygen(bld, skip_pid=False):
+    env = wutils.bld.env
+    proc_env = wutils.get_proc_env()
+
+    if not env['DOXYGEN']:
+        Logs.error("waf configure did not detect doxygen in the system -> cannot build api docs.")
+        raise SystemExit(1)
+        return
+
+    if not skip_pid:
+        _print_introspected_doxygen(bld)
+
     _getVersion()
     doxygen_config = os.path.join('doc', 'doxygen.conf')
     if subprocess.Popen(env['DOXYGEN'] + [doxygen_config]).wait():
         Logs.error("Doxygen build returned an error.")
         raise SystemExit(1)
 
+def _docset(bld):
+    # Get the doxygen config
+    doxyfile = os.path.join('doc', 'doxygen.conf')
+    Logs.info("docset: reading " + doxyfile)
+    doxygen_config = open(doxyfile, 'r')
+    doxygen_config_contents = doxygen_config.read()
+    doxygen_config.close()
+
+    # Create the output directory
+    docset_path = os.path.join('doc', 'docset')
+    Logs.info("docset: checking for output directory " + docset_path)
+    if not os.path.exists(docset_path):
+        Logs.info("docset: creating output directory " + docset_path)
+        os.mkdir(docset_path)
+
+    doxyfile = os.path.join('doc', 'doxygen.docset.conf')
+    doxygen_config = open(doxyfile, 'w')
+    Logs.info("docset: writing doxygen conf " + doxyfile)
+    doxygen_config.write(doxygen_config_contents)
+    doxygen_config.write(
+        """
+        HAVE_DOT = NO
+        GENERATE_DOCSET = YES
+        DISABLE_INDEX = YES
+        SEARCHENGINE = NO
+        GENERATE_TREEVIEW = NO
+        OUTPUT_DIRECTORY=""" + docset_path + "\n"
+        )
+    doxygen_config.close()
+
+    # Run Doxygen manually, so as to avoid build
+    Logs.info("docset: running doxygen")
+    env = wutils.bld.env
+    _getVersion()
+    if subprocess.Popen(env['DOXYGEN'] + [doxyfile]).wait():
+        Logs.error("Doxygen docset build returned an error.")
+        raise SystemExit(1)
+
+    # Build docset
+    docset_path = os.path.join(docset_path, 'html')
+    Logs.info("docset: Running docset Make")
+    if subprocess.Popen(["make"], cwd=docset_path).wait():
+        Logs.error("Docset make returned and error.")
+        raise SystemExit(1)
+
+    # Additional steps from
+    #   https://github.com/Kapeli/Dash-User-Contributions/tree/master/docsets/ns-3
+    docset_out = os.path.join(docset_path, 'org.nsnam.ns3.docset')
+    icons = os.path.join('doc', 'ns3_html_theme', 'static')
+    shutil.copy(os.path.join(icons, 'ns-3-bars-16x16.png'),
+                os.path.join(docset_out, 'icon.png'))
+    shutil.copy(os.path.join(icons, 'ns-3-bars-32x32.png'),
+                os.path.join(docset_out, 'icon@x2.png'))
+    shutil.copy(os.path.join(docset_path, 'Info.plist'),
+                os.path.join(docset_out, 'Contents'))
+    shutil.move(docset_out, os.path.join('doc', 'ns-3.docset'))
+
+    print("Docset built successfully.")
+    
 
 def _getVersion():
     """update the ns3_version.js file, when building documentation"""
@@ -1318,7 +1406,7 @@ class Ns3SphinxContext(Context.Context):
 
     def execute(self):
         _getVersion()
-        for sphinxdir in ["manual", "models", "tutorial", "tutorial-pt-br"] :
+        for sphinxdir in ["manual", "models", "tutorial"] :
             self.sphinx_build(os.path.join("doc", sphinxdir))
      
 
@@ -1338,7 +1426,20 @@ def lcov_report(bld):
     if not env['GCOV_ENABLED']:
         raise WafError("project not configured for code coverage;"
                        " reconfigure with --enable-gcov")
-
+    try:
+        subprocess.call(["lcov", "--help"], stdout=subprocess.DEVNULL)
+    except OSError as e:
+        if e.errno == os.errno.ENOENT:
+            raise WafError("Error: lcov program not found")
+        else:
+            raise
+    try:
+        subprocess.call(["genhtml", "--help"], stdout=subprocess.DEVNULL)
+    except OSError as e:
+        if e.errno == os.errno.ENOENT:
+            raise WafError("Error: genhtml program not found")
+        else:
+            raise
     os.chdir(out)
     try:
         lcov_report_dir = 'lcov-report'
@@ -1349,15 +1450,34 @@ def lcov_report(bld):
             raise SystemExit(1)
 
         info_file = os.path.join(lcov_report_dir, 'report.info')
-        lcov_command = "../utils/lcov/lcov -c -d . -o " + info_file
+        lcov_command = "lcov -c -d . -o " + info_file
         lcov_command += " -b " + os.getcwd()
         if subprocess.Popen(lcov_command, shell=True).wait():
             raise SystemExit(1)
 
-        genhtml_command = "../utils/lcov/genhtml -o " + lcov_report_dir
+        genhtml_command = "genhtml -o " + lcov_report_dir
         genhtml_command += " " + info_file
         if subprocess.Popen(genhtml_command, shell=True).wait():
             raise SystemExit(1)
     finally:
         os.chdir("..")
 
+def lcov_zerocounters(bld):
+    env = bld.env
+
+    if not env['GCOV_ENABLED']:
+        raise WafError("project not configured for code coverage;"
+                       " reconfigure with --enable-gcov")
+    try:
+        subprocess.call(["lcov", "--help"], stdout=subprocess.DEVNULL)
+    except OSError as e:
+        if e.errno == os.errno.ENOENT:
+            raise WafError("Error: lcov program not found")
+        else:
+            raise
+
+    os.chdir(out)
+    lcov_clear_command = "lcov -d . --zerocounters"
+    if subprocess.Popen(lcov_clear_command, shell=True).wait():
+        raise SystemExit(1)
+    os.chdir("..")

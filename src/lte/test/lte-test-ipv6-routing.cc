@@ -51,6 +51,12 @@
 
 using namespace ns3;
 
+/**
+ * \ingroup lte-test
+ * \ingroup tests
+ *
+ * \brief Lte Ipv6 routing test case.
+ */
 class LteIpv6RoutingTestCase : public TestCase
 {
 public:
@@ -64,29 +70,29 @@ public:
 
   /**
    * \brief sent Packets from client's IPv6 interface.
-   * \param: p packet
-   * \param: ipv6 Ipv6 object
-   * \param: interface Ipv6interface from which the packet is transmitted
+   * \param p packet
+   * \param ipv6 Ipv6 object
+   * \param interface Ipv6interface from which the packet is transmitted
    */
   void SentAtClient (Ptr<const Packet> p, Ptr<Ipv6> ipv6, uint32_t interface);
 
   /**
    * \brief Received Packets at client's IPv6 interface.
-   * \param: p packet
-   * \param: ipv6 Ipv6 object
-   * \param: interface Ipv6interface at which the packet is received
+   * \param p packet
+   * \param ipv6 Ipv6 object
+   * \param interface Ipv6interface at which the packet is received
    */
   void ReceivedAtClient (Ptr<const Packet> p, Ptr<Ipv6> ipv6, uint32_t interface);
 
   /**
    * \brief Received Packet at pgw from enb.
-   * \param: p packet
+   * \param p packet
    */
   void EnbToPgw (Ptr<Packet> p);
 
   /**
    * \brief Received Packet at pgw from enb.
-   * \param: p packet
+   * \param p packet
    */
   void TunToPgw (Ptr<Packet> p);
 
@@ -179,7 +185,11 @@ void LteIpv6RoutingTestCase::Checker ()
           sourcePort = udpHeader2.GetSourcePort ();
           destinationPort = udpHeader2.GetDestinationPort ();
           //Check whether the uids, addresses and ports match
-          if ((p2->GetUid () == p1->GetUid ()) && sorceAddress.IsEqual (ipv6header1.GetDestinationAddress ()) && destinationAddress.IsEqual (ipv6header1.GetSourceAddress ()) && sourcePort == udpHeader1.GetDestinationPort () && destinationPort == udpHeader1.GetSourcePort ())
+          if ((p2->GetUid () == p1->GetUid ())
+              && sorceAddress == ipv6header1.GetDestinationAddress ()
+              && destinationAddress == ipv6header1.GetSourceAddress ()
+              && sourcePort == udpHeader1.GetDestinationPort ()
+              && destinationPort == udpHeader1.GetSourcePort ())
             {
               b = true;
               break;

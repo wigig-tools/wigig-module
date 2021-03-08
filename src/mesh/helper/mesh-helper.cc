@@ -18,15 +18,17 @@
  * Author: Kirill Andreev <andreev@iitp.ru>
  *         Pavel Boyko <boyko@iitp.ru>
  */
+ 
 #include "mesh-helper.h"
 #include "ns3/simulator.h"
 #include "ns3/pointer.h"
 #include "ns3/mesh-point-device.h"
-#include "ns3/dca-txop.h"
-#include "ns3/edca-txop-n.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/minstrel-wifi-manager.h"
 #include "ns3/mesh-wifi-interface-mac.h"
+#include "ns3/wifi-helper.h"
+#include "ns3/wifi-ack-policy-selector.h"
+
 namespace ns3
 {
 MeshHelper::MeshHelper () :
@@ -118,6 +120,10 @@ MeshHelper::Default (void)
   MeshHelper helper;
   helper.SetMacType ();
   helper.SetRemoteStationManager ("ns3::ArfWifiManager");
+  helper.SetAckPolicySelectorForAc (AC_BE, "ns3::ConstantWifiAckPolicySelector");
+  helper.SetAckPolicySelectorForAc (AC_BK, "ns3::ConstantWifiAckPolicySelector");
+  helper.SetAckPolicySelectorForAc (AC_VI, "ns3::ConstantWifiAckPolicySelector");
+  helper.SetAckPolicySelectorForAc (AC_VO, "ns3::ConstantWifiAckPolicySelector");
   helper.SetSpreadInterfaceChannels (SPREAD_CHANNELS);
   return helper;
 }
@@ -164,6 +170,28 @@ MeshHelper::SetRemoteStationManager (std::string type,
   m_stationManager.Set (n6, v6);
   m_stationManager.Set (n7, v7);
 }
+void
+MeshHelper::SetAckPolicySelectorForAc (AcIndex ac, std::string type,
+                                       std::string n0, const AttributeValue &v0,
+                                       std::string n1, const AttributeValue &v1,
+                                       std::string n2, const AttributeValue &v2,
+                                       std::string n3, const AttributeValue &v3,
+                                       std::string n4, const AttributeValue &v4,
+                                       std::string n5, const AttributeValue &v5,
+                                       std::string n6, const AttributeValue &v6,
+                                       std::string n7, const AttributeValue &v7)
+{
+  m_ackPolicySelector[ac] = ObjectFactory ();
+  m_ackPolicySelector[ac].SetTypeId (type);
+  m_ackPolicySelector[ac].Set (n0, v0);
+  m_ackPolicySelector[ac].Set (n1, v1);
+  m_ackPolicySelector[ac].Set (n2, v2);
+  m_ackPolicySelector[ac].Set (n3, v3);
+  m_ackPolicySelector[ac].Set (n4, v4);
+  m_ackPolicySelector[ac].Set (n5, v5);
+  m_ackPolicySelector[ac].Set (n6, v6);
+  m_ackPolicySelector[ac].Set (n7, v7);
+}
 void 
 MeshHelper::SetStandard (enum WifiPhyStandard standard)
 {
@@ -178,6 +206,7 @@ MeshHelper::CreateInterface (const WifiPhyHelper &phyHelper, Ptr<Node> node, uin
   Ptr<MeshWifiInterfaceMac> mac = m_mac.Create<MeshWifiInterfaceMac> ();
   NS_ASSERT (mac != 0);
   mac->SetSsid (Ssid ());
+  mac->SetDevice (device);
   Ptr<WifiRemoteStationManager> manager = m_stationManager.Create<WifiRemoteStationManager> ();
   NS_ASSERT (manager != 0);
   Ptr<WifiPhy> phy = phyHelper.Create (node, device);
@@ -189,6 +218,30 @@ MeshHelper::CreateInterface (const WifiPhyHelper &phyHelper, Ptr<Node> node, uin
   device->SetRemoteStationManager (manager);
   node->AddDevice (device);
   mac->SwitchFrequencyChannel (channelId);
+  // Install ack policy selector
+  PointerValue ptr;
+  Ptr<WifiAckPolicySelector> ackSelector;
+
+  mac->GetAttributeFailSafe ("BE_Txop", ptr);
+  ackSelector = m_ackPolicySelector[AC_BE].Create<WifiAckPolicySelector> ();
+  ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+  ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+
+  mac->GetAttributeFailSafe ("BK_Txop", ptr);
+  ackSelector = m_ackPolicySelector[AC_BK].Create<WifiAckPolicySelector> ();
+  ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+  ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+
+  mac->GetAttributeFailSafe ("VI_Txop", ptr);
+  ackSelector = m_ackPolicySelector[AC_VI].Create<WifiAckPolicySelector> ();
+  ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+  ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+
+  mac->GetAttributeFailSafe ("VO_Txop", ptr);
+  ackSelector = m_ackPolicySelector[AC_VO].Create<WifiAckPolicySelector> ();
+  ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+  ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+
   return device;
 }
 void
@@ -250,25 +303,25 @@ MeshHelper::AssignStreams (NetDeviceContainer c, int64_t stream)
               if (rmac)
                 {
                   PointerValue ptr;
-                  rmac->GetAttribute ("DcaTxop", ptr);
-                  Ptr<DcaTxop> dcaTxop = ptr.Get<DcaTxop> ();
-                  currentStream += dcaTxop->AssignStreams (currentStream);
+                  rmac->GetAttribute ("Txop", ptr);
+                  Ptr<Txop> txop = ptr.Get<Txop> ();
+                  currentStream += txop->AssignStreams (currentStream);
 
-                  rmac->GetAttribute ("VO_EdcaTxopN", ptr);
-                  Ptr<EdcaTxopN> vo_edcaTxopN = ptr.Get<EdcaTxopN> ();
-                  currentStream += vo_edcaTxopN->AssignStreams (currentStream);
+                  rmac->GetAttribute ("VO_Txop", ptr);
+                  Ptr<QosTxop> vo_txop = ptr.Get<QosTxop> ();
+                  currentStream += vo_txop->AssignStreams (currentStream);
 
-                  rmac->GetAttribute ("VI_EdcaTxopN", ptr);
-                  Ptr<EdcaTxopN> vi_edcaTxopN = ptr.Get<EdcaTxopN> ();
-                  currentStream += vi_edcaTxopN->AssignStreams (currentStream);
+                  rmac->GetAttribute ("VI_Txop", ptr);
+                  Ptr<QosTxop> vi_txop = ptr.Get<QosTxop> ();
+                  currentStream += vi_txop->AssignStreams (currentStream);
 
-                  rmac->GetAttribute ("BE_EdcaTxopN", ptr);
-                  Ptr<EdcaTxopN> be_edcaTxopN = ptr.Get<EdcaTxopN> ();
-                  currentStream += be_edcaTxopN->AssignStreams (currentStream);
+                  rmac->GetAttribute ("BE_Txop", ptr);
+                  Ptr<QosTxop> be_txop = ptr.Get<QosTxop> ();
+                  currentStream += be_txop->AssignStreams (currentStream);
 
-                  rmac->GetAttribute ("BK_EdcaTxopN", ptr);
-                  Ptr<EdcaTxopN> bk_edcaTxopN = ptr.Get<EdcaTxopN> ();
-                  currentStream += bk_edcaTxopN->AssignStreams (currentStream);
+                  rmac->GetAttribute ("BK_Txop", ptr);
+                  Ptr<QosTxop> bk_txop = ptr.Get<QosTxop> ();
+                  currentStream += bk_txop->AssignStreams (currentStream);
                }
             }
         }

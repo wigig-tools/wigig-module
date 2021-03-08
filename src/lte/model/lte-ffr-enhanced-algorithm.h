@@ -80,7 +80,7 @@ protected:
   virtual void DoReportUlCqiInfo (const struct FfMacSchedSapProvider::SchedUlCqiInfoReqParameters& params);
   virtual void DoReportUlCqiInfo ( std::map <uint16_t, std::vector <double> > ulCqiMap );
   virtual uint8_t DoGetTpc (uint16_t rnti);
-  virtual uint8_t DoGetMinContinuousUlBandwidth ();
+  virtual uint16_t DoGetMinContinuousUlBandwidth ();
 
   // FFR SAP RRC PROVIDER IMPLEMENTATION
   virtual void DoReportUeMeas (uint16_t rnti, LteRrcSap::MeasResults measResults);
@@ -120,9 +120,9 @@ private:
    */
   double EstimateUlSinr (uint16_t rnti, uint16_t rb, std::map <uint16_t, std::vector <double> > ulCqiMap);
   /**
-   * Get CQI from spectral efficency
+   * Get CQI from spectral efficiency
    *
-   * \param s spectral efficency
+   * \param s spectral efficiency
    * \returns CQI
    */
   int GetCqiFromSpectralEfficiency (double s);

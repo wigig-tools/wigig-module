@@ -101,21 +101,16 @@ protected:
   virtual void DoReportBufferStatus (LteMacSapProvider::ReportBufferStatusParameters params);
   /**
    * \brief Notify transmit opportunity.
-   * \param bytes the number of bytes
-   * \param layer the layer
-   * \param harqId the HARQ ID
-   * \param componentCarrierId the component carrier ID
-   * \param rnti the RNTI
-   * \param lcid the LCID
+   *
+   * \param txOpParams the LteMacSapUser::TxOpportunityParameters
    */
-  virtual void DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId, uint8_t componentCarrierId, uint16_t rnti, uint8_t lcid);
+  virtual void DoNotifyTxOpportunity (LteMacSapUser::TxOpportunityParameters txOpParams);
   /**
    * \brief Receive PDU.
-   * \param p the packet
-   * \param rnti the RNTI
-   * \param lcid the LCID
+   *
+   * \param rxPduParams the LteMacSapUser::ReceivePduParameters
    */
-  virtual void DoReceivePdu (Ptr<Packet> p, uint16_t rnti, uint8_t lcid);
+  virtual void DoReceivePdu (LteMacSapUser::ReceivePduParameters rxPduParams);
   /// Notify HARQ delivery failure
   virtual void DoNotifyHarqDeliveryFailure ();
   /**
@@ -144,6 +139,12 @@ protected:
    */
   virtual void DoUlReceiveMacCe (MacCeListElement_s bsr, uint8_t componentCarrierId);
   /**
+   * \brief Forward uplink SR to CCM, called by MAC through CCM SAP interface.
+   * \param rnti RNTI of the UE that requested SR
+   * \param componentCarrierId the component carrier ID that forwarded the SR
+   */
+  virtual void DoUlReceiveSr (uint16_t rnti, uint8_t componentCarrierId);
+  /**
    * \brief Function implements the function of the SAP interface of CCM instance which is used by MAC
    * to notify the PRB occupancy reported by scheduler.
    * \param prbOccupancy the PRB occupancy
@@ -158,7 +159,7 @@ protected:
 }; // end of class NoOpComponentCarrierManager
 
 
-/*
+/**
  * \brief Component carrier manager implementation that splits traffic equally among carriers.
  */
 class RrComponentCarrierManager : public NoOpComponentCarrierManager
@@ -166,7 +167,7 @@ class RrComponentCarrierManager : public NoOpComponentCarrierManager
 public:
 
   RrComponentCarrierManager ();
-  virtual ~RrComponentCarrierManager ();
+  virtual ~RrComponentCarrierManager () override;
   /**
    * \brief Get the type ID.
    * \return the object TypeId
@@ -176,9 +177,12 @@ public:
 protected:
 
   // Inherited methods
-  virtual void DoReportBufferStatus (LteMacSapProvider::ReportBufferStatusParameters params);
-  virtual void DoUlReceiveMacCe (MacCeListElement_s bsr, uint8_t componentCarrierId);
+  virtual void DoReportBufferStatus (LteMacSapProvider::ReportBufferStatusParameters params) override;
+  virtual void DoUlReceiveMacCe (MacCeListElement_s bsr, uint8_t componentCarrierId) override;
+  virtual void DoUlReceiveSr (uint16_t rnti, uint8_t componentCarrierId) override;
 
+private:
+  uint8_t m_lastCcIdForSr {0}; //!< Last CCID to which a SR was routed
 }; // end of class RrComponentCarrierManager
 
 } // end of namespace ns3

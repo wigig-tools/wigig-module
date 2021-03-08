@@ -23,11 +23,7 @@
 #include "ns3/mesh-wifi-beacon.h"
 #include "ns3/log.h"
 #include "ns3/boolean.h"
-#include "ns3/wifi-phy.h"
-#include "ns3/dcf-manager.h"
-#include "ns3/mac-rx-middle.h"
 #include "ns3/mac-low.h"
-#include "ns3/dca-txop.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/simulator.h"
 #include "ns3/yans-wifi-phy.h"
@@ -92,13 +88,13 @@ MeshWifiInterfaceMac::~MeshWifiInterfaceMac ()
 // WifiMac inherited
 //-----------------------------------------------------------------------------
 void
-MeshWifiInterfaceMac::Enqueue (Ptr<const Packet> packet, Mac48Address to, Mac48Address from)
+MeshWifiInterfaceMac::Enqueue (Ptr<Packet> packet, Mac48Address to, Mac48Address from)
 {
   NS_LOG_FUNCTION (this << packet << to << from);
   ForwardDown (packet, from, to);
 }
 void
-MeshWifiInterfaceMac::Enqueue (Ptr<const Packet> packet, Mac48Address to)
+MeshWifiInterfaceMac::Enqueue (Ptr<Packet> packet, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << to);
   ForwardDown (packet, m_low->GetAddress (), to);
@@ -210,16 +206,14 @@ MeshWifiInterfaceMac::SwitchFrequencyChannel (uint16_t new_id)
   Ptr<YansWifiPhy> phy = m_phy->GetObject<YansWifiPhy> ();
   phy->SetChannelNumber (new_id);
   // Don't know NAV on new channel
-  m_dcfManager->NotifyNavResetNow (Seconds (0));
+  m_channelAccessManager->NotifyNavResetNow (Seconds (0));
 }
 //-----------------------------------------------------------------------------
 // Forward frame down
 //-----------------------------------------------------------------------------
 void
-MeshWifiInterfaceMac::ForwardDown (Ptr<const Packet> const_packet, Mac48Address from, Mac48Address to)
+MeshWifiInterfaceMac::ForwardDown (Ptr<Packet> packet, Mac48Address from, Mac48Address to)
 {
-  // copy packet to allow modifications
-  Ptr<Packet> packet = const_packet->Copy ();
   WifiMacHeader hdr;
   hdr.SetType (WIFI_MAC_QOSDATA);
   hdr.SetAddr2 (GetAddress ());
@@ -416,13 +410,15 @@ MeshWifiInterfaceMac::SendBeacon ()
     {
       (*i)->UpdateBeacon (beacon);
     }
-  m_dca->Queue (beacon.CreatePacket (), beacon.CreateHeader (GetAddress (), GetMeshPointAddress ()));
+  m_txop->Queue (beacon.CreatePacket (), beacon.CreateHeader (GetAddress (), GetMeshPointAddress ()));
 
   ScheduleNextBeacon ();
 }
 void
-MeshWifiInterfaceMac::Receive (Ptr<Packet> packet, WifiMacHeader const *hdr)
+MeshWifiInterfaceMac::Receive (Ptr<WifiMacQueueItem> mpdu)
 {
+  const WifiMacHeader* hdr = &mpdu->GetHeader ();
+  Ptr<Packet> packet = mpdu->GetPacket ()->Copy ();
   // Process beacon
   if ((hdr->GetAddr1 () != GetAddress ()) && (hdr->GetAddr1 () != Mac48Address::GetBroadcast ()))
     {
@@ -560,9 +556,9 @@ MeshWifiInterfaceMac::FinishConfigureStandard (enum WifiPhyStandard standard)
   // We use the single DCF provided by WifiMac for the purpose of
   // Beacon transmission. For this we need to reconfigure the channel
   // access parameters slightly, and do so here.
-  m_dca->SetMinCw (0);
-  m_dca->SetMaxCw (0);
-  m_dca->SetAifsn (1);
+  m_txop->SetMinCw (0);
+  m_txop->SetMaxCw (0);
+  m_txop->SetAifsn (1);
 }
 WifiPhyStandard
 MeshWifiInterfaceMac::GetPhyStandard () const

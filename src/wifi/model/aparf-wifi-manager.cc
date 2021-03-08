@@ -18,10 +18,11 @@
  * Author: Matias Richart <mrichart@fing.edu.uy>
  */
 
-#include "aparf-wifi-manager.h"
-#include "wifi-phy.h"
 #include "ns3/log.h"
 #include "ns3/uinteger.h"
+#include "ns3/data-rate.h"
+#include "aparf-wifi-manager.h"
+#include "wifi-phy.h"
 
 #define Min(a,b) ((a < b) ? a : b)
 
@@ -48,7 +49,7 @@ AparfWifiRemoteStation : public WifiRemoteStation
   uint8_t m_critRateIndex;              //!< Critical rate.
   uint8_t m_prevPowerLevel;             //!< Power level of the previous transmission.
   uint8_t m_powerLevel;                 //!< Current power level.
-  uint32_t m_nSupported;                //!< Number of supported rates by the remote station.
+  uint8_t m_nSupported;                 //!< Number of supported rates by the remote station.
   bool m_initialized;                   //!< For initializing variables.
   AparfWifiManager::State m_aparfState; //!< The estimated state of the channel.
 };
@@ -128,9 +129,27 @@ void
 AparfWifiManager::SetupPhy (const Ptr<WifiPhy> phy)
 {
   NS_LOG_FUNCTION (this << phy);
-  m_minPower = phy->GetTxPowerStart ();
-  m_maxPower = phy->GetTxPowerEnd ();
+  m_minPower = 0;
+  m_maxPower = phy->GetNTxPower () - 1;
   WifiRemoteStationManager::SetupPhy (phy);
+}
+
+void
+AparfWifiManager::DoInitialize ()
+{
+  NS_LOG_FUNCTION (this);
+  if (GetHtSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HT rates");
+    }
+  if (GetVhtSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support VHT rates");
+    }
+  if (GetHeSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HE rates");
+    }
 }
 
 WifiRemoteStation *
@@ -165,7 +184,7 @@ AparfWifiManager::CheckInit (AparfWifiRemoteStation *station)
       station->m_prevPowerLevel = m_maxPower;
       station->m_critRateIndex = 0;
       WifiMode mode = GetSupported (station, station->m_rateIndex);
-      uint8_t channelWidth = GetChannelWidth (station);
+      uint16_t channelWidth = GetChannelWidth (station);
       DataRate rate = DataRate (mode.GetDataRate (channelWidth));
       double power = GetPhy ()->GetPowerDbm (m_maxPower);
       m_powerChange (power, power, station->m_state->m_address);
@@ -182,7 +201,7 @@ void AparfWifiManager::DoReportRtsFailed (WifiRemoteStation *station)
 void AparfWifiManager::DoReportDataFailed (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  AparfWifiRemoteStation *station = (AparfWifiRemoteStation *) st;
+  AparfWifiRemoteStation *station = static_cast<AparfWifiRemoteStation*> (st);
   CheckInit (station);
   station->m_nFailed++;
   station->m_nSuccess = 0;
@@ -236,11 +255,11 @@ AparfWifiManager::DoReportRtsOk (WifiRemoteStation *station, double ctsSnr,
 }
 
 void
-AparfWifiManager::DoReportDataOk (WifiRemoteStation *st, double ackSnr,
-                                  WifiMode ackMode, double dataSnr)
+AparfWifiManager::DoReportDataOk (WifiRemoteStation *st, double ackSnr, WifiMode ackMode,
+                                  double dataSnr, uint16_t dataChannelWidth, uint8_t dataNss)
 {
-  NS_LOG_FUNCTION (this << st << ackSnr << ackMode << dataSnr);
-  AparfWifiRemoteStation *station = (AparfWifiRemoteStation *) st;
+  NS_LOG_FUNCTION (this << st << ackSnr << ackMode << dataSnr << dataChannelWidth << +dataNss);
+  AparfWifiRemoteStation *station = static_cast<AparfWifiRemoteStation*> (st);
   CheckInit (station);
   station->m_nSuccess++;
   station->m_nFailed = 0;
@@ -320,11 +339,10 @@ WifiTxVector
 AparfWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  AparfWifiRemoteStation *station = (AparfWifiRemoteStation *) st;
-  uint8_t channelWidth = GetChannelWidth (station);
+  AparfWifiRemoteStation *station = static_cast<AparfWifiRemoteStation*> (st);
+  uint16_t channelWidth = GetChannelWidth (station);
   if (channelWidth > 20 && channelWidth != 22)
     {
-      //avoid to use legacy rate adaptation algorithms for IEEE 802.11n/ac
       channelWidth = 20;
     }
   CheckInit (station);
@@ -343,20 +361,19 @@ AparfWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
       m_rateChange (prevRate, rate, station->m_state->m_address);
       station->m_prevRateIndex = station->m_rateIndex;
     }
-  return WifiTxVector (mode, station->m_powerLevel, GetPreambleForTransmission (mode, GetAddress (st)), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
+  return WifiTxVector (mode, station->m_powerLevel, GetPreambleForTransmission (mode.GetModulationClass (), GetShortPreambleEnabled (), UseGreenfieldForDestination (GetAddress (st))), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
 }
 
 WifiTxVector
 AparfWifiManager::DoGetRtsTxVector (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  /// \todo we could/should implement the Arf algorithm for
+  /// \todo we could/should implement the ARF algorithm for
   /// RTS only by picking a single rate within the BasicRateSet.
-  AparfWifiRemoteStation *station = (AparfWifiRemoteStation *) st;
-  uint8_t channelWidth = GetChannelWidth (station);
+  AparfWifiRemoteStation *station = static_cast<AparfWifiRemoteStation*> (st);
+  uint16_t channelWidth = GetChannelWidth (station);
   if (channelWidth > 20 && channelWidth != 22)
     {
-      //avoid to use legacy rate adaptation algorithms for IEEE 802.11n/ac
       channelWidth = 20;
     }
   WifiTxVector rtsTxVector;
@@ -369,44 +386,8 @@ AparfWifiManager::DoGetRtsTxVector (WifiRemoteStation *st)
     {
       mode = GetNonErpSupported (station, 0);
     }
-  rtsTxVector = WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode, GetAddress (st)), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
+  rtsTxVector = WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode.GetModulationClass (), GetShortPreambleEnabled (), UseGreenfieldForDestination (GetAddress (st))), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
   return rtsTxVector;
-}
-
-bool
-AparfWifiManager::IsLowLatency (void) const
-{
-  return true;
-}
-
-void
-AparfWifiManager::SetHtSupported (bool enable)
-{
-  //HT is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HT rates");
-    }
-}
-
-void
-AparfWifiManager::SetVhtSupported (bool enable)
-{
-  //VHT is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support VHT rates");
-    }
-}
-
-void
-AparfWifiManager::SetHeSupported (bool enable)
-{
-  //HE is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HE rates");
-    }
 }
 
 } //namespace ns3

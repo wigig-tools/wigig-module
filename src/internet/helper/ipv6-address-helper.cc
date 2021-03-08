@@ -31,6 +31,7 @@
 #include "ns3/ipv6-address-generator.h"
 #include "ns3/traffic-control-helper.h"
 #include "ns3/traffic-control-layer.h"
+#include "ns3/net-device-queue-interface.h"
 
 #include "ipv6-address-helper.h"
 
@@ -104,9 +105,15 @@ Ipv6Address Ipv6AddressHelper::NewAddress (Address addr)
       Ipv6AddressGenerator::AddAllocated (address);
       return address;
     }
+  else if (Mac8Address::IsMatchingType (addr))
+    {
+      Ipv6Address address = Ipv6Address::MakeAutoconfiguredAddress (Mac8Address::ConvertFrom (addr), m_network);
+      Ipv6AddressGenerator::AddAllocated (address);
+      return address;
+    }
   else
     {
-      NS_FATAL_ERROR ("Did not pass in a valid Mac Address (16, 48 or 64 bits)");
+      NS_FATAL_ERROR ("Did not pass in a valid Mac Address (8, 16, 48 or 64 bits)");
     }
   /* never reached */
   return Ipv6Address ("::");
@@ -224,6 +231,9 @@ Ipv6InterfaceContainer Ipv6AddressHelper::Assign (const NetDeviceContainer &c)
       NS_ASSERT_MSG (ifIndex >= 0, "Ipv6AddressHelper::Allocate (): "
                      "Interface index not found");
 
+      // the first round is to make sure that the interface is set up, including its link-local addresses.
+      ipv6->SetUp (ifIndex);
+
       Ipv6InterfaceAddress ipv6Addr = Ipv6InterfaceAddress (NewAddress (device->GetAddress ()), Ipv6Prefix (64));
       ipv6->SetMetric (ifIndex, 1);
       ipv6->AddAddress (ifIndex, ipv6Addr);
@@ -237,9 +247,19 @@ Ipv6InterfaceContainer Ipv6AddressHelper::Assign (const NetDeviceContainer &c)
       Ptr<TrafficControlLayer> tc = node->GetObject<TrafficControlLayer> ();
       if (tc && DynamicCast<LoopbackNetDevice> (device) == 0 && tc->GetRootQueueDiscOnDevice (device) == 0)
         {
-          NS_LOG_LOGIC ("Installing default traffic control configuration");
-          TrafficControlHelper tcHelper = TrafficControlHelper::Default ();
-          tcHelper.Install (device);
+          Ptr<NetDeviceQueueInterface> ndqi = device->GetObject<NetDeviceQueueInterface> ();
+          // It is useless to install a queue disc if the device has no
+          // NetDeviceQueueInterface attached: the device queue is never
+          // stopped and every packet enqueued in the queue disc is
+          // immediately dequeued, hence there will never be backlog
+          if (ndqi)
+            {
+              std::size_t nTxQueues = ndqi->GetNTxQueues ();
+              NS_LOG_LOGIC ("Installing default traffic control configuration ("
+                            << nTxQueues << " device queue(s))");
+              TrafficControlHelper tcHelper = TrafficControlHelper::Default (nTxQueues);
+              tcHelper.Install (device);
+            }
         }
     }
   return retval;
@@ -267,6 +287,9 @@ Ipv6InterfaceContainer Ipv6AddressHelper::Assign (const NetDeviceContainer &c, s
       NS_ASSERT_MSG (ifIndex >= 0, "Ipv6AddressHelper::Allocate (): "
                      "Interface index not found");
 
+      // the first round is to make sure that the interface is set up, including its link-local addresses.
+      ipv6->SetUp (ifIndex);
+
       ipv6->SetMetric (ifIndex, 1);
 
       if (withConfiguration.at (i))
@@ -284,9 +307,19 @@ Ipv6InterfaceContainer Ipv6AddressHelper::Assign (const NetDeviceContainer &c, s
       Ptr<TrafficControlLayer> tc = node->GetObject<TrafficControlLayer> ();
       if (tc && DynamicCast<LoopbackNetDevice> (device) == 0 && tc->GetRootQueueDiscOnDevice (device) == 0)
         {
-          NS_LOG_LOGIC ("Installing default traffic control configuration");
-          TrafficControlHelper tcHelper = TrafficControlHelper::Default ();
-          tcHelper.Install (device);
+          Ptr<NetDeviceQueueInterface> ndqi = device->GetObject<NetDeviceQueueInterface> ();
+          // It is useless to install a queue disc if the device has no
+          // NetDeviceQueueInterface attached: the device queue is never
+          // stopped and every packet enqueued in the queue disc is
+          // immediately dequeued, hence there will never be backlog
+          if (ndqi)
+            {
+              std::size_t nTxQueues = ndqi->GetNTxQueues ();
+              NS_LOG_LOGIC ("Installing default traffic control configuration ("
+                            << nTxQueues << " device queue(s))");
+              TrafficControlHelper tcHelper = TrafficControlHelper::Default (nTxQueues);
+              tcHelper.Install (device);
+            }
         }
     }
   return retval;

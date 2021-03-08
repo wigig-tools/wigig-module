@@ -54,7 +54,7 @@ public:
   struct LcsConfig
   {
     uint8_t componentCarrierId; ///< component carrier ID
-    LteUeCmacSapProvider::LogicalChannelConfig *lcConfig; ///< logical channel config
+    LteUeCmacSapProvider::LogicalChannelConfig lcConfig; ///< logical channel config
     LteMacSapUser *msu; ///< MSU
   };
 
@@ -80,12 +80,17 @@ public:
    *                where the bearer is enabled
    */
   virtual std::vector<uint16_t> RemoveLc (uint8_t lcid) = 0;
+  /**
+   * \brief Reset LC maps
+   *
+   */
+  virtual void Reset () = 0;
   /// Notify reconfiguration msg function
   virtual void NotifyConnectionReconfigurationMsg () = 0;
 
   
   /**
-   * \brief Add the Signal Bearer for a specif Ue in LteUeComponenCarrierManager
+   * \brief Add the Signal Bearer for a specific Ue in LteUeComponenCarrierManager
    * \param lcid the Logical Channel Id
    * \param lcConfig this structure it is hard-coded in the LteEnbRrc
    * \param msu it is the MacSapUser of the Rlc istance
@@ -110,6 +115,7 @@ public:
 
   // inherited from LteUeCcmRrcSapProvider
   virtual std::vector<uint16_t> RemoveLc (uint8_t lcid);
+  virtual void Reset ();
   virtual std::vector<LteUeCcmRrcSapProvider::LcsConfig> AddLc (uint8_t lcId,  LteUeCmacSapProvider::LogicalChannelConfig lcConfig, LteMacSapUser* msu);
   virtual void NotifyConnectionReconfigurationMsg ();
   virtual LteMacSapUser* ConfigureSignalBearer (uint8_t lcid,  LteUeCmacSapProvider::LogicalChannelConfig lcConfig, LteMacSapUser* msu);
@@ -131,6 +137,13 @@ std::vector<uint16_t> MemberLteUeCcmRrcSapProvider<C>::RemoveLc (uint8_t lcid)
 }
 
 template <class C>
+void MemberLteUeCcmRrcSapProvider<C>::Reset ()
+{
+  return m_owner->DoReset ();
+}
+
+
+template <class C>
 std::vector<LteUeCcmRrcSapProvider::LcsConfig> MemberLteUeCcmRrcSapProvider<C>::AddLc (uint8_t lcId,  LteUeCmacSapProvider::LogicalChannelConfig lcConfig, LteMacSapUser* msu)
 {
   return m_owner->DoAddLc (lcId, lcConfig, msu);
@@ -139,7 +152,8 @@ std::vector<LteUeCcmRrcSapProvider::LcsConfig> MemberLteUeCcmRrcSapProvider<C>::
 template <class C>
 void MemberLteUeCcmRrcSapProvider<C>::NotifyConnectionReconfigurationMsg ()
 {
-  m_owner->DoNotifyConnectionReconfigurationMsg ();
+  NS_FATAL_ERROR ("Function should not be called because it is not implemented.");
+  //m_owner->DoNotifyConnectionReconfigurationMsg ();
 }
 
 
@@ -169,6 +183,12 @@ public:
    * \param componentCarrierList component carrier list
    */
   virtual void ComponentCarrierEnabling (std::vector<uint8_t> componentCarrierList) = 0;
+  /**
+   * \brief Set the number of component carriers
+   *
+   * \param noOfComponentCarriers The number of component carriers
+   */
+  virtual void SetNumberOfComponentCarriers (uint16_t noOfComponentCarriers) = 0;
 
 }; // end of class LteUeCcmRrcSapUser
 
@@ -185,6 +205,7 @@ public:
     MemberLteUeCcmRrcSapUser (C* owner);
     //inherited from LteUeCcmRrcSapUser
     virtual void ComponentCarrierEnabling (std::vector<uint8_t> componentCarrierList);
+    virtual void SetNumberOfComponentCarriers (uint16_t noOfComponentCarriers);
 
   private:
   C* m_owner; ///< the owner class
@@ -199,7 +220,14 @@ MemberLteUeCcmRrcSapUser<C>::MemberLteUeCcmRrcSapUser (C* owner)
 template <class C>
 void MemberLteUeCcmRrcSapUser<C>::ComponentCarrierEnabling (std::vector<uint8_t> componentCarrierList)
 {
-  m_owner->DoComponentCarrierEnabling (componentCarrierList);
+  NS_FATAL_ERROR ("Function should not be called because it is not implemented.");
+  //m_owner->DoComponentCarrierEnabling (componentCarrierList);
+}
+
+template <class C>
+void MemberLteUeCcmRrcSapUser<C>::SetNumberOfComponentCarriers (uint16_t noOfComponentCarriers)
+{
+  m_owner->DoSetNumberOfComponentCarriers (noOfComponentCarriers);
 }
   
 } // end of namespace ns3

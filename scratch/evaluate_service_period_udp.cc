@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -24,7 +24,7 @@
  *
  * Simulation Description:
  * Once all the stations have assoicated successfully with the PCP/AP. The PCP/AP allocates two SPs
- * to perform TxSS between all the stations. Once West DMG STA has completed TxSS phase with East DMG.
+ * to perform TXSS between all the stations. Once West DMG STA has completed TXSS phase with East DMG.
  * The PCP/AP allocates two static service periods for communication as following:
  *
  * SP: DMG West STA -----> DMG East STA (SP Length = 3.2ms)
@@ -95,7 +95,7 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t
       std::cout << "All stations got associated with " << address << std::endl;
       /* Create list of Information Element ID to request */
       WifiInformationElementIdList list;
-      list.push_back (IE_DMG_CAPABILITIES);
+      list.push_back (std::make_pair (IE_DMG_CAPABILITIES,0));
       /* West DMG STA Request information about East STA */
       westWifiMac->RequestInformation (eastWifiMac->GetAddress (), list);
       /* East DMG STA Request information about West STA */
@@ -124,8 +124,8 @@ CreateBeamformingAllocationRequest (AllocationFormat format, uint8_t destAid,
 
   BF_Control_Field bfField;
   bfField.SetBeamformTraining (true);
-  bfField.SetAsInitiatorTxss (isInitiatorTxss);
-  bfField.SetAsResponderTxss (isResponderTxss);
+  bfField.SetAsInitiatorTXSS (isInitiatorTxss);
+  bfField.SetAsResponderTXSS (isResponderTxss);
   element.SetBfControl (bfField);
 
   /* For more deetails on the meaning of this field refer to IEEE 802.11-2012ad 10.4.13*/
@@ -156,13 +156,13 @@ InformationResponseReceived (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address
 //void
 //SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
 //              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-//              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+//              ANTENNA_ID antennaId, SECTOR_ID sectorId)
 //{
 //  if (accessPeriod == CHANNEL_ACCESS_DTI)
 //    {
 //      std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-//      std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
-//                << ", AntennaID=" << uint32_t (antennaId) << std::endl;
+//      std::cout << "The best antenna configuration is AntennaID=" << uint16_t (antennaId)
+//                << ", SectorID=" << uint16_t (sectorId) << std::endl;
 //      if (!scheduledStaticPeriods)
 //        {
 //          std::cout << "Schedule Static Periods" << std::endl;
@@ -175,15 +175,14 @@ InformationResponseReceived (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address
 //}
 
 void
-SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, SlsCompletionAttrbitutes attributes)
 {
-  if (accessPeriod == CHANNEL_ACCESS_DTI)
+  if (attributes.accessPeriod == CHANNEL_ACCESS_DTI)
     {
-      std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-      std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
-                << ", AntennaID=" << uint32_t (antennaId) << std::endl;
+      std::cout << "DMG STA " << staWifiMac->GetAddress ()
+                << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
+      std::cout << "The best antenna configuration is AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
       apWifiMac->PrintSnrTable ();
       westWifiMac->PrintSnrTable ();
       eastWifiMac->PrintSnrTable ();
@@ -204,8 +203,8 @@ ADDTSReceived (Ptr<DmgApWifiMac> apWifiMac, Mac48Address address, DmgTspecElemen
                                                                           info.GetDestinationAid (),
                                                                           beamformingStartTime,
                                                                           element.GetMinimumDuration (),
-                                                                          bfControl.IsInitiatorTxss (),
-                                                                          bfControl.IsResponderTxss ());
+                                                                          bfControl.IsInitiatorTXSS (),
+                                                                          bfControl.IsResponderTXSS ());
 
       /* Set status code to success */
       StatusCode code;
@@ -225,8 +224,9 @@ main (int argc, char *argv[])
 {
   uint32_t payloadSize = 1448;                  /* Transport Layer Payload size in bytes. */
   string dataRate = "300Mbps";                  /* Application Layer Data Rate. */
-  uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
-  uint32_t queueSize = 10000;                   /* Wifi Mac Queue Size. */
+  string msduAggSize = MAX_DMG_AMSDU_LENGTH;    /* The maximum aggregation size for A-MSDU in Bytes. */
+  string mpduAggSize = "0";                     /* The maximum aggregation size for A-MPDU in Bytes. */
+  string queueSize = "10000p";             /* Wifi MAC Queue Size. */
   string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
   bool verbose = false;                         /* Print Logging Information. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
@@ -236,7 +236,7 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("payloadSize", "Payload size in bytes", payloadSize);
   cmd.AddValue ("dataRate", "Data rate for OnOff Application", dataRate);
-  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
+  cmd.AddValue ("msduAggSize", "The maximum aggregation size for A-MSDU in Bytes", msduAggSize);
   cmd.AddValue ("queueSize", "The size of the Wifi Mac Queue", queueSize);
   cmd.AddValue ("spDuration", "The duration of service period in MicroSeconds", spDuration);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
@@ -245,10 +245,12 @@ main (int argc, char *argv[])
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
   cmd.Parse (argc, argv);
 
-  /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
-  Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::QueueBase::MaxPackets", UintegerValue (queueSize));
+  /* Validate A-MSDU and A-MPDU values */
+  ValidateFrameAggregationAttributes (msduAggSize, mpduAggSize);
+  /* Configure RTS/CTS and Fragmentation */
+  ConfigureRtsCtsAndFragmenatation ();
+  /* Wifi MAC Queue Parameters */
+  ChangeQueueSize (queueSize);
 
   /**** DmgWifiHelper is a meta-helper ****/
   DmgWifiHelper wifi;
@@ -280,12 +282,8 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   /* Set default algorithm for all nodes to be constant rate */
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
-                                                                "DataMode", StringValue (phyMode));
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));
 
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -301,11 +299,10 @@ main (int argc, char *argv[])
   Ssid ssid = Ssid ("ServicePeriod");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue(ssid),
-                   "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
-                   "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "ATIPresent", BooleanValue (false));
+                   "BeaconInterval", TimeValue (MicroSeconds (102400)));
 
   /* Set Analytical Codebook for the DMG Devices */
   wifi.SetCodebook ("ns3::CodebookAnalytical",
@@ -319,17 +316,17 @@ main (int argc, char *argv[])
   /* Install DMG STA Nodes */
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "BE_MaxAmpduSize", UintegerValue (0),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize));
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize));
 
   staDevices = wifi.Install (wifiPhy, wifiMac, NodeContainer (westNode, eastNode));
 
   /* Setting mobility model */
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0.0, +1.0, 0.0));   /* PCP/AP */
-  positionAlloc->Add (Vector (-1.0, 0.0, 0.0));   /* West STA */
-  positionAlloc->Add (Vector (+1.0, 0.0, 0.0));   /* East STA */
+  positionAlloc->Add (Vector (0.0, +1.0, 0.0));   /* DMG PCP/AP */
+  positionAlloc->Add (Vector (-1.0, 0.0, 0.0));   /* West DMG STA */
+  positionAlloc->Add (Vector (+1.0, 0.0, 0.0));   /* East DMG STA */
 
   mobility.SetPositionAllocator (positionAlloc);
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
@@ -367,7 +364,7 @@ main (int argc, char *argv[])
   Ptr<OnOffApplication> onoff;
   ApplicationContainer srcApp;
   OnOffHelper src ("ns3::UdpSocketFactory", InetSocketAddress (staInterfaces.GetAddress (1), 9999));
-  src.SetAttribute ("MaxBytes", UintegerValue (0));
+  src.SetAttribute ("MaxPackets", UintegerValue (0));
   src.SetAttribute ("PacketSize", UintegerValue (payloadSize));
   src.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1e6]"));
   src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));

@@ -682,7 +682,7 @@ GlobalRouter::DiscoverLSAs ()
         }
 
       //
-      // We have a net device that we need to check out.  If it suports 
+      // We have a net device that we need to check out.  If it supports 
       // broadcast and is not a point-point link, then it will be either a stub 
       // network or a transit network depending on the number of routers on
       // the segment.  We add the appropriate link record to the LSA.
@@ -910,7 +910,7 @@ GlobalRouter::ProcessBridgedBroadcastLink (Ptr<NetDevice> nd, GlobalRoutingLSA *
       NS_LOG_WARN ("Warning, interface has multiple IP addresses; using only the primary one");
     }
   Ipv4Address addrLocal = ipv4Local->GetAddress (interfaceLocal, 0).GetLocal ();
-  Ipv4Mask maskLocal = ipv4Local->GetAddress (interfaceLocal, 0).GetMask ();;
+  Ipv4Mask maskLocal = ipv4Local->GetAddress (interfaceLocal, 0).GetMask ();
   NS_LOG_LOGIC ("Working with local address " << addrLocal);
   uint16_t metricLocal = ipv4Local->GetMetric (interfaceLocal);
 
@@ -1201,7 +1201,7 @@ GlobalRouter::BuildNetworkLSAs (NetDeviceContainer c)
       //
       ClearBridgesVisited ();
       Ptr<Channel> ch = ndLocal->GetChannel ();
-      uint32_t nDevices = ch->GetNDevices ();
+      std::size_t nDevices = ch->GetNDevices ();
       NS_ASSERT (nDevices);
       NetDeviceContainer deviceList = FindAllNonBridgedDevicesOnLink (ch);
       NS_LOG_LOGIC ("Found " << deviceList.GetN () << " non-bridged devices on channel");
@@ -1270,7 +1270,7 @@ GlobalRouter::FindAllNonBridgedDevicesOnLink (Ptr<Channel> ch) const
   NS_LOG_FUNCTION (this << ch);
   NetDeviceContainer c;
 
-  for (uint32_t i = 0; i < ch->GetNDevices (); i++)
+  for (std::size_t i = 0; i < ch->GetNDevices (); i++)
     {
       Ptr<NetDevice> nd = ch->GetDevice (i);
       NS_LOG_LOGIC ("checking to see if the device " << nd << " is bridged");

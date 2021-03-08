@@ -22,17 +22,14 @@
 #define DMG_WIFI_HELPER_H
 
 #include "ns3/dmg-wifi-channel.h"
-#include "wifi-helper.h"
 #include "dmg-wifi-mac-helper.h"
-
-//TR++
 #include "spectrum-wifi-helper.h"
-//TR--
+#include "wifi-helper.h"
 
 namespace ns3 {
 
 /**
- * \brief manage and create wifi channel objects for the Dmg model.
+ * \brief manage and create wifi channel objects for the IEEE 802.11ad/ay models.
  *
  * The intent of this class is to make it easy to create a channel object
  * which implements the Dmg channel model. The Dmg channel model is described
@@ -192,6 +189,11 @@ public:
 
 protected:
   friend class DmgWifiHelper;
+
+  /**
+   * Set the default values for the WiGig PHY layer.
+   */
+  void SetDefaultWiGigPhyValues (void);
   /**
    * \param node the node on which we wish to create a wifi PHY
    * \param device the device within which this PHY will be created
@@ -341,8 +343,6 @@ public:
                     std::string n5 = "", const AttributeValue &v5 = EmptyAttributeValue (),
                     std::string n6 = "", const AttributeValue &v6 = EmptyAttributeValue (),
                     std::string n7 = "", const AttributeValue &v7 = EmptyAttributeValue ());
-
-  //TR++
   /**
    * \param phy the PHY helper to create PHY objects
    * \param mac the MAC helper to create MAC objects
@@ -353,7 +353,7 @@ public:
   NetDeviceContainer Install (const SpectrumDmgWifiPhyHelper &phyHelper,
                               const DmgWifiMacHelper &macHelper,
                               NodeContainer::Iterator first,
-                              NodeContainer::Iterator last) const;
+                              NodeContainer::Iterator last, bool installCodebook = true) const;
 
   /**
    * \param phy the PHY helper to create PHY objects
@@ -362,7 +362,7 @@ public:
    * \returns a device container which contains all the devices created by this method.
    */
   NetDeviceContainer Install (const SpectrumDmgWifiPhyHelper &phy,
-                              const DmgWifiMacHelper &mac, NodeContainer c) const;
+                              const DmgWifiMacHelper &mac, NodeContainer c, bool installCodebook = true) const;
   /**
    * \param phy the PHY helper to create PHY objects
    * \param mac the MAC helper to create MAC objects
@@ -370,7 +370,7 @@ public:
    * \returns a device container which contains all the devices created by this method.
    */
   NetDeviceContainer Install (const SpectrumDmgWifiPhyHelper &phy,
-                              const DmgWifiMacHelper &mac, Ptr<Node> node) const;
+                              const DmgWifiMacHelper &mac, Ptr<Node> node, bool installCodebook = true) const;
   /**
    * \param phy the PHY helper to create PHY objects
    * \param mac the MAC helper to create MAC objects
@@ -378,11 +378,10 @@ public:
    * \returns a device container which contains all the devices created by this method.
    */
   NetDeviceContainer Install (const SpectrumDmgWifiPhyHelper &phy,
-                              const DmgWifiMacHelper &mac, std::string nodeName) const;
-  //TR--
+                              const DmgWifiMacHelper &mac, std::string nodeName, bool installCodebook = true) const;
 
 private:
-  ObjectFactory m_codeBook;
+  ObjectFactory m_codeBook;                  ///< Codebook factory for all the devices
 
 };
 

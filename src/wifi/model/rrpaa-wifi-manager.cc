@@ -18,17 +18,16 @@
  * Author: Matías Richart <mrichart@fing.edu.uy>
  */
 
-#include "rrpaa-wifi-manager.h"
-#include "yans-wifi-phy.h"
-#include "wifi-phy.h"
-#include "wifi-mac.h"
-#include "ns3/assert.h"
+#include "ns3/packet.h"
 #include "ns3/log.h"
 #include "ns3/boolean.h"
 #include "ns3/double.h"
 #include "ns3/uinteger.h"
 #include "ns3/simulator.h"
-#include <cmath>
+#include "ns3/data-rate.h"
+#include "rrpaa-wifi-manager.h"
+#include "wifi-phy.h"
+#include "wifi-mac.h"
 
 NS_LOG_COMPONENT_DEFINE ("RrpaaWifiManager");
 
@@ -50,12 +49,12 @@ struct RrpaaWifiRemoteStation : public WifiRemoteStation
   bool m_adaptiveRtsOn;          //!< Check if Adaptive RTS mechanism is on.
   bool m_lastFrameFail;          //!< Flag if the last frame sent has failed.
   bool m_initialized;            //!< For initializing variables.
-  uint8_t m_nRate;              //!< Number of supported rates.
-  uint8_t m_prevRateIndex;      //!< Rate index of the previous transmission.
-  uint8_t m_rateIndex;          //!< Current rate index.
+  uint8_t m_nRate;               //!< Number of supported rates.
+  uint8_t m_prevRateIndex;       //!< Rate index of the previous transmission.
+  uint8_t m_rateIndex;           //!< Current rate index.
   uint8_t m_prevPowerLevel;      //!< Power level of the previous transmission.
   uint8_t m_powerLevel;          //!< Current power level.
-  RrpaaThresholdsTable m_thresholds;  //!< Rrpaa thresholds for this station.
+  RrpaaThresholdsTable m_thresholds;  //!< RRPAA thresholds for this station.
   RrpaaProbabilitiesTable m_pdTable;  //!< Probability table for power and rate changes.
 };
 
@@ -69,22 +68,22 @@ RrpaaWifiManager::GetTypeId (void)
     .SetGroupName ("Wifi")
     .AddConstructor<RrpaaWifiManager> ()
     .AddAttribute ("Basic",
-                   "If true the RRAA-BASIC algorithm will be used, otherwise the RRAA will be used.",
+                   "If true the RRPAA-BASIC algorithm will be used, otherwise the RRPAA will be used.",
                    BooleanValue (true),
                    MakeBooleanAccessor (&RrpaaWifiManager::m_basic),
                    MakeBooleanChecker ())
     .AddAttribute ("Timeout",
-                   "Timeout for the RRAA-BASIC loss estimation block (s).",
+                   "Timeout for the RRPAA-BASIC loss estimation block.",
                    TimeValue (MilliSeconds (500)),
                    MakeTimeAccessor (&RrpaaWifiManager::m_timeout),
                    MakeTimeChecker ())
     .AddAttribute ("FrameLength",
-                   "The data frame length (in bytes) used for calculating mode TxTime.",
+                   "The Data frame length (in bytes) used for calculating mode TxTime.",
                    UintegerValue (1420),
                    MakeUintegerAccessor (&RrpaaWifiManager::m_frameLength),
                    MakeUintegerChecker <uint32_t> ())
     .AddAttribute ("AckFrameLength",
-                   "The ACK frame length (in bytes) used for calculating mode TxTime.",
+                   "The Ack frame length (in bytes) used for calculating mode TxTime.",
                    UintegerValue (14),
                    MakeUintegerAccessor (&RrpaaWifiManager::m_ackLength),
                    MakeUintegerChecker <uint32_t> ())
@@ -159,7 +158,7 @@ RrpaaWifiManager::SetupPhy (const Ptr<WifiPhy> phy)
       WifiTxVector txVector;
       txVector.SetMode (mode);
       txVector.SetPreambleType (WIFI_PREAMBLE_LONG);
-      /* Calculate the TX Time of the data and the corresponding ACK*/
+      /* Calculate the TX Time of the Data and the corresponding Ack */
       Time dataTxTime = phy->CalculateTxDuration (m_frameLength, txVector, phy->GetFrequency ());
       Time ackTxTime = phy->CalculateTxDuration (m_ackLength, txVector, phy->GetFrequency ());
       NS_LOG_DEBUG ("Calculating TX times: Mode= " << mode << " DataTxTime= " << dataTxTime << " AckTxTime= " << ackTxTime);
@@ -175,6 +174,24 @@ RrpaaWifiManager::SetupMac (const Ptr<WifiMac> mac)
   m_sifs = mac->GetSifs ();
   m_difs = m_sifs + 2 * mac->GetSlot ();
   WifiRemoteStationManager::SetupMac (mac);
+}
+
+void
+RrpaaWifiManager::DoInitialize ()
+{
+  NS_LOG_FUNCTION (this);
+  if (GetHtSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HT rates");
+    }
+  if (GetVhtSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support VHT rates");
+    }
+  if (GetHeSupported ())
+    {
+      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HE rates");
+    }
 }
 
 Time
@@ -244,7 +261,7 @@ RrpaaWifiManager::CheckInit (RrpaaWifiRemoteStation *station)
       station->m_prevPowerLevel = m_maxPowerLevel;
       station->m_powerLevel = m_maxPowerLevel;
       WifiMode mode = GetSupported (station, 0);
-      uint8_t channelWidth = GetChannelWidth (station);
+      uint16_t channelWidth = GetChannelWidth (station);
       DataRate rate = DataRate (mode.GetDataRate (channelWidth));
       double power = GetPhy ()->GetPowerDbm (station->m_powerLevel);
       m_rateChange (rate, rate, station->m_state->m_address);
@@ -297,7 +314,7 @@ RrpaaWifiManager::InitThresholds (RrpaaWifiRemoteStation *station)
           mtl = nextMtl;
         }
       WifiRrpaaThresholds th;
-      th.m_ewnd = ceil (m_tau / totalTxTime.GetSeconds ());
+      th.m_ewnd = static_cast<uint32_t> (ceil (m_tau / totalTxTime.GetSeconds ()));
       th.m_ori = ori;
       th.m_mtl = mtl;
       station->m_thresholds.push_back (std::make_pair (th, mode));
@@ -325,7 +342,7 @@ void
 RrpaaWifiManager::DoReportDataFailed (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  RrpaaWifiRemoteStation *station = (RrpaaWifiRemoteStation *) st;
+  RrpaaWifiRemoteStation *station = static_cast<RrpaaWifiRemoteStation*> (st);
   CheckInit (station);
   station->m_lastFrameFail = true;
   CheckTimeout (station);
@@ -349,11 +366,11 @@ RrpaaWifiManager::DoReportRtsOk (WifiRemoteStation *st,
 }
 
 void
-RrpaaWifiManager::DoReportDataOk (WifiRemoteStation *st,
-                                  double ackSnr, WifiMode ackMode, double dataSnr)
+RrpaaWifiManager::DoReportDataOk (WifiRemoteStation *st, double ackSnr, WifiMode ackMode,
+                                  double dataSnr, uint16_t dataChannelWidth, uint8_t dataNss)
 {
-  NS_LOG_FUNCTION (this << st << ackSnr << ackMode << dataSnr);
-  RrpaaWifiRemoteStation *station = (RrpaaWifiRemoteStation *) st;
+  NS_LOG_FUNCTION (this << st << ackSnr << ackMode << dataSnr << dataChannelWidth << +dataNss);
+  RrpaaWifiRemoteStation *station = static_cast<RrpaaWifiRemoteStation*> (st);
   CheckInit (station);
   station->m_lastFrameFail = false;
   CheckTimeout (station);
@@ -375,11 +392,10 @@ WifiTxVector
 RrpaaWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  RrpaaWifiRemoteStation *station = (RrpaaWifiRemoteStation *) st;
-  uint8_t channelWidth = GetChannelWidth (station);
+  RrpaaWifiRemoteStation *station = static_cast<RrpaaWifiRemoteStation*> (st);
+  uint16_t channelWidth = GetChannelWidth (station);
   if (channelWidth > 20 && channelWidth != 22)
     {
-      //avoid to use legacy rate adaptation algorithms for IEEE 802.11n/ac
       channelWidth = 20;
     }
   CheckInit (station);
@@ -398,17 +414,16 @@ RrpaaWifiManager::DoGetDataTxVector (WifiRemoteStation *st)
       m_powerChange (prevPower, power, station->m_state->m_address);
       station->m_prevPowerLevel = station->m_powerLevel;
     }
-  return WifiTxVector (mode, station->m_powerLevel, GetPreambleForTransmission (mode, GetAddress (station)), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
+  return WifiTxVector (mode, station->m_powerLevel, GetPreambleForTransmission (mode.GetModulationClass (), GetShortPreambleEnabled (), UseGreenfieldForDestination (GetAddress (station))), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
 }
 WifiTxVector
 RrpaaWifiManager::DoGetRtsTxVector (WifiRemoteStation *st)
 {
   NS_LOG_FUNCTION (this << st);
-  RrpaaWifiRemoteStation *station = (RrpaaWifiRemoteStation *) st;
-  uint8_t channelWidth = GetChannelWidth (station);
+  RrpaaWifiRemoteStation *station = static_cast<RrpaaWifiRemoteStation*> (st);
+  uint16_t channelWidth = GetChannelWidth (station);
   if (channelWidth > 20 && channelWidth != 22)
     {
-      //avoid to use legacy rate adaptation algorithms for IEEE 802.11n/ac
       channelWidth = 20;
     }
   WifiTxVector rtsTxVector;
@@ -421,16 +436,16 @@ RrpaaWifiManager::DoGetRtsTxVector (WifiRemoteStation *st)
     {
       mode = GetNonErpSupported (station, 0);
     }
-  rtsTxVector = WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode, GetAddress (st)), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
+  rtsTxVector = WifiTxVector (mode, GetDefaultTxPowerLevel (), GetPreambleForTransmission (mode.GetModulationClass (), GetShortPreambleEnabled (), UseGreenfieldForDestination (GetAddress (station))), 800, 1, 1, 0, channelWidth, GetAggregation (station), false);
   return rtsTxVector;
 }
 
 bool
 RrpaaWifiManager::DoNeedRts (WifiRemoteStation *st,
-                             Ptr<const Packet> packet, bool normally)
+                             uint32_t size, bool normally)
 {
-  NS_LOG_FUNCTION (this << st << packet << normally);
-  RrpaaWifiRemoteStation *station = (RrpaaWifiRemoteStation *) st;
+  NS_LOG_FUNCTION (this << st << size << normally);
+  RrpaaWifiRemoteStation *station = static_cast<RrpaaWifiRemoteStation*> (st);
   CheckInit (station);
   if (m_basic)
     {
@@ -588,47 +603,11 @@ RrpaaWifiManager::RunAdaptiveRtsAlgorithm (RrpaaWifiRemoteStation *station)
 }
 
 WifiRrpaaThresholds
-RrpaaWifiManager::GetThresholds (RrpaaWifiRemoteStation *station, uint8_t rate) const
+RrpaaWifiManager::GetThresholds (RrpaaWifiRemoteStation *station, uint8_t index) const
 {
-  NS_LOG_FUNCTION (this << station << +rate);
-  WifiMode mode = GetSupported (station, rate);
+  NS_LOG_FUNCTION (this << station << +index);
+  WifiMode mode = GetSupported (station, index);
   return GetThresholds (station, mode);
-}
-
-bool
-RrpaaWifiManager::IsLowLatency (void) const
-{
-  return true;
-}
-
-void
-RrpaaWifiManager::SetHtSupported (bool enable)
-{
-  //HT is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HT rates");
-    }
-}
-
-void
-RrpaaWifiManager::SetVhtSupported (bool enable)
-{
-  //VHT is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support VHT rates");
-    }
-}
-
-void
-RrpaaWifiManager::SetHeSupported (bool enable)
-{
-  //HE is not supported by this algorithm.
-  if (enable)
-    {
-      NS_FATAL_ERROR ("WifiRemoteStationManager selected does not support HE rates");
-    }
 }
 
 } // namespace ns3

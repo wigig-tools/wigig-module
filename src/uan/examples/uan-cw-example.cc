@@ -77,7 +77,7 @@ Experiment::Experiment ()
 void
 Experiment::ResetData ()
 {
-  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << "  Resetting data");
+  NS_LOG_DEBUG (Now ().As (Time::S) << "  Resetting data");
   m_throughputs.push_back (m_bytesTotal * 8.0 / m_simTime.GetSeconds ());
   m_bytesTotal = 0;
 }
@@ -106,7 +106,7 @@ void
 Experiment::UpdatePositions (NodeContainer &nodes)
 {
 
-  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Updating positions");
+  NS_LOG_DEBUG (Now ().As (Time::S) << " Updating positions");
   NodeContainer::Iterator it = nodes.Begin ();
   Ptr<UniformRandomVariable> uv = CreateObject<UniformRandomVariable> ();
   for (; it != nodes.End (); it++)
@@ -266,15 +266,14 @@ int
 main (int argc, char **argv)
 {
 
-  LogComponentEnable ("UanCwExample", LOG_LEVEL_ALL);
-
   Experiment exp;
+  bool quiet = false;
 
   std::string gnudatfile ("cwexpgnuout.dat");
   std::string perModel = "ns3::UanPhyPerGenDefault";
   std::string sinrModel = "ns3::UanPhyCalcSinrDefault";
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("NumNodes", "Number of transmitting nodes", exp.m_numNodes);
   cmd.AddValue ("Depth", "Depth of transmitting and sink nodes", exp.m_depth);
   cmd.AddValue ("RegionSize", "Size of boundary in meters", exp.m_boundary);
@@ -287,7 +286,13 @@ main (int argc, char **argv)
   cmd.AddValue ("GnuFile", "Name for GNU Plot output", exp.m_gnudatfile);
   cmd.AddValue ("PerModel", "PER model name", perModel);
   cmd.AddValue ("SinrModel", "SINR model name", sinrModel);
+  cmd.AddValue ("Quiet", "Run in quiet mode (disable logging)", quiet);
   cmd.Parse (argc, argv);
+
+  if (!quiet)
+    {
+      LogComponentEnable ("UanCwExample", LOG_LEVEL_ALL);
+    }
 
   ObjectFactory obf;
   obf.SetTypeId (perModel);

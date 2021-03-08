@@ -23,24 +23,95 @@
 #ifndef STA_WIFI_MAC_H
 #define STA_WIFI_MAC_H
 
-#include "regular-wifi-mac.h"
-#include "supported-rates.h"
-#include "capability-information.h"
-#include "vht-operation.h"
-#include "extended-capabilities.h"
+#include "infrastructure-wifi-mac.h"
+#include "mgt-headers.h"
+
+class TwoLevelAggregationTest;
+class AmpduAggregationTest;
+class HeAggregationTest;
 
 namespace ns3  {
 
-class MgtAddBaRequestHeader;
+class SupportedRates;
+class CapabilityInformation;
 
 /**
  * \ingroup wifi
  *
- * The Wifi MAC high model for a non-AP STA in a BSS.
+ * Struct to hold information regarding observed AP through
+ * active/passive scanning
  */
-class StaWifiMac : public RegularWifiMac
+struct ApInfo
+{
+  Mac48Address m_bssid;               ///< BSSID
+  Mac48Address m_apAddr;              ///< AP MAC address
+  double m_snr;                       ///< SNR in linear scale
+  bool m_activeProbing;               ///< Flag whether active probing is used or not
+  MgtBeaconHeader m_beacon;           ///< Beacon header
+  MgtProbeResponseHeader m_probeResp; ///< Probe Response header
+};
+
+/**
+ * \ingroup wifi
+ *
+ * The Wifi MAC high model for a non-AP STA in a BSS. The state
+ * machine is as follows:
+ *
+   \verbatim
+   ---------       --------------                                         -----------
+   | Start |       | Associated | <-------------------------        ----> | Refused |
+   ---------       --------------                           |      /      -----------
+      |              |   /------------------------------\   |     /
+      \              v   v                              |   v    /
+       \    ----------------     ---------------     -----------------------------
+        \-> | Unassociated | --> | Wait Beacon | --> | Wait Association Response |
+            ----------------     ---------------     -----------------------------
+                  \                  ^     ^ |              ^    ^ |
+                   \                 |     | |              |    | |
+                    \                v      -               /     -
+                     \    -----------------------          /
+                      \-> | Wait Probe Response | --------/
+                          -----------------------
+                                  ^ |
+                                  | |
+                                   -
+   \endverbatim
+ *
+ * Notes:
+ * 1. The state 'Start' is not included in #MacState and only used
+ *    for illustration purpose.
+ * 2. The Unassociated state is a transient state before STA starts the
+ *    scanning procedure which moves it into either Wait Beacon or Wait
+ *    Probe Response, based on whether passive or active scanning is
+ *    selected.
+ * 3. In Wait Beacon and Wait Probe Response, STA is gathering beacon or
+ *    probe response packets from APs, resulted in a list of candidate AP.
+ *    After the respective timeout, it then tries to associate to the best
+ *    AP (i.e., best SNR). STA will switch between the two states and
+ *    restart the scanning procedure if SetActiveProbing() called.
+ * 4. In the case when AP responded to STA's association request with a
+ *    refusal, STA will try to associate to the next best AP until the list
+ *    of candidate AP is exhausted which sends STA to Refused state.
+ *    - Note that this behavior is not currently tested since ns-3 does not
+  *     implement association refusal at present.
+ * 5. The transition from Wait Association Response to Unassociated
+ *    occurs if an association request fails without explicit
+ *    refusal (i.e., the AP fails to respond).
+ * 6. The transition from Associated to Wait Association Response
+ *    occurs when STA's PHY capabilities changed. In this state, STA
+ *    tries to reassociate with the previously associated AP.
+ * 7. The transition from Associated to Unassociated occurs if the number
+ *    of missed beacons exceeds the threshold.
+ */
+class StaWifiMac : public InfrastructureWifiMac
 {
 public:
+  /// Allow test cases to access private members
+  friend class ::TwoLevelAggregationTest;
+  /// Allow test cases to access private members
+  friend class ::AmpduAggregationTest;
+  /// Allow test cases to access private members
+  friend class ::HeAggregationTest;
   /**
    * \brief Get the type ID.
    * \return the object TypeId
@@ -51,14 +122,21 @@ public:
   virtual ~StaWifiMac ();
 
   /**
+   * Set up WifiRemoteStationManager associated with this StaWifiMac.
+   *
+   * \param stationManager the station manager attached to this MAC.
+   */
+  void SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> stationManager);
+
+  /**
    * \param packet the packet to send.
    * \param to the address to which the packet should be sent.
    *
-   * The packet should be enqueued in a tx queue, and should be
+   * The packet should be enqueued in a TX queue, and should be
    * dequeued as soon as the channel access function determines that
    * access is granted to this MAC.
    */
-  void Enqueue (Ptr<const Packet> packet, Mac48Address to);
+  void Enqueue (Ptr<Packet> packet, Mac48Address to);
 
   /**
    * \param phy the physical layer attached to this MAC.
@@ -66,42 +144,36 @@ public:
   void SetWifiPhy (const Ptr<WifiPhy> phy);
 
   /**
-   * \param missed the number of beacons which must be missed
-   * before a new association sequence is started.
-   */
-  void SetMaxMissedBeacons (uint32_t missed);
-  /**
-   * \param timeout
+   * Return whether we are associated with an AP.
    *
-   * If no probe response is received within the specified
-   * timeout, the station sends a new probe request.
+   * \return true if we are associated with an AP, false otherwise
    */
-  void SetProbeRequestTimeout (Time timeout);
-  /**
-   * \param timeout
-   *
-   * If no association response is received within the specified
-   * timeout, the station sends a new association request.
-   */
-  void SetAssocRequestTimeout (Time timeout);
+  bool IsAssociated (void) const;
 
   /**
-   * Start an active association sequence immediately.
-   */
-  void StartActiveAssociation (void);
-  /**
-   * Get MultiBand Element supported by this STA.
-   * \return
-   */
-  Ptr<MultiBandElement> GetMultiBandElement (void) const;
-  /**
-   * Set the current MAC state.
+   * Return the association ID.
    *
-   * \param value the new state
+   * \return the association ID
    */
-  void SetState (enum MacState value);
+  uint16_t GetAssociationId (void) const;
+
+protected:
+  Ptr<MultiBandElement> GetMultiBandElement (void) const;
 
 private:
+  /**
+   * The current MAC state of the STA.
+   */
+  enum MacState
+  {
+    ASSOCIATED,
+    WAIT_BEACON,
+    WAIT_PROBE_RESP,
+    WAIT_ASSOC_RESP,
+    UNASSOCIATED,
+    REFUSED
+  };
+
   /**
    * Enable or disable active probing.
    *
@@ -115,7 +187,44 @@ private:
    */
   bool GetActiveProbing (void) const;
 
-  void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
+  /**
+   * Handle a received packet.
+   *
+   * \param mpdu the received MPDU
+   */
+  void Receive (Ptr<WifiMacQueueItem> mpdu);
+  /**
+   * Update associated AP's information from beacon. If STA is not associated,
+   * this information will used for the association process.
+   *
+   * \param beacon the beacon header
+   * \param apAddr MAC address of the AP
+   * \param bssid MAC address of BSSID
+   */
+  void UpdateApInfoFromBeacon (MgtBeaconHeader beacon, Mac48Address apAddr, Mac48Address bssid);
+  /**
+   * Update AP's information from probe response. This information is required
+   * for the association process.
+   *
+   * \param probeResp the probe response header
+   * \param apAddr MAC address of the AP
+   * \param bssid MAC address of BSSID
+   */
+  void UpdateApInfoFromProbeResp (MgtProbeResponseHeader probeResp, Mac48Address apAddr, Mac48Address bssid);
+  /**
+   * Update AP's information from association response.
+   *
+   * \param assocResp the association response header
+   * \param apAddr MAC address of the AP
+   */
+  void UpdateApInfoFromAssocResp (MgtAssocResponseHeader assocResp, Mac48Address apAddr);
+  /**
+   * Update list of candidate AP to associate. The list should contain ApInfo sorted from
+   * best to worst SNR, with no duplicate.
+   *
+   * \param newApInfo the new ApInfo to be inserted
+   */
+  void UpdateCandidateApList (ApInfo newApInfo);
 
   /**
    * Forward a probe request packet to the DCF. The standard is not clear on the correct
@@ -132,6 +241,10 @@ private:
    */
   void SendAssociationRequest (bool isReassoc);
   /**
+   * Forward a CF-Poll response packet to the CFP queue.
+   */
+  void SendCfPollResponse (void);
+  /**
    * Try to ensure that we are associated with an AP by taking an appropriate action
    * depending on the current association status.
    */
@@ -142,16 +255,16 @@ private:
    */
   void AssocRequestTimeout (void);
   /**
-   * This method is called after the probe request timeout occurred. We switch the state to
-   * WAIT_PROBE_RESP and re-send a probe request.
+   * Start the scanning process which trigger active or passive scanning based on the
+   * active probing flag.
    */
-  void ProbeRequestTimeout (void);
+  void StartScanning (void);
   /**
-   * Return whether we are associated with an AP.
-   *
-   * \return true if we are associated with an AP, false otherwise
+   * This method is called after wait beacon timeout or wait probe request timeout has
+   * occurred. This will trigger association process from beacons or probe responses
+   * gathered while scanning.
    */
-  bool IsAssociated (void) const;
+  void ScanningTimeout (void);
   /**
    * Return whether we are waiting for an association response from an AP.
    *
@@ -176,29 +289,11 @@ private:
    */
   SupportedRates GetSupportedRates (void) const;
   /**
-   * Return the extended capabilities of the device.
+   * Set the current MAC state.
    *
-   * \return the extended capabilities that we support
+   * \param value the new state
    */
-  Ptr<ExtendedCapabilities> GetExtendedCapabilities (void) const;
-  /**
-   * Return the HT capability of the device.
-   *
-   * \return the HT capability that we support
-   */
-  Ptr<HtCapabilities> GetHtCapabilities (void) const;
-  /**
-   * Return the VHT capability of the device.
-   *
-   * \return the VHT capability that we support
-   */
-  Ptr<VhtCapabilities> GetVhtCapabilities (void) const;
-  /**
-   * Return the HE capability of the device.
-   *
-   * \return the HE capability that we support
-   */
-  Ptr<HeCapabilities> GetHeCapabilities (void) const;
+  void SetState (MacState value);
   /**
    * Set the EDCA parameters.
    *
@@ -221,18 +316,29 @@ private:
    */
   void PhyCapabilitiesChanged (void);
 
+  void DoInitialize (void);
+
   MacState m_state;            ///< MAC state
+  uint16_t m_aid;              ///< Association AID
+  Time m_waitBeaconTimeout;    ///< wait beacon timeout
   Time m_probeRequestTimeout;  ///< probe request timeout
-  Time m_assocRequestTimeout;  ///< assoc request timeout
+  Time m_assocRequestTimeout;  ///< association request timeout
+  EventId m_waitBeaconEvent;   ///< wait beacon event
   EventId m_probeRequestEvent; ///< probe request event
-  EventId m_assocRequestEvent; ///< assoc request event
+  EventId m_assocRequestEvent; ///< association request event
   EventId m_beaconWatchdog;    ///< beacon watchdog
   Time m_beaconWatchdogEnd;    ///< beacon watchdog end
   uint32_t m_maxMissedBeacons; ///< maximum missed beacons
   bool m_activeProbing;        ///< active probing
+  std::vector<ApInfo> m_candidateAps; ///< list of candidate APs to associate to
+  // Note: std::multiset<ApInfo> might be a candidate container to implement
+  // this sorted list, but we are using a std::vector because we want to sort
+  // based on SNR but find duplicates based on BSSID, and in practice this
+  // candidate vector should not be too large.
 
-  TracedCallback<Mac48Address> m_assocLogger;   ///< assoc logger
-  TracedCallback<Mac48Address> m_deAssocLogger; ///< deassoc logger
+  TracedCallback<Mac48Address> m_assocLogger;   ///< association logger
+  TracedCallback<Mac48Address> m_deAssocLogger; ///< disassociation logger
+  TracedCallback<Time>         m_beaconArrival; ///< beacon arrival logger
 };
 
 } //namespace ns3

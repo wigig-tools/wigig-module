@@ -123,7 +123,7 @@ public:
   RrcHeaderTestCase (std::string s);
   virtual void DoRun (void) = 0;
   /**
-   * \brief Create radio resoure config dedicated
+   * \brief Create radio resource config dedicated
    * \returns LteRrcSap::RadioResourceConfigDedicated
    */
   LteRrcSap::RadioResourceConfigDedicated CreateRadioResourceConfigDedicated ();
@@ -737,7 +737,7 @@ HandoverPreparationInfoTestCase::DoRun (void)
   msg.asConfig.sourceDlCarrierFreq = 3;
   msg.asConfig.sourceUeIdentity = 11;
   msg.asConfig.sourceRadioResourceConfig = CreateRadioResourceConfigDedicated ();
-  msg.asConfig.sourceMasterInformationBlock.dlBandwidth = 3;
+  msg.asConfig.sourceMasterInformationBlock.dlBandwidth = 50;
   msg.asConfig.sourceMasterInformationBlock.systemFrameNumber = 1;
 
   msg.asConfig.sourceSystemInformationBlockType1.cellAccessRelatedInfo.csgIndication = true;

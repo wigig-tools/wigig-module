@@ -22,11 +22,11 @@
 #ifndef WIFI_SPECTRUM_SIGNAL_PARAMETERS_H
 #define WIFI_SPECTRUM_SIGNAL_PARAMETERS_H
 
-#include <ns3/spectrum-signal-parameters.h>
+#include "ns3/spectrum-signal-parameters.h"
 
 namespace ns3 {
 
-class Packet;
+class WifiPpdu;
 
 /**
  * \ingroup wifi
@@ -51,10 +51,7 @@ struct WifiSpectrumSignalParameters : public SpectrumSignalParameters
    */
   WifiSpectrumSignalParameters (const WifiSpectrumSignalParameters& p);
 
-  /**
-   * The packet being transmitted with this signal
-   */
-  Ptr<Packet> packet;
+  Ptr<WifiPpdu> ppdu; ///< The PPDU being transmitted
 };
 
 }  // namespace ns3

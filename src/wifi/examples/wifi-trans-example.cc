@@ -18,13 +18,15 @@
  * Author: Rediet <getachew.redieteab@orange.com>
  */
 
-#include <iostream>
-#include <stdlib.h>
-#include "ns3/core-module.h"
-#include "ns3/wifi-module.h"
-#include "ns3/mobility-module.h"
-#include "ns3/spectrum-module.h"
 #include "ns3/gnuplot.h"
+#include "ns3/command-line.h"
+#include "ns3/string.h"
+#include "ns3/ssid.h"
+#include "ns3/spectrum-helper.h"
+#include "ns3/spectrum-wifi-helper.h"
+#include "ns3/spectrum-analyzer-helper.h"
+#include "ns3/spectrum-channel.h"
+#include "ns3/mobility-helper.h"
 
 using namespace ns3;
 
@@ -55,7 +57,7 @@ int main (int argc, char** argv)
   int bw = 20;
   double pow = 23; //dBm
   bool verbose = false;
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("standard",
                 "OFDM-based Wi-Fi standard [11a, 11_10MHZ, 11_5MHZ, 11n_2_4GHZ, 11n_5GHZ, 11ac, 11ax_2_4GHZ, 11ax_5GHZ]",
                 standard);

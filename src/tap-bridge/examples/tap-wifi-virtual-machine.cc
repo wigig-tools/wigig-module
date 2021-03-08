@@ -82,7 +82,7 @@ NS_LOG_COMPONENT_DEFINE ("TapWifiVirtualMachineExample");
 int 
 main (int argc, char *argv[])
 {
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
 
   //
@@ -115,7 +115,7 @@ main (int argc, char *argv[])
   wifiMac.SetType ("ns3::AdhocWifiMac");
 
   //
-  // Configure the physcial layer.
+  // Configure the physical layer.
   //
   YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default ();
   YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();

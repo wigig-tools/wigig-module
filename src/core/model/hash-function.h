@@ -61,7 +61,7 @@ public:
    * \param [in] size Length of the buffer, in bytes.
    * \return 32-bit hash of the buffer.
    */
-  virtual uint32_t  GetHash32  (const char * buffer, const size_t size) = 0;
+  virtual uint32_t  GetHash32  (const char * buffer, const std::size_t size) = 0;
   /**
    * Compute 64-bit hash of a byte buffer.
    *
@@ -78,7 +78,7 @@ public:
    * \param [in] size Length of the buffer, in bytes.
    * \return 64-bit hash of the buffer.
    */
-  virtual uint64_t  GetHash64  (const char * buffer, const size_t size);
+  virtual uint64_t  GetHash64  (const char * buffer, const std::size_t size);
   /**
    * Restore initial state.
    */
@@ -86,14 +86,16 @@ public:
   /**
    * Constructor.
    */
-  Implementation () { };
+  Implementation ()
+  { }
   /**
    * Destructor.
    */
-  virtual ~Implementation () { };
+  virtual ~Implementation ()
+  { }
 };  // Hashfunction
 
-  
+
 /*--------------------------------------
  *  Hash function implementation
  *  by function pointers and templates
@@ -108,8 +110,8 @@ public:
  * See Hash::Function::Hash32 or Hash::Function::Hash64
  * @{
  */
-typedef uint32_t (*Hash32Function_ptr) (const char *, const size_t);
-typedef uint64_t (*Hash64Function_ptr) (const char *, const size_t);
+typedef uint32_t (*Hash32Function_ptr) (const char *, const std::size_t);
+typedef uint64_t (*Hash64Function_ptr) (const char *, const std::size_t);
 /**@}*/
 
 /**
@@ -132,12 +134,15 @@ public:
    *
    * \param [in] hp Function pointer to a 32-bit hash function.
    */
-  Hash32 (Hash32Function_ptr hp) : m_fp (hp) { };
-  uint32_t GetHash32 (const char * buffer, const size_t size)
+  Hash32 (Hash32Function_ptr hp) : m_fp (hp)
+  { }
+  uint32_t GetHash32 (const char * buffer, const std::size_t size)
   {
-    return (*m_fp) (buffer, size);
+    return (*m_fp)(buffer, size);
   }
-  void clear () { };
+  void clear ()
+  { }
+
 private:
   Hash32Function_ptr m_fp;  /**< The hash function. */
 };  // Hash32
@@ -145,7 +150,7 @@ private:
 /**
  * \ingroup hash
  *
- * \brief Template for creating a Hash::Implemetation from
+ * \brief Template for creating a Hash::Implementation from
  * a 64-bit hash function.
  */
 class Hash64 : public Implementation
@@ -156,12 +161,13 @@ public:
    *
    * \param [in] hp Function pointer to a 64-bit hash function.
    */
-  Hash64 (Hash64Function_ptr hp) : m_fp (hp) { };
-  uint64_t GetHash64 (const char * buffer, const size_t size)
+  Hash64 (Hash64Function_ptr hp) : m_fp (hp)
+  { }
+  uint64_t GetHash64 (const char * buffer, const std::size_t size)
   {
-    return (*m_fp) (buffer, size);
+    return (*m_fp)(buffer, size);
   }
-  uint32_t GetHash32 (const char * buffer, const size_t size)
+  uint32_t GetHash32 (const char * buffer, const std::size_t size)
   {
     uint32_t hash32;
     uint64_t hash64 = GetHash64 (buffer, size);
@@ -169,7 +175,9 @@ public:
     memcpy (&hash32, &hash64, sizeof (hash32));
     return hash32;
   }
-  void clear () { };
+  void clear ()
+  { }
+
 private:
   Hash64Function_ptr m_fp;  /**< The hash function. */
 };  // Hash64<Hash64Function_ptr>

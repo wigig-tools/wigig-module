@@ -74,9 +74,12 @@ OhBuildingsPropagationLossModel::GetLoss (Ptr<MobilityModel> a, Ptr<MobilityMode
 
   double loss = 0.0;
 
-  if (a1->IsOutdoor ())
+  bool isAIndoor = a1->IsIndoor ();
+  bool isBIndoor = b1->IsIndoor ();
+
+  if (!isAIndoor) // a is outdoor
     {
-      if (b1->IsOutdoor ())
+      if (!isBIndoor) // b is outdoor
         {
           loss = m_okumuraHata->GetLoss (a, b);
           NS_LOG_INFO (this << " O-O : " << loss);
@@ -91,12 +94,12 @@ OhBuildingsPropagationLossModel::GetLoss (Ptr<MobilityModel> a, Ptr<MobilityMode
   else
     {
       // a is indoor
-      if (b1->IsIndoor ())
+      if (isBIndoor) // b is indoor
         {
           if (a1->GetBuilding () == b1->GetBuilding ())
             {
               // nodes are in same building -> indoor communication ITU-R P.1238
-              loss = m_okumuraHata->GetLoss (a, b) + InternalWallsLoss (a1, b1);;
+              loss = m_okumuraHata->GetLoss (a, b) + InternalWallsLoss (a1, b1);
               NS_LOG_INFO (this << " I-I (same building)" << loss);
 
             }
@@ -111,8 +114,8 @@ OhBuildingsPropagationLossModel::GetLoss (Ptr<MobilityModel> a, Ptr<MobilityMode
         {
           loss = m_okumuraHata->GetLoss (a, b) + ExternalWallLoss (a1);
           NS_LOG_INFO (this << " I-O : " << loss);
-        } // end b1->IsIndoor ()
-    } // end a1->IsOutdoor ()
+        } // end if (isBIndoor)
+    } // end if (!isAIndoor)
 
   loss = std::max (0.0, loss);
   return loss;

@@ -45,12 +45,12 @@ int main (int argc, char *argv[])
   Config::SetDefault ("ns3::LteUePowerControl::AccumulationEnabled", BooleanValue (true));
   Config::SetDefault ("ns3::LteUePowerControl::Alpha", DoubleValue (1.0));
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
   
   Ptr<LteHelper> lteHelper = CreateObject<LteHelper> ();
 
-  uint8_t bandwidth = 25;
+  uint16_t bandwidth = 25;
   double d1 = 0;
 
   // Create Nodes: eNodeB and UE

@@ -38,21 +38,11 @@ public:
    * \return The AID of the station.
    */
   virtual uint16_t GetAssociationID (void);
-  /**
-   * \param address the current address of this MAC layer.
-   */
   virtual void SetAddress (Mac48Address address);
+  void SetLinkUpCallback (Callback<void> linkUp);
+  virtual void Enqueue (Ptr<Packet> packet, Mac48Address to);
   /**
-   * \param packet the packet to send.
-   * \param to the address to which the packet should be sent.
-   *
-   * The packet should be enqueued in a tx queue, and should be
-   * dequeued as soon as the channel access function determines that
-   * access is granted to this MAC.
-   */
-  virtual void Enqueue (Ptr<const Packet> packet, Mac48Address to);
-  /**
-   * Add manual Antenna Configuration for a specific DMG AD-HOC STA.
+   * Add manually the best antenna configuration for communication with a specific DMG AD-HOC STA.
    * \param txSectorID The ID of the transmit sector.
    * \param txAntennaID The ID of the transmit phased antenna array.
    * \param rxSectorID The ID of the receive sector.
@@ -62,6 +52,13 @@ public:
   void AddAntennaConfig (SectorID txSectorID, AntennaID txAntennaID,
                          SectorID rxSectorID, AntennaID rxAntennaID,
                          Mac48Address address);
+  /**
+   * Add manually the best antenna configuration for communication with a specific DMG AD-HOC STA.
+   * \param txSectorID The ID of the transmit sector.
+   * \param txAntennaID The ID of the transmit phased antenna array.
+   * \param address The MAC address of the peer DMG AD-HOC STA.
+   */
+  void AddAntennaConfig (SectorID txSectorID, AntennaID txAntennaID, Mac48Address address);
 
 protected:
   virtual void DoDispose (void);
@@ -83,7 +80,7 @@ protected:
   Ptr<MultiBandElement> GetMultiBandElement (void) const;
 
 private:
-  virtual void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
+  virtual void Receive (Ptr<WifiMacQueueItem> mpdu);
   /**
    * Return the DMG capability of the current STA.
    *

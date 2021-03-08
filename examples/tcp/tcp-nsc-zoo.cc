@@ -49,7 +49,7 @@ int main (int argc, char *argv[])
 
   Config::SetDefault ("ns3::OnOffApplication::PacketSize", UintegerValue (2048));
   Config::SetDefault ("ns3::OnOffApplication::DataRate", StringValue ("8kbps"));
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   // this allows the user to raise the number of nodes using --nodes=X command-line argument.
   cmd.AddValue ("nodes", "Number of nodes in the network (must be > 1)", MaxNodes);
   cmd.AddValue ("runtime", "How long the applications should send data (default 3 seconds)", runtime);
@@ -89,7 +89,7 @@ int main (int argc, char *argv[])
       internetStack.SetTcp ("ns3::NscTcpL4Protocol","Library",StringValue ("liblinux2.6.26.so"));
       // this switches node 3 to NSCs Linux 2.6.26 stack.
       internetStack.Install (n.Get (3));
-      // and then agains disables sack/timestamps/wscale on node 3.
+      // and then again disables sack/timestamps/wscale on node 3.
       Config::Set ("/NodeList/3/$ns3::Ns3NscStack<linux2.6.26>/net.ipv4.tcp_sack", StringValue ("0"));
       Config::Set ("/NodeList/3/$ns3::Ns3NscStack<linux2.6.26>/net.ipv4.tcp_timestamps", StringValue ("0"));
       Config::Set ("/NodeList/3/$ns3::Ns3NscStack<linux2.6.26>/net.ipv4.tcp_window_scaling", StringValue ("0"));

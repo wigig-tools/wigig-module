@@ -65,10 +65,10 @@ DsssErrorRateModel::GetDsssDqpskCck5_5SuccessRate (double sinr, uint64_t nbits)
   //symbol error probability
   double EbN0 = sinr * 22000000.0 / 1375000.0 / 4.0;
   double sep = SymbolErrorProb16Cck (4.0 * EbN0 / 2.0);
-  return std::pow (1.0 - sep, nbits / 4.0);
+  return std::min (1.0, std::pow (1.0 - sep, nbits / 4.0));
 #else
   NS_LOG_WARN ("Running a 802.11b CCK Matlab model less accurate than GSL model");
-  //The matlab model
+  //The Matlab model
   double ber;
   if (sinr > WLAN_SIR_PERFECT)
     {
@@ -80,14 +80,14 @@ DsssErrorRateModel::GetDsssDqpskCck5_5SuccessRate (double sinr, uint64_t nbits)
     }
   else
     {
-      //fitprops.coeff from matlab berfit
+      //fitprops.coeff from Matlab berfit
       double a1 = 5.3681634344056195e-001;
       double a2 = 3.3092430025608586e-003;
       double a3 = 4.1654372361004000e-001;
       double a4 = 1.0288981434358866e+000;
       ber = a1 * std::exp (-std::pow ((sinr - a2) / a3, a4));
     }
-  return std::pow ((1.0 - ber), static_cast<double> (nbits));
+  return std::min (1.0, std::pow ((1.0 - ber), static_cast<double> (nbits)));
 #endif
 }
 
@@ -100,10 +100,10 @@ DsssErrorRateModel::GetDsssDqpskCck11SuccessRate (double sinr, uint64_t nbits)
   //symbol error probability
   double EbN0 = sinr * 22000000.0 / 1375000.0 / 8.0;
   double sep = SymbolErrorProb256Cck (8.0 * EbN0 / 2.0);
-  return std::pow (1.0 - sep, nbits / 8.0);
+  return std::min (1.0, std::pow (1.0 - sep, nbits / 8.0));
 #else
   NS_LOG_WARN ("Running a 802.11b CCK Matlab model less accurate than GSL model");
-  //The matlab model
+  //The Matlab model
   double ber;
   if (sinr > WLAN_SIR_PERFECT)
     {
@@ -115,7 +115,7 @@ DsssErrorRateModel::GetDsssDqpskCck11SuccessRate (double sinr, uint64_t nbits)
     }
   else
     {
-      //fitprops.coeff from matlab berfit
+      //fitprops.coeff from Matlab berfit
       double a1 = 7.9056742265333456e-003;
       double a2 = -1.8397449399176360e-001;
       double a3 = 1.0740689468707241e+000;
@@ -124,7 +124,7 @@ DsssErrorRateModel::GetDsssDqpskCck11SuccessRate (double sinr, uint64_t nbits)
       double a6 = 2.2032715128698435e+000;
       ber =  (a1 * sinr * sinr + a2 * sinr + a3) / (sinr * sinr * sinr + a4 * sinr * sinr + a5 * sinr + a6);
     }
-  return std::pow ((1.0 - ber), static_cast<double> (nbits));
+  return std::min (1.0, std::pow ((1.0 - ber), static_cast<double> (nbits)));
 #endif
 }
 

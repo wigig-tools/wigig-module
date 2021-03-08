@@ -31,7 +31,7 @@ LrWpanMacHeader::LrWpanMacHeader ()
   SetType (LRWPAN_MAC_DATA);     // Assume Data frame
   SetSecDisable ();              // Assume there is No Aux Sec but
   SetNoFrmPend ();               // No Frame Pending
-  SetNoAckReq ();                // No Ack Frame will be expected from recepient
+  SetNoAckReq ();                // No Ack Frame will be expected from recipient
   SetNoPanIdComp ();             // No PAN Id Compression since no addresses
   SetFrmCtrlRes (0);             // Initialize the 3 reserved bits to 0
   SetDstAddrMode (NOADDR);       // Assume there will be no src and dst address
@@ -47,7 +47,7 @@ LrWpanMacHeader::LrWpanMacHeader (enum LrWpanMacType wpanMacType,
   SetSeqNum (seqNum);
   SetSecDisable ();              // Assume there is No Aux Sec but
   SetNoFrmPend ();               // No Frame Pending
-  SetNoAckReq ();                // No Ack Frame will be expected from recepient
+  SetNoAckReq ();                // No Ack Frame will be expected from recipient
   SetNoPanIdComp ();             // No PAN Id Compression since no addresses
   SetFrmCtrlRes (0);             // Initialize the 3 reserved bits to 0
   SetDstAddrMode (NOADDR);       // Assume there will be no src and dst address
@@ -252,14 +252,11 @@ LrWpanMacHeader::GetKeyIdIndex (void) const
   return(m_auxKeyIdKeyIndex);
 }
 
-
 bool
 LrWpanMacHeader::IsBeacon (void) const
 {
   return(m_fctrlFrmType == LRWPAN_MAC_BEACON);
 }
-
-
 
 bool
 LrWpanMacHeader::IsData (void) const
@@ -267,15 +264,11 @@ LrWpanMacHeader::IsData (void) const
   return(m_fctrlFrmType == LRWPAN_MAC_DATA);
 }
 
-
-
 bool
 LrWpanMacHeader::IsAcknowledgment (void) const
 {
   return(m_fctrlFrmType == LRWPAN_MAC_ACKNOWLEDGMENT);
 }
-
-
 
 bool
 LrWpanMacHeader::IsCommand (void) const
@@ -786,9 +779,6 @@ LrWpanMacHeader::Deserialize (Buffer::Iterator start)
     }
   return i.GetDistanceFrom (start);
 }
-
-// ----------------------------------------------------------------------------------------------------------
-
 
 } //namespace ns3
 

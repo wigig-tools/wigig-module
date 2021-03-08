@@ -17,8 +17,13 @@
 #include "vht-capabilities.h"
 #include "vht-operation.h"
 #include "dmg-capabilities.h"
+#include "edmg-capabilities.h"
 #include "dsss-parameter-set.h"
 #include "edca-parameter-set.h"
+#include "cf-parameter-set.h"
+#include "extended-capabilities.h"
+#include "he-capabilities.h"
+#include "he-operation.h"
 
 namespace ns3 {
 
@@ -30,14 +35,21 @@ NS_LOG_COMPONENT_DEFINE ("CommonHeader");
 void
 MgtFrame::AddWifiInformationElement (Ptr<WifiInformationElement> element)
 {
-  m_map[element->ElementId ()] = element;
+  if (element->ElementId () != IE_EXTENSION)
+    {
+      m_map[std::make_pair (element->ElementId (), 0)] = element;
+    }
+  else
+    {
+      m_map[std::make_pair (element->ElementId (), element->ElementIdExt ())] = element;
+    }
 }
 
 Ptr<WifiInformationElement>
-MgtFrame::GetInformationElement (WifiInformationElementId id)
+MgtFrame::GetInformationElement (WifiInfoElementId id)
 {
   WifiInformationElementMap::const_iterator it = m_map.find (id);
-  if (it != m_map.end())
+  if (it != m_map.end ())
     {
       return it->second;
     }
@@ -90,10 +102,14 @@ MgtFrame::DeserializeInformationElements (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
   Ptr<WifiInformationElement> element;
-  uint8_t id, length;
+  uint8_t id, extensionId, length;
   while (!i.IsEnd ())
     {
-      i = DeserializeElementID (i, id, length);
+      i = DeserializeExtensionElementID (i, id, length, extensionId);
+      if (id != IE_EXTENSION)
+        {
+          i = DeserializeElementID (i, id , length);
+        }
       switch (id)
         {
           case IE_SUPPORTED_RATES:
@@ -121,11 +137,11 @@ MgtFrame::DeserializeInformationElements (Buffer::Iterator start)
               element = Create<HtOperation> ();
               break;
             }
-        case IE_VHT_OPERATION:
-          {
-            element = Create<VhtOperation> ();
-            break;
-          }
+          case IE_VHT_OPERATION:
+            {
+              element = Create<VhtOperation> ();
+              break;
+            }
           case IE_ERP_INFORMATION:
             {
               element = Create<ErpInformation> ();
@@ -171,15 +187,99 @@ MgtFrame::DeserializeInformationElements (Buffer::Iterator start)
               element = Create<ExtendedScheduleElement> ();
               break;
             }
+          case IE_EXTENDED_CAPABILITIES:
+            {
+              element = Create<ExtendedCapabilities> ();
+              break;
+            }
           case IE_STA_AVAILABILITY:
             {
               element = Create<StaAvailabilityElement> ();
               break;
             }
+          case IE_DMG_BEAM_REFINEMENT:
+            {
+              element = Create<BeamRefinementElement> ();
+              break;
+            }
+          case IE_CHANNEL_MEASUREMENT_FEEDBACK:
+            {
+              element = Create<ChannelMeasurementFeedbackElement> ();
+              break;
+            }
+          case IE_CF_PARAMETER_SET:
+            {
+              element = Create<CfParameterSet> ();
+              break;
+            }
+          case IE_EXTENSION:
+            {
+              switch (extensionId)
+                {
+                  case IE_EXT_HE_CAPABILITIES:
+                    {
+                      element = Create<HeCapabilities> ();
+                      break;
+                    }
+                  case IE_EXT_HE_OPERATION:
+                    {
+                      element = Create<HeOperation> ();
+                      break;
+                    }
+                  case IE_EXTENSION_EDMG_TRAINING_FIELD_SCHEDULE:
+                    {
+                      element = Create<EdmgTrainingFieldScheduleElement> ();
+                      break;
+                    }
+                  case IE_EXTENSION_EDMG_CAPABILITIES:
+                    {
+                      element = Create<EdmgCapabilities> ();
+                      break;
+                    }
+                  case IE_EXTENSION_EDMG_OPERATION:
+                    {
+                      element = Create<EdmgOperationElement> ();
+                      break;
+                    }
+                  case IE_EXTENSION_EDMG_CHANNEL_MEASUREMENT_FEEDBACK:
+                    {
+                      element = Create<EDMGChannelMeasurementFeedbackElement> ();
+                      break;
+                    }
+                  case IE_EXTENSION_EDMG_BRP_REQUEST:
+                    {
+                      element = Create<EdmgBrpRequestElement> ();
+                      break;
+                    }
+                  case IE_EXTENSION_EDMG_GROUP_ID_SET:
+                    {
+                      element = Create<EDMGGroupIDSetElement> ();
+                      break;
+                    }
+                  case IE_EXTENSION_EDMG_PARTIAL_SECTOR_SWEEP:
+                    {
+                      element = Create<EdmgPartialSectorLevelSweep> ();
+                      break;
+                    }
+                  default:
+                    NS_FATAL_ERROR ("Extension Information Element="  << +extensionId << " is not supported");
+                }
+              break;
+            }
+          default:
+            NS_FATAL_ERROR ("Information Element="  << +id << " is not supported");
         }
 
-      i = element->DeserializeElementBody (i, length);
-      m_map[id] = element;
+      if (id != IE_EXTENSION)
+        {
+          i = element->DeserializeElementBody (i, length);
+          m_map[std::make_pair (id, 0)] = element;
+        }
+      else
+        {
+          i = element->DeserializeElementBody (i, length - 1);
+          m_map[std::make_pair (id, extensionId)] = element;
+        }
     }
 
   return i;

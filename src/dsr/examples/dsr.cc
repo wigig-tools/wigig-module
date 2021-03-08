@@ -29,15 +29,15 @@
  * US Department of Defense (DoD), and ITTC at The University of Kansas.
  */
 
+#include <sstream>
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/config-store-module.h"
-#include "ns3/wifi-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/dsr-module.h"
-#include <sstream>
+#include "ns3/yans-wifi-helper.h"
 
 using namespace ns3;
 
@@ -94,7 +94,7 @@ main (int argc, char *argv[])
   std::string phyMode ("DsssRate11Mbps");
 
   //Allow users to override the default parameters and set it to new ones from CommandLine.
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("nWifis", "Number of wifi nodes", nWifis);
   cmd.AddValue ("nSinks", "Number of SINK traffic nodes", nSinks);
   cmd.AddValue ("rate", "CBR traffic rate(in kbps), Default:8", rate);

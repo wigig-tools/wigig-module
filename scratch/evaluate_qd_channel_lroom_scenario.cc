@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -72,18 +72,15 @@ Ptr<OnOffApplication> onoff;
 Ptr<BulkSendApplication> bulk;
 
 /* Network Nodes */
-Ptr<WifiNetDevice> apWifiNetDevice;
-Ptr<WifiNetDevice> staWifiNetDevice;
-Ptr<WifiRemoteStationManager> apRemoteStationManager;
+Ptr<WifiNetDevice> apWifiNetDevice, staWifiNetDevice;
 Ptr<DmgApWifiMac> apWifiMac;
 Ptr<DmgStaWifiMac> staWifiMac;
-Ptr<DmgWifiPhy> apWifiPhy;
-Ptr<DmgWifiPhy> staWifiPhy;
-Ptr<WifiRemoteStationManager> staRemoteStationManager;
+Ptr<DmgWifiPhy> apWifiPhy, staWifiPhy;
+Ptr<WifiRemoteStationManager> apRemoteStationManager, staRemoteStationManager;
 NetDeviceContainer staDevices;
 
-/*** Beamforming TxSS Schedulling ***/
-uint16_t biThreshold = 10;                /* BI Threshold to trigger TxSS TXOP. */
+/*** Beamforming TXSS Schedulling ***/
+uint16_t biThreshold = 10;                /* BI Threshold to trigger TXSS TXOP. */
 uint16_t biCounter;                       /* Number of beacon intervals that have passed. */
 
 /* Flow monitor */
@@ -97,32 +94,7 @@ uint64_t receivedPackets = 0;
 bool csv = false;                         /* Enable CSV output. */
 
 /* Tracing */
-Ptr<QdPropagationLossModel> lossModelRaytracing;                         //!< Q-D Channel Tracing Model.
-
-struct Parameters : public SimpleRefCount<Parameters>
-{
-  uint32_t srcNodeID;
-  uint32_t dstNodeID;
-  Ptr<DmgWifiMac> wifiMac;
-};
-
-template <typename T>
-std::string to_string_with_precision (const T a_value, const int n = 6)
-{
-  std::ostringstream out;
-  out.precision (n);
-  out << std::fixed << a_value;
-  return out.str ();
-}
-
-double
-CalculateSingleStreamThroughput (Ptr<PacketSink> sink, uint64_t &lastTotalRx, double &averageThroughput)
-{
-  double thr = (sink->GetTotalRx () - lastTotalRx) * (double) 8 / 1e5;     /* Convert Application RX Packets to MBits. */
-  lastTotalRx = sink->GetTotalRx ();
-  averageThroughput += thr;
-  return thr;
-}
+Ptr<QdPropagationEngine> qdPropagationEngine; /* Q-D Propagation Engine. */
 
 void
 CalculateThroughput (void)
@@ -131,10 +103,10 @@ CalculateThroughput (void)
   if (!csv)
     {
       string duration = to_string_with_precision<double> (Simulator::Now ().GetSeconds () - 0.1, 1)
-        + " - " + to_string_with_precision<double> (Simulator::Now ().GetSeconds (), 1);
+                      + " - " + to_string_with_precision<double> (Simulator::Now ().GetSeconds (), 1);
       std::cout << std::left << std::setw (12) << duration
                 << std::left << std::setw (12) << thr
-                << std::left << std::setw (12) << lossModelRaytracing->GetCurrentTraceIndex () << std::endl;
+                << std::left << std::setw (12) << qdPropagationEngine->GetCurrentTraceIndex () << std::endl;
     }
   else
     {
@@ -144,38 +116,28 @@ CalculateThroughput (void)
 }
 
 void
-SLSCompleted (Ptr<OutputStreamWrapper> stream, Ptr<Parameters> parameters, Mac48Address address,  ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<OutputStreamWrapper> stream, Ptr<SLS_PARAMETERS> parameters, SlsCompletionAttrbitutes attributes)
 {
   *stream->GetStream () << parameters->srcNodeID + 1 << "," << parameters->dstNodeID + 1 << ","
-                        << lossModelRaytracing->GetCurrentTraceIndex () << ","
-                        << uint16_t (sectorId) << "," << uint16_t (antennaId)  << ","
+                        << qdPropagationEngine->GetCurrentTraceIndex () << ","
+                        << uint16_t (attributes.sectorID) << "," << uint16_t (attributes.antennaID)  << ","
                         << parameters->wifiMac->GetTypeOfStation ()  << ","
                         << apWifiNetDevice->GetNode ()->GetId () + 1  << ","
                         << Simulator::Now ().GetNanoSeconds () << std::endl;
-
   if (!csv)
     {
-      std::cout << "DMG STA " << parameters->wifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-      std::cout << "Best Tx Antenna Configuration: SectorID=" << uint16_t (sectorId) << ", AntennaID=" << uint16_t (antennaId) << std::endl;
+      std::cout << "DMG STA " << parameters->wifiMac->GetAddress ()
+                << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
+      std::cout << "Best Tx Antenna Configuration: AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
     }
 }
 
 void
-MacRxOk (Ptr<DmgWifiMac> WifiMac, Ptr<OutputStreamWrapper> stream,
-         WifiMacType type, Mac48Address address, double snrValue)
+MacRxOk (Ptr<OutputStreamWrapper> stream, WifiMacType, Mac48Address, double snrValue)
 {
-  if (type == WIFI_MAC_QOSDATA)
-    {
-      *stream->GetStream () << Simulator::Now ().GetNanoSeconds () << ","
-                            << address << ","
-                            << WifiMac->GetAddress () << ","
-                            << snrValue << std::endl;
-    }
+  *stream->GetStream () << Simulator::Now ().GetNanoSeconds () << "," << snrValue << std::endl;
 }
-
-
 
 void
 StationAssoicated (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, uint16_t aid)
@@ -203,7 +165,7 @@ DataTransmissionIntervalStarted (Ptr<DmgApWifiMac> apWifiMac, Ptr<DmgStaWifiMac>
       biCounter++;
       if (biCounter == biThreshold)
         {
-          staWifiMac->InitiateTxssCbap (address);
+          staWifiMac->Perform_TXSS_TXOP (address);
           biCounter = 0;
         }
     }
@@ -222,7 +184,7 @@ PhyTxEnd (Ptr<const Packet>)
 }
 
 void
-PhyRxDrop (Ptr<const Packet>)
+PhyRxDrop (Ptr<const Packet>, WifiPhyRxfailureReason)
 {
   droppedPackets++;
 }
@@ -236,35 +198,26 @@ PhyRxEnd (Ptr<const Packet>)
 int
 main (int argc, char *argv[])
 {
-  bool activateApp = true;                      /* Flag to indicate whether we activate onoff or bulk App */
-  string socketType = "ns3::TcpSocketFactory";  /* Socket Type (TCP/UDP) */
-  uint32_t packetSize = 1448;                   /* Application payload size in bytes. */
-  string dataRate = "300Mbps";                  /* Application data rate. */
-  string tcpVariant = "NewReno";                /* TCP Variant Type. */
-  uint32_t bufferSize = 131072;                 /* TCP Send/Receive Buffer Size. */
-  uint32_t maxPackets = 0;                      /* Maximum Number of Packets */
-  uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
-  uint32_t mpduAggregationSize = 262143;        /* The maximum aggregation size for A-MSPU in Bytes. */
-  uint32_t queueSize = 1000;                    /* Wifi MAC Queue Size. */
-  string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
-  uint16_t startDistance = 0;                   /* Starting distance in the Trace-File. */
-  bool enableMobility = true;                   /* Enable mobility. */
-  bool verbose = false;                         /* Print Logging Information. */
-  double simulationTime = 10;                   /* Simulation time in seconds. */
-  bool pcapTracing = false;                     /* PCAP Tracing is enabled or not. */
-  std::map<std::string, std::string> tcpVariants; /* List of the tcp Variants */
-  std::string arrayConfig = "28";               /* Phased antenna array configuration*/
-
-  /** TCP Variants **/
-  tcpVariants.insert (std::make_pair ("NewReno",       "ns3::TcpNewReno"));
-  tcpVariants.insert (std::make_pair ("Hybla",         "ns3::TcpHybla"));
-  tcpVariants.insert (std::make_pair ("HighSpeed",     "ns3::TcpHighSpeed"));
-  tcpVariants.insert (std::make_pair ("Vegas",         "ns3::TcpVegas"));
-  tcpVariants.insert (std::make_pair ("Scalable",      "ns3::TcpScalable"));
-  tcpVariants.insert (std::make_pair ("Veno",          "ns3::TcpVeno"));
-  tcpVariants.insert (std::make_pair ("Bic",           "ns3::TcpBic"));
-  tcpVariants.insert (std::make_pair ("Westwood",      "ns3::TcpWestwood"));
-  tcpVariants.insert (std::make_pair ("WestwoodPlus",  "ns3::TcpWestwoodPlus"));
+  bool activateApp = true;                        /* Flag to indicate whether we activate OnOff/Bulk Application. */
+  string socketType = "ns3::TcpSocketFactory";    /* Socket type (TCP/UDP). */
+  uint32_t packetSize = 1448;                     /* Application payload size in bytes. */
+  string dataRate = "300Mbps";                    /* Application data rate. */
+  string tcpVariant = "NewReno";                  /* TCP Variant Type. */
+  uint32_t bufferSize = 131072;                   /* TCP Send/Receive Buffer Size. */
+  uint32_t maxPackets = 0;                        /* Maximum Number of Packets */
+  string msduAggSize = "max";                     /* The maximum aggregation size for A-MSDU in Bytes. */
+  string mpduAggSize = "max";                     /* The maximum aggregation size for A-MPDU in Bytes. */
+  bool enableRts = false;                         /* Flag to indicate if RTS/CTS handskahre is enabled or disabled. */
+  uint32_t rtsThreshold = 0;                      /* RTS/CTS handshare threshold. */
+  string queueSize = "4000p";                     /* Wifi MAC Queue Size. */
+  string phyMode = "DMG_MCS12";                   /* Type of the DMG physical layer. */
+  uint16_t startDistance = 0;                     /* Starting distance in the Trace-File. */
+  bool enableMobility = true;                     /* Enable mobility. */
+  bool verbose = false;                           /* Print logging information. */
+  double simulationTime = 10;                     /* Simulation time in seconds. */
+  string directory = "";                          /* Path to the directory where to store the results. */
+  bool pcapTracing = false;                       /* Fla to indicate if PCAP tracing is enabled or not. */
+  string arrayConfig = "28";                      /* Phased antenna array configuration. */
 
   /* Command line argument parser setup. */
   CommandLine cmd;
@@ -273,11 +226,13 @@ main (int argc, char *argv[])
   cmd.AddValue ("packetSize", "Application packet size in bytes", packetSize);
   cmd.AddValue ("dataRate", "Application data rate", dataRate);
   cmd.AddValue ("maxPackets", "Maximum number of packets to send", maxPackets);
-  cmd.AddValue ("tcpVariant", "Transport protocol to use: TcpTahoe, TcpReno, TcpNewReno, TcpWestwood, TcpWestwoodPlus", tcpVariant);
+  cmd.AddValue ("tcpVariant", TCP_VARIANTS_NAMES, tcpVariant);
   cmd.AddValue ("socketType", "Type of the Socket (ns3::TcpSocketFactory, ns3::UdpSocketFactory)", socketType);
   cmd.AddValue ("bufferSize", "TCP Buffer Size (Send/Receive) in Bytes", bufferSize);
-  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
-  cmd.AddValue ("mpduAggregation", "The maximum aggregation size for A-MPDU in Bytes", mpduAggregationSize);
+  cmd.AddValue ("msduAggSize", "The maximum aggregation size for A-MSDU in Bytes", msduAggSize);
+  cmd.AddValue ("mpduAggSize", "The maximum aggregation size for A-MPDU in Bytes", mpduAggSize);
+  cmd.AddValue ("enableRts", "Enable or disable RTS/CTS handshake", enableRts);
+  cmd.AddValue ("rtsThreshold", "The RTS/CTS threshold value", rtsThreshold);
   cmd.AddValue ("queueSize", "The maximum size of the Wifi MAC Queue", queueSize);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
   cmd.AddValue ("startDistance", "Starting distance in the trace file [0-260]", startDistance);
@@ -285,37 +240,21 @@ main (int argc, char *argv[])
   cmd.AddValue ("enableMobility", "Whether to enable mobility or simulate static scenario", enableMobility);
   cmd.AddValue ("verbose", "Turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
+  cmd.AddValue ("directory", "Path to the directory where we store the results", directory);
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
   cmd.AddValue ("arrayConfig", "Antenna array configuration", arrayConfig);
   cmd.AddValue ("csv", "Enable CSV output instead of plain text. This mode will suppress all the messages related statistics and events.", csv);
   cmd.Parse (argc, argv);
 
-  /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
-  Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::QueueBase::MaxPackets", UintegerValue (queueSize));
+  /* Validate A-MSDU and A-MPDU values */
+  ValidateFrameAggregationAttributes (msduAggSize, mpduAggSize);
+  /* Configure RTS/CTS and Fragmentation */
+  ConfigureRtsCtsAndFragmenatation (enableRts, rtsThreshold);
+  /* Wifi MAC Queue Parameters */
+  ChangeQueueSize (queueSize);
 
   /*** Configure TCP Options ***/
-  /* Select TCP variant */
-  std::map<std::string, std::string>::const_iterator iter = tcpVariants.find (tcpVariant);
-  NS_ASSERT_MSG (iter != tcpVariants.end (), "Cannot find Tcp Variant");
-  TypeId tid = TypeId::LookupByName (iter->second);
-  Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (tid));
-  if (tcpVariant.compare ("Westwood") == 0)
-    {
-      Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOOD));
-      Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
-    }
-  else if (tcpVariant.compare ("WestwoodPlus") == 0)
-    {
-      Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOODPLUS));
-      Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
-    }
-
-  /* Configure TCP Segment Size */
-  Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (packetSize));
-  Config::SetDefault ("ns3::TcpSocket::SndBufSize", UintegerValue (bufferSize));
-  Config::SetDefault ("ns3::TcpSocket::RcvBufSize", UintegerValue (bufferSize));
+  ConfigureTcpOptions (tcpVariant, packetSize, bufferSize);
 
   /**** DmgWifiHelper is a meta-helper ****/
   DmgWifiHelper wifi;
@@ -330,19 +269,17 @@ main (int argc, char *argv[])
       LogComponentEnable ("Mobility", LOG_LEVEL_ALL);
     }
 
-  /**** Setup Ray-Tracing Channel ****/
-  /**** Set up Channel ****/
+  /**** Setup mmWave Q-D Channel ****/
   Ptr<MultiModelSpectrumChannel> spectrumChannel = CreateObject<MultiModelSpectrumChannel> ();
-  lossModelRaytracing = CreateObject<QdPropagationLossModel> ();
-  Ptr<QdPropagationDelay> propagationDelayRayTracing = CreateObject<QdPropagationDelay> ();
-  lossModelRaytracing->SetAttribute ("QDModelFolder", StringValue ("DmgFiles/QdChannel/L-ShapedRoom/"));
-  propagationDelayRayTracing->SetAttribute ("QDModelFolder", StringValue ("DmgFiles/QdChannel/L-ShapedRoom/"));
+  qdPropagationEngine = CreateObject<QdPropagationEngine> ();
+  qdPropagationEngine->SetAttribute ("QDModelFolder", StringValue ("DmgFiles/QdChannel/L-ShapedRoom/"));
+  Ptr<QdPropagationLossModel> lossModelRaytracing = CreateObject<QdPropagationLossModel> (qdPropagationEngine);
+  Ptr<QdPropagationDelayModel> propagationDelayRayTracing = CreateObject<QdPropagationDelayModel> (qdPropagationEngine);
   spectrumChannel->AddSpectrumPropagationLossModel (lossModelRaytracing);
   spectrumChannel->SetPropagationDelayModel (propagationDelayRayTracing);
   if (enableMobility)
     {
-      lossModelRaytracing->SetAttribute ("Speed", DoubleValue (0.1));
-      propagationDelayRayTracing->SetAttribute ("Speed", DoubleValue (0.1));
+      qdPropagationEngine->SetAttribute ("Interval", TimeValue (MilliSeconds (100)));
     }
 
   /**** Setup physical layer ****/
@@ -352,14 +289,10 @@ main (int argc, char *argv[])
   spectrumWifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
   spectrumWifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   spectrumWifiPhy.Set ("TxPowerLevels", UintegerValue (1));
-  /* Set operating channel */
+  /* Set the operational channel */
   spectrumWifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  spectrumWifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  spectrumWifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   /* Set default algorithm for all nodes to be constant rate */
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
-                                "DataMode", StringValue (phyMode));
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));
   /* Make four nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
   wifiNodes.Create (2);
@@ -373,11 +306,10 @@ main (int argc, char *argv[])
   Ssid ssid = Ssid ("Mobility");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue (ssid),
-                   "BE_MaxAmpduSize", UintegerValue (mpduAggregationSize),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (13),
-                   "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "ATIPresent", BooleanValue (false));
+                   "BeaconInterval", TimeValue (MicroSeconds (102400)));
 
   /* Set Parametric Codebook for the DMG AP */
   wifi.SetCodebook ("ns3::CodebookParametric",
@@ -389,8 +321,8 @@ main (int argc, char *argv[])
 
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "BE_MaxAmpduSize", UintegerValue (mpduAggregationSize),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize));
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize));
 
   /* Set Parametric Codebook for the DMG STA */
   wifi.SetCodebook ("ns3::CodebookParametric",
@@ -431,7 +363,7 @@ main (int argc, char *argv[])
       if (applicationType == "onoff")
         {
           OnOffHelper src (socketType, dest);
-          src.SetAttribute ("MaxBytes", UintegerValue (maxPackets));
+          src.SetAttribute ("MaxPackets", UintegerValue (maxPackets));
           src.SetAttribute ("PacketSize", UintegerValue (packetSize));
           src.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1e6]"));
           src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
@@ -442,7 +374,7 @@ main (int argc, char *argv[])
       else if (applicationType == "bulk")
         {
           BulkSendHelper src (socketType, dest);
-          srcApp = src.Install (staWifiNode);
+          srcApp= src.Install (staWifiNode);
           bulk = StaticCast<BulkSendApplication> (srcApp.Get (0));
         }
       srcApp.Start (Seconds (simulationTime + 1));
@@ -469,12 +401,10 @@ main (int argc, char *argv[])
   staRemoteStationManager = StaticCast<WifiRemoteStationManager> (staWifiNetDevice->GetRemoteStationManager ());
 
   /** Connect Traces **/
-  AsciiTraceHelper ascii;
-  Ptr<OutputStreamWrapper> outputSlsPhase = ascii.CreateFileStream ("slsResults" + arrayConfig + ".csv");
-  *outputSlsPhase->GetStream () << "SRC_ID,DST_ID,TRACE_IDX,SECTOR_ID,ANTENNA_ID,ROLE,BSS_ID,Timestamp" << std::endl;
+  Ptr<OutputStreamWrapper> outputSlsPhase = CreateSlsTraceStream (directory + "slsResults" + arrayConfig);
 
   /* DMG AP Straces */
-  Ptr<Parameters> parametersAp = Create<Parameters> ();
+  Ptr<SLS_PARAMETERS> parametersAp = Create<SLS_PARAMETERS> ();
   parametersAp->srcNodeID = apWifiNetDevice->GetNode ()->GetId ();
   parametersAp->dstNodeID = staWifiNetDevice->GetNode ()->GetId ();
   parametersAp->wifiMac = apWifiMac;
@@ -485,7 +415,7 @@ main (int argc, char *argv[])
   apWifiPhy->TraceConnectWithoutContext ("PhyRxDrop", MakeCallback (&PhyRxDrop));
 
   /* DMG STA Straces */
-  Ptr<Parameters> parametersSta = Create<Parameters> ();
+  Ptr<SLS_PARAMETERS> parametersSta = Create<SLS_PARAMETERS> ();
   parametersSta->srcNodeID = staWifiNetDevice->GetNode ()->GetId ();
   parametersSta->dstNodeID = apWifiNetDevice->GetNode ()->GetId ();
   parametersSta->wifiMac = staWifiMac;
@@ -495,8 +425,9 @@ main (int argc, char *argv[])
   staRemoteStationManager->TraceConnectWithoutContext ("MacTxDataFailed", MakeCallback (&MacTxDataFailed));
 
   /* Get SNR Traces */
-  Ptr<OutputStreamWrapper> snrStream = ascii.CreateFileStream ("snrValues.csv");
-  apRemoteStationManager->TraceConnectWithoutContext ("MacRxOK", MakeBoundCallback (&MacRxOk, apWifiMac, snrStream));
+  AsciiTraceHelper ascii;
+  Ptr<OutputStreamWrapper> snrStream = ascii.CreateFileStream (directory + "snrValues.csv");
+  apRemoteStationManager->TraceConnectWithoutContext ("MacRxOK", MakeBoundCallback (&MacRxOk, snrStream));
 
   FlowMonitorHelper flowmon;
   if (activateApp)
@@ -512,7 +443,7 @@ main (int argc, char *argv[])
         }
 
       /* Schedule Throughput Calulcations */
-      Simulator::Schedule (Seconds (0.1), &CalculateThroughput);
+      Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
     }
 
   Simulator::Stop (Seconds (simulationTime + 0.101));
@@ -523,24 +454,11 @@ main (int argc, char *argv[])
     {
       if (activateApp)
         {
-          /* Print per flow statistics */
-          monitor->CheckForLostPackets ();
-          Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
-          FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
-          for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
-            {
-              Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-              std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")" << std::endl;
-              std::cout << "  Tx Packets: " << i->second.txPackets << std::endl;
-              std::cout << "  Tx Bytes:   " << i->second.txBytes << std::endl;
-              std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;
-              std::cout << "  Rx Packets: " << i->second.rxPackets << std::endl;
-              std::cout << "  Rx Bytes:   " << i->second.rxBytes << std::endl;
-              std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;
-            }
+          /* Print Flow-Monitor Statistics */
+          PrintFlowMonitorStatistics (flowmon, monitor, simulationTime);
 
           /* Print Application Layer Results Summary */
-          std::cout << "\nApplication Layer Statistics:" << std::endl;
+          std::cout << "\nApplication Layer Statistics:" << std::endl;;
           if (applicationType == "onoff")
             {
               std::cout << "  Tx Packets: " << onoff->GetTotalTxPackets () << std::endl;
@@ -555,14 +473,14 @@ main (int argc, char *argv[])
 
       std::cout << "  Rx Packets: " << packetSink->GetTotalReceivedPackets () << std::endl;
       std::cout << "  Rx Bytes:   " << packetSink->GetTotalRx () << std::endl;
-      std::cout << "  Throughput: " << packetSink->GetTotalRx () * 8.0 / ((simulationTime - 1) * 1e6) << " Mbps" << std::endl;
+      std::cout << "  Throughput: " << packetSink->GetTotalRx () * 8.0 / (simulationTime * 1e6) << " Mbps" << std::endl;
 
       /* Print MAC Layer Statistics */
-      std::cout << "\nMAC Layer Statistics:" << std::endl;
+      std::cout << "\nMAC Layer Statistics:" << std::endl;;
       std::cout << "  Number of Failed Tx Data Packets:  " << macTxDataFailed << std::endl;
 
       /* Print PHY Layer Statistics */
-      std::cout << "\nPHY Layer Statistics:" << std::endl;
+      std::cout << "\nPHY Layer Statistics:" << std::endl;;
       std::cout << "  Number of Tx Packets:         " << transmittedPackets << std::endl;
       std::cout << "  Number of Rx Packets:         " << receivedPackets << std::endl;
       std::cout << "  Number of Rx Dropped Packets: " << droppedPackets << std::endl;

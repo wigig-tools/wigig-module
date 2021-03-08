@@ -22,12 +22,12 @@
 #ifndef WIFI_PHY_LISTENER_H
 #define WIFI_PHY_LISTENER_H
 
-#include "ns3/nstime.h"
-
 namespace ns3 {
 
+class Time;
+
 /**
- * \brief receive notifications about phy events.
+ * \brief receive notifications about PHY events.
  */
 class WifiPhyListener
 {
@@ -67,13 +67,13 @@ public:
   virtual void NotifyRxEndError (void) = 0;
   /**
    * \param duration the expected transmission duration.
-   * \param txPowerDbm the nominal tx power in dBm
+   * \param txPowerDbm the nominal TX power in dBm
    *
    * We are about to send the first bit of the packet.
    * We do not send any event to notify the end of
    * transmission. Listeners should assume that the
-   * channel implicitely reverts to the idle state
-   * unless they have received a cca busy report.
+   * channel implicitly reverts to the idle state
+   * unless they have received a CCA busy report.
    */
   virtual void NotifyTxStart (Time duration, double txPowerDbm) = 0;
   /**
@@ -97,7 +97,7 @@ public:
    *
    * We do not send any event to notify the end of
    * channel switching. Listeners should assume that the
-   * channel implicitely reverts to the idle or busy states.
+   * channel implicitly reverts to the idle or busy states.
    */
   virtual void NotifySwitchingStart (Time duration) = 0;
   /**

@@ -64,6 +64,20 @@ public:
   NodeContainer (std::string nodeName);
 
   /**
+   * Create a NodeContainer with the requested number of Nodes.
+   *
+   * This is syntatic sugar for
+   *
+   *     NodeContainer nodes;
+   *     nodes.Create (size);
+   *     // or nodes.Create (size, systemId);
+   *
+   * \param [in] n The number of nodes to create.
+   * \param [in] systemId The system id or rank associated with this node
+   */
+  NodeContainer (uint32_t n, uint32_t systemId = 0);
+  
+  /**
    * Create a node container which is a concatenation of two input
    * NodeContainers.
    *
@@ -287,6 +301,14 @@ public:
    * \returns a NoceContainer which contains a list of all Nodes.
    */
   static NodeContainer GetGlobal (void);
+
+  /**
+   * \brief Return true if container contains a Node with index id
+   *
+   * \return whether the NodeContainer contains a node with index id
+   * \param id Node Id
+   */
+  bool Contains (uint32_t id) const;
 
 private:
   std::vector<Ptr<Node> > m_nodes; //!< Nodes smart pointers

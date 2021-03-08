@@ -72,7 +72,7 @@ private:
    */
   bool Receive (Ptr<NetDevice> dev, Ptr<const Packet> pkt, uint16_t mode, const Address &sender);
   /**
-   * Receive VSA functon
+   * Receive VSA function
    * \param pkt the packet
    * \param address the address
    * \returns true if successful
@@ -278,7 +278,7 @@ WaveNetDeviceExample::SendWsaExample ()
 int
 main (int argc, char *argv[])
 {
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
   
   WaveNetDeviceExample example;

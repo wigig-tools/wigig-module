@@ -68,6 +68,13 @@ CodebookAnalytical::~CodebookAnalytical ()
 }
 
 void
+CodebookAnalytical::DoInitialize (void)
+{
+  NS_LOG_FUNCTION (this);
+  Codebook::DoInitialize ();
+}
+
+void
 CodebookAnalytical::SetCodebookFileName (std::string fileName)
 {
   NS_LOG_FUNCTION (this << fileName);
@@ -97,10 +104,11 @@ CodebookAnalytical::LoadCodebook (std::string filename)
   NS_ASSERT_MSG (file.good (), " Codebook file not found");
   std::string line;
 
-  uint8_t nSectors;
+  uint8_t nSectors;     /* The total number of sectors within phased antenna array */
   AntennaID antennaID;
   SectorID sectorID;
 
+  /* The first line determines the number of phased antenna arrays within the device */
   std::getline (file, line);
   m_totalAntennas = std::stod (line);
 
@@ -109,15 +117,19 @@ CodebookAnalytical::LoadCodebook (std::string filename)
       Ptr<AnalyticalAntennaConfig> config = Create<AnalyticalAntennaConfig> ();
       SectorIDList bhiSectors, txBeamformingSectors, rxBeamformingSectors;
 
+      /* Read phased antenna array ID */
       std::getline (file, line);
       antennaID = std::stod (line);
 
+      /* Read phased antenna array orientation degree */
       std::getline (file, line);
       config->azimuthOrientationDegree = std::stod (line);
 
+      /* Read phased antenna array quasi-omni gain */
       std::getline (file, line);
       config->quasiOmniGain = std::stod (line);
 
+      /* Read number of sectors within this antenna array */
       std::getline (file, line);
       nSectors = std::stoul (line);
       m_totalSectors += nSectors;
@@ -126,12 +138,15 @@ CodebookAnalytical::LoadCodebook (std::string filename)
         {
           Ptr<AnalyticalSectorConfig> sectorConfig = Create<AnalyticalSectorConfig> ();
 
+          /* Read Sector ID */
           std::getline (file, line);
           sectorID = std::stoul (line);
 
+          /* Read Sector Type */
           std::getline (file, line);
           sectorConfig->sectorType = static_cast<SectorType> (std::stoul (line));
 
+          /* Read Sector Usage */
           std::getline (file, line);
           sectorConfig->sectorUsage = static_cast<SectorUsage> (std::stoul (line));
 
@@ -153,19 +168,22 @@ CodebookAnalytical::LoadCodebook (std::string filename)
                 }
             }
 
+          /* Read Sector Steering Angle */
           std::getline (file, line);
           sectorConfig->steeringAngle = std::stod (line);
 
+          /* Read Sector MainLobe Width */
           std::getline (file, line);
           sectorConfig->mainLobeBeamWidth = std::stod (line);
 
+          /* Calculate Analytical Sector Parameters */
           SetPatternConfiguration (sectorConfig);
 
           config->sectorList[sectorID] = sectorConfig;
         }
 
       if (bhiSectors.size () > 0)
-        m_bhiAntennasList[antennaID] = bhiSectors;
+        m_bhiAntennaList[antennaID] = bhiSectors;
 
       if (txBeamformingSectors.size () > 0)
         m_txBeamformingSectors[antennaID] = txBeamformingSectors;
@@ -176,6 +194,7 @@ CodebookAnalytical::LoadCodebook (std::string filename)
       m_antennaArrayList[antennaID] = config;
     }
 
+  /* Close the file */
   file.close ();
 }
 
@@ -202,6 +221,10 @@ CodebookAnalytical::CreateEquallySizedSectors (uint8_t numberOfAntennas, uint8_t
   sectorBeamWidth =  2 * M_PI/m_totalTxSectors;
   antennaBeamWidth = 2 * M_PI/numberOfAntennas;
 
+  /* Create single RF Chain */
+  RFChainID rfID = 1;
+  Ptr<RFChain> rfChainConfig = CreateObject<RFChain> ();
+
   for (AntennaID antennaID = 1; antennaID <= numberOfAntennas; antennaID++)
     {
       Ptr<AnalyticalAntennaConfig> antennaConfig = Create<AnalyticalAntennaConfig> ();
@@ -214,13 +237,16 @@ CodebookAnalytical::CreateEquallySizedSectors (uint8_t numberOfAntennas, uint8_t
         {
           Ptr<AnalyticalSectorConfig> sectorConfig = Create<AnalyticalSectorConfig> ();
 
+          /* Specific Analytical Sector Configuration */
           sectorConfig->steeringAngle = sectorBeamWidth * (sectorID - 1);
           sectorConfig->mainLobeBeamWidth = sectorBeamWidth;
           SetPatternConfiguration (sectorConfig);
 
+          /* General Sector Configuration */
           sectorConfig->sectorType = TX_RX_SECTOR;
           sectorConfig->sectorUsage = BHI_SLS_SECTOR;
 
+          /* Add the current sector to all the exisiting beamforming lists */
           bhiSectors.push_back (sectorID);
           txBeamformingSectors.push_back (sectorID);
           rxBeamformingSectors.push_back (sectorID);
@@ -260,15 +286,26 @@ CodebookAnalytical::CreateEquallySizedSectors (uint8_t numberOfAntennas, uint8_t
 
           antennaConfig->sectorList[sectorID] = sectorConfig;
         }
-      m_bhiAntennasList[antennaID] = bhiSectors;
+      m_bhiAntennaList[antennaID] = bhiSectors;
       m_txBeamformingSectors[antennaID] = txBeamformingSectors;
       m_rxBeamformingSectors[antennaID] = rxBeamformingSectors;
       m_antennaArrayList[antennaID] = antennaConfig;
+      rfChainConfig->ConnectPhasedAntennaArray (antennaID, antennaConfig);
+      antennaConfig->rfChain = rfChainConfig;
     }
+  m_rfChainList[rfID] = rfChainConfig;
 }
 
 void
-CodebookAnalytical::AppendAntenna (AntennaID antennaID, double orientation, double quasiOmniGain)
+CodebookAnalytical::AppendRFChain (RFChainID rfchainID)
+{
+  NS_LOG_FUNCTION (this << static_cast<uint16_t> (rfchainID));
+  Ptr<RFChain> rfChain = Create<RFChain> ();
+  m_rfChainList[rfchainID] = rfChain;
+}
+
+void
+CodebookAnalytical::AppendAntenna (RFChainID rfchainID, AntennaID antennaID, double orientation, double quasiOmniGain)
 {
   NS_LOG_FUNCTION (this << static_cast<uint16_t> (antennaID) << orientation << quasiOmniGain);
 
@@ -282,6 +319,11 @@ CodebookAnalytical::AppendAntenna (AntennaID antennaID, double orientation, doub
   antennaConfig->quasiOmniGain = quasiOmniGain;
   m_antennaArrayList[antennaID] = antennaConfig;
   m_totalAntennas++;
+
+  /* Connect to phase antenna array */
+  Ptr<RFChain> rfChainConfig = m_rfChainList[rfchainID];
+  rfChainConfig->ConnectPhasedAntennaArray (antennaID, antennaConfig);
+  antennaConfig->rfChain = rfChainConfig;
 }
 
 void
@@ -289,7 +331,7 @@ CodebookAnalytical::AddSectorToBeamformingLists (AntennaID antennaID, SectorID s
 {
   if ((sectorConfig->sectorUsage == BHI_SECTOR) || (sectorConfig->sectorUsage == BHI_SLS_SECTOR))
     {
-      m_bhiAntennasList[antennaID].push_back (sectorID);
+      m_bhiAntennaList[antennaID].push_back (sectorID);
     }
   if ((sectorConfig->sectorUsage == SLS_SECTOR) || (sectorConfig->sectorUsage == BHI_SLS_SECTOR))
     {
@@ -338,8 +380,10 @@ CodebookAnalytical::AppendSector (AntennaID antennaID, SectorID sectorID, Ptr<An
       NS_ASSERT_MSG (m_totalSectors < MAXIMUM_NUMBER_OF_SECTORS,
                      "The maximum total number of sectors is limited to 128 sectors.");
 
+      /* Calculate Analytical Sector Parameters */
       SetPatternConfiguration (sectorConfig);
 
+      /* Add the sector to the corresponding beamformnig lists */
       AddSectorToBeamformingLists (antennaID, sectorID, sectorConfig);
 
       config->sectorList[sectorID] = sectorConfig;
@@ -382,8 +426,10 @@ CodebookAnalytical::AppendSector (AntennaID antennaID, SectorID sectorID,
       sectorConfig->sectorType = sectorType;
       sectorConfig->sectorUsage = sectorUsage;
 
+      /* Calculate Analytical Sector Parameters */
       SetPatternConfiguration (sectorConfig);
 
+      /* Add the sector to the corresponding beamformnig lists */
       AddSectorToBeamformingLists (antennaID, sectorID, sectorConfig);
 
       config->sectorList[sectorID] = sectorConfig;
@@ -414,20 +460,20 @@ double
 CodebookAnalytical::GetTxGainDbi (double angle)
 {
   NS_LOG_FUNCTION (this << angle);
-  return GetGainDbi (angle, DynamicCast<AnalyticalPatternConfig> (m_txPattern));
+  return GetGainDbi (angle, DynamicCast<AnalyticalPatternConfig> (GetTxPatternConfig ()));
 }
 
 double
 CodebookAnalytical::GetRxGainDbi (double angle)
 {
-  NS_LOG_FUNCTION (this << angle << m_quasiOmniMode);
-  if (m_quasiOmniMode)
+  NS_LOG_FUNCTION (this << angle);
+  if (m_activeRFChain->IsQuasiOmniMode ())
     {
-      return StaticCast<AnalyticalAntennaConfig> (m_antennaConfig)->quasiOmniGain;
+      return StaticCast<AnalyticalAntennaConfig> (GetAntennaArrayConfig ())->quasiOmniGain;
     }
   else
     {
-      return GetGainDbi (angle, DynamicCast<AnalyticalPatternConfig> (m_rxPattern));
+      return GetGainDbi (angle, DynamicCast<AnalyticalPatternConfig> (GetRxPatternConfig ()));
     }
 }
 
@@ -447,12 +493,13 @@ double
 CodebookAnalytical::GetGainDbi (double angle, Ptr<AnalyticalPatternConfig> patternConfig)
 {
   NS_LOG_FUNCTION (this << angle);
-  Ptr<AnalyticalAntennaConfig> antennaCoonfig = StaticCast<AnalyticalAntennaConfig> (m_antennaConfig);
+  Ptr<AnalyticalAntennaConfig> antennaConfig = StaticCast<AnalyticalAntennaConfig> (GetAntennaArrayConfig ());
   double gain;
   NS_LOG_DEBUG ("Angle=" << angle << ", MainLobeBeamWidth=" << patternConfig->mainLobeBeamWidth
-            << ", azimuthOrientationDegree=" << antennaCoonfig->azimuthOrientationDegree
-            << ", steeringAngle=" << patternConfig->steeringAngle);
-  angle += patternConfig->mainLobeBeamWidth/2 - (antennaCoonfig->azimuthOrientationDegree + patternConfig->steeringAngle);
+                << ", azimuthOrientationDegree=" << antennaConfig->azimuthOrientationDegree
+                << ", steeringAngle=" << patternConfig->steeringAngle);
+  /* Do this shifting to deal with positive angles only */
+  angle += patternConfig->mainLobeBeamWidth/2 - (antennaConfig->azimuthOrientationDegree + patternConfig->steeringAngle);
   if (angle < 0)
     {
       angle += M_PI * 2;
@@ -461,6 +508,7 @@ CodebookAnalytical::GetGainDbi (double angle, Ptr<AnalyticalPatternConfig> patte
 
   if ((0 <= angle) && (angle <= patternConfig->mainLobeBeamWidth))
     {
+      /* Calculate relative angle with respect to the current sector */
       double virtualAngle = std::abs (angle - patternConfig->mainLobeBeamWidth/2);
       NS_LOG_DEBUG ("VirtualAngle=" << virtualAngle);
       gain = patternConfig->maxGain - 3.01 * pow (2 * virtualAngle/patternConfig->halfPowerBeamWidth, 2);
@@ -509,6 +557,7 @@ CodebookAnalytical::AppendListOfAWV (AntennaID antennaID, SectorID sectorID, uin
       if (sectorIt != config->sectorList.end ())
         {
           Ptr<AnalyticalSectorConfig> sectorConfig = DynamicCast<AnalyticalSectorConfig> (sectorIt->second);
+          /* Add custom AWVs within each sector */
           double startAngle = sectorConfig->steeringAngle - sectorConfig->mainLobeBeamWidth/2;
           double awvBeamWidth = sectorConfig->mainLobeBeamWidth/m_awvs;
           for (uint8_t k = 0; k < numberOfAWVs; k++)

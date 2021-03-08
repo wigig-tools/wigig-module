@@ -50,20 +50,19 @@
 // ./waf --run "olsr-hna --assocMethod2=1"
 //
 
-#include "ns3/core-module.h"
-#include "ns3/network-module.h"
-#include "ns3/mobility-module.h"
-#include "ns3/config-store-module.h"
-#include "ns3/wifi-module.h"
-#include "ns3/csma-module.h"
-#include "ns3/internet-module.h"
-#include "ns3/olsr-routing-protocol.h"
-#include "ns3/olsr-helper.h"
-
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <string>
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/config-store-module.h"
+#include "ns3/csma-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/olsr-routing-protocol.h"
+#include "ns3/olsr-helper.h"
+#include "ns3/yans-wifi-helper.h"
 
 using namespace ns3;
 
@@ -101,7 +100,7 @@ int main (int argc, char *argv[])
   bool assocMethod1 = false;
   bool assocMethod2 = false;
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
 
   cmd.AddValue ("phyMode", "Wifi Phy mode", phyMode);
   cmd.AddValue ("rss", "received signal strength", rss);

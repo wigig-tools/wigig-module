@@ -17,6 +17,12 @@ NS_LOG_COMPONENT_DEFINE ("CodebookNumerical");
 
 NS_OBJECT_ENSURE_REGISTERED (CodebookNumerical);
 
+Ptr<NumericalPatternConfig>
+NumericalAntennaConfig::GetQuasiOmniConfig (void) const
+{
+  return DynamicCast<NumericalPatternConfig> (m_quasiOmniConfig);
+}
+
 TypeId
 CodebookNumerical::GetTypeId (void)
 {
@@ -51,7 +57,7 @@ CodebookNumerical::DoDispose ()
           Ptr<NumericalSectorConfig> sectorConfig = DynamicCast<NumericalSectorConfig> (sectorIter->second);
           delete[] sectorConfig->directivity;
         }
-      delete[] antennaConfig->quasiOmniDirectivity;
+      delete[] antennaConfig->GetQuasiOmniConfig ()->directivity;
     }
   Codebook::DoDispose ();
 }
@@ -81,47 +87,78 @@ CodebookNumerical::LoadCodebook (std::string filename)
   NS_ASSERT_MSG (file.good (), " Codebook file not found");
   std::string line;
 
-  uint8_t nsectorList;
+  RFChainID rfChainID;
+  uint8_t totalRFChains;  /* The total number of RF Chains. */
+  uint8_t nSectors;       /* The total number of sectors within a phased antenna array */
   AntennaID antennaID;
   SectorID sectorID;
   Directivity directivity;
 
+  /** Create RF Chain List **/
+
+  /* The first line determines the number of RF Chains within the device */
+  Ptr<RFChain> rfChainConfig;
+  std::getline (file, line);
+  totalRFChains = std::stod (line);
+  for (RFChainID rfChainID = 1; rfChainID <= totalRFChains; rfChainID++)
+    {
+      rfChainConfig = Create<RFChain> ();
+      m_rfChainList[rfChainID] = rfChainConfig;
+    }
+
+  /* The first line determines the number of phased antenna arrays within the device */
   std::getline (file, line);
   m_totalAntennas = std::stod (line);
 
   for (uint8_t antennaIndex = 0; antennaIndex < m_totalAntennas; antennaIndex++)
     {
-      Ptr<NumericalAntennaConfig> config =  Create<NumericalAntennaConfig> ();
+      Ptr<NumericalAntennaConfig> antennaConfig =  Create<NumericalAntennaConfig> ();
       SectorIDList bhiSectors, txBeamformingSectors, rxBeamformingSectors;
 
+      /* Read phased antenna array ID */
       std::getline (file, line);
       antennaID = std::stoul (line);
 
+      /* Read RF Chain ID (To which RF Chain we connect this phased antenna Array). */
       std::getline (file, line);
-      config->azimuthOrientationDegree = std::stod (line);
+      rfChainID = std::stoul (line);
+      rfChainConfig = m_rfChainList[rfChainID];
+      rfChainConfig->ConnectPhasedAntennaArray (antennaID, antennaConfig);
+      antennaConfig->rfChain = rfChainConfig;
 
-      config->quasiOmniDirectivity = new double[AZIMUTH_CARDINALITY];
+      /* Read phased antenna array orientation degree */
+      std::getline (file, line);
+      antennaConfig->azimuthOrientationDegree = std::stod (line);
+
+      /* Read Quasi-omni sector directivity in dBi */
+      Ptr<NumericalPatternConfig> quasiOmni = Create<NumericalPatternConfig> ();
+      quasiOmni->directivity = new double[AZIMUTH_CARDINALITY];
       for (uint16_t i = 0; i < AZIMUTH_CARDINALITY; i++)
         {
           std::getline (file, line);
           directivity = std::stod (line);
-          config->quasiOmniDirectivity[i] = directivity;
+          quasiOmni->directivity[i] = directivity;
         }
+      antennaConfig->SetQuasiOmniConfig (quasiOmni);
 
+      /* Read the number of sectorList within this antenna array */
       std::getline (file, line);
-      nsectorList = std::stoul (line);
-      m_totalSectors += nsectorList;
+      nSectors = std::stoul (line);
+      m_totalSectors += nSectors;
 
-      for (uint8_t sector = 0; sector < nsectorList; sector++)
+      for (uint8_t sector = 0; sector < nSectors; sector++)
         {
           Ptr<NumericalSectorConfig> sectorConfig = Create<NumericalSectorConfig> ();
 
+          /* Read Sector ID */
           std::getline (file, line);
           sectorID = std::stoul (line);
 
+          /* Read Sector Type */
           std::getline (file, line);
           sectorConfig->sectorType = static_cast<SectorType> (std::stoul (line));
 
+          /* Read Sector Usage */
           std::getline (file, line);
           sectorConfig->sectorUsage = static_cast<SectorUsage> (std::stoul (line));
 
@@ -143,6 +180,7 @@ CodebookNumerical::LoadCodebook (std::string filename)
                 }
             }
 
+          /* Read directivity in dBi */
           sectorConfig->directivity = new double[AZIMUTH_CARDINALITY];
           for (uint16_t i = 0; i < AZIMUTH_CARDINALITY; i++)
             {
@@ -151,17 +189,18 @@ CodebookNumerical::LoadCodebook (std::string filename)
               sectorConfig->directivity[i] = directivity;
             }
 
-          config->sectorList[sectorID] = sectorConfig;
+          antennaConfig->sectorList[sectorID] = sectorConfig;
         }
 
-      if (config->azimuthOrientationDegree != 0)
+      /* Change antenna orientation in case it-is non-zero */
+      if (antennaConfig->azimuthOrientationDegree != 0)
         {
-          ChangeAntennaOrientation (antennaID, config->azimuthOrientationDegree, 0);
+          ChangeAntennaOrientation (antennaID, antennaConfig->azimuthOrientationDegree, 0);
         }
 
       if (bhiSectors.size () > 0)
         {
-          m_bhiAntennasList[antennaID] = bhiSectors;
+          m_bhiAntennaList[antennaID] = bhiSectors;
         }
 
       if (txBeamformingSectors.size () > 0)
@@ -174,9 +213,10 @@ CodebookNumerical::LoadCodebook (std::string filename)
           m_rxBeamformingSectors[antennaID] = rxBeamformingSectors;
         }
 
-      m_antennaArrayList[antennaID] = config;
+      m_antennaArrayList[antennaID] = antennaConfig;
     }
 
+  /* Close the file */
   file.close ();
 }
 
@@ -199,22 +239,14 @@ double
 CodebookNumerical::GetTxGainDbi (double angle)
 {
   NS_LOG_FUNCTION (this << angle);
-  return GetGainDbi (angle, DynamicCast<NumericalPatternConfig> (m_txPattern)->directivity);
+  return GetGainDbi (angle, DynamicCast<NumericalPatternConfig> (GetTxPatternConfig ())->directivity);
 }
 
 double
 CodebookNumerical::GetRxGainDbi (double angle)
 {
   NS_LOG_FUNCTION (this << angle);
-  if (m_quasiOmniMode)
-    {
-      Ptr<NumericalAntennaConfig> antennaConfig = StaticCast<NumericalAntennaConfig> (m_antennaArrayList[m_antennaID]);
-      return GetGainDbi (angle, antennaConfig->quasiOmniDirectivity);
-    }
-  else
-    {
-      return GetGainDbi (angle, DynamicCast<NumericalPatternConfig> (m_rxPattern)->directivity);
-    }
+  return GetGainDbi (angle, DynamicCast<NumericalPatternConfig> (GetRxPatternConfig ())->directivity);
 }
 
 double
@@ -233,22 +265,23 @@ double
 CodebookNumerical::GetGainDbi (double angle, DirectivityTable directivity) const
 {
   NS_LOG_FUNCTION (this << angle);
-  double gain;
+  double gain;  // retrieved gain value after any interpolation
   angle = RadiansToDegrees (angle);
+  /* Convert to positive angle */
   if (angle < 0)
     {
       angle += 2 * 180;
     }
   int x1 = floor (angle);
   int x2 = ceil (angle);
-  if (x1 != x2)
+  if (x1 != x2) // 1D linear interpolation (x)
     {
       NS_LOG_DEBUG ("Performing linear interpolation on sector directivity");
       Directivity g1 = directivity[x1];
       Directivity g2 = directivity[x2];
       gain = (((x2 - angle) / (x2 - x1)) * g1) + (((angle - x1) / (x2 - x1)) * g2);
     }
-  else
+  else //x1 == x2; no interpolation needed
     {
       NS_LOG_DEBUG ("No interpolation needed");
       gain = directivity[x1];
@@ -266,9 +299,11 @@ CodebookNumerical::ChangeAntennaOrientation (AntennaID antennaID, double orienta
     {
       Ptr<NumericalAntennaConfig> antennaConfig = StaticCast<NumericalAntennaConfig> (iter->second);
       antennaConfig->azimuthOrientationDegree = orientation;
-      std::rotate (antennaConfig->quasiOmniDirectivity,
-                   antennaConfig->quasiOmniDirectivity + uint (orientation),
-                   antennaConfig->quasiOmniDirectivity + AZIMUTH_CARDINALITY);
+      /* Rotate Quasi-omni directivity table */
+      std::rotate (antennaConfig->GetQuasiOmniConfig ()->directivity,
+                   antennaConfig->GetQuasiOmniConfig ()->directivity + uint (orientation),
+                   antennaConfig->GetQuasiOmniConfig ()->directivity + AZIMUTH_CARDINALITY);
+      /* Rotate each sector directivity table */
       Ptr<NumericalSectorConfig> sectorConfig;
       for (SectorListI sectorIter = antennaConfig->sectorList.begin ();
            sectorIter != antennaConfig->sectorList.end (); sectorIter++)

@@ -68,13 +68,7 @@ There are five trace sources that may be hooked:
 * ``DropBeforeEnqueue``
 * ``DropAfterDequeue``
 
-Also, the QueueBase class defines three attributes:
-
-* ``Mode``: whether the capacity of the queue is measured in packets or bytes
-* ``MaxPackets``: the maximum number of packets accepted by the queue in packet mode
-* ``MaxBytes``: the maximum number of bytes accepted by the queue in byte mode
-
-and two trace sources:
+Also, the QueueBase class defines two additional trace sources:
 
 * ``PacketsInQueue``
 * ``BytesInQueue``
@@ -84,6 +78,10 @@ DropTail
 
 This is a basic first-in-first-out (FIFO) queue that performs a tail drop
 when the queue is full.
+
+The DropTailQueue class defines one attribute:
+
+* ``MaxSize``: the maximum queue size
 
 Usage
 *****
@@ -109,8 +107,7 @@ the queue type and attributes from the helper, such as this example:
   NetDeviceContainer devn1n2 = p2p.Install (n1n2);
 
   p2p.SetQueue ("ns3::DropTailQueue",
-                "LinkBandwidth", StringValue (linkDataRate),
-                "LinkDelay", StringValue (linkDelay));
+                "MaxSize", StringValue ("50p"));
   p2p.SetDeviceAttribute ("DataRate", StringValue (linkDataRate));
   p2p.SetChannelAttribute ("Delay", StringValue (linkDelay));
   NetDeviceContainer devn2n3 = p2p.Install (n2n3);

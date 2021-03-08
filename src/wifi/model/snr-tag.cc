@@ -22,8 +22,8 @@
  *          Konstantinos Katsaros <dinos.katsaros@gmail.com>
  */
 
-#include "snr-tag.h"
 #include "ns3/double.h"
+#include "snr-tag.h"
 
 namespace ns3 {
 
@@ -36,7 +36,7 @@ SnrTag::GetTypeId (void)
     .SetParent<Tag> ()
     .SetGroupName ("Wifi")
     .AddConstructor<SnrTag> ()
-    .AddAttribute ("Snr", "The snr of the last packet received",
+    .AddAttribute ("Snr", "The SNR of the last packet received",
                    DoubleValue (0.0),
                    MakeDoubleAccessor (&SnrTag::Get),
                    MakeDoubleChecker<double> ())
@@ -52,11 +52,6 @@ SnrTag::GetInstanceTypeId (void) const
 
 SnrTag::SnrTag ()
   : m_snr (0)
-{
-}
-
-SnrTag::SnrTag (double snr)
-  : m_snr (snr)
 {
 }
 

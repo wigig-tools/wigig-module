@@ -30,6 +30,7 @@
 #include <iostream>
 #include "ns3/radio-bearer-stats-calculator.h"
 #include <ns3/constant-position-mobility-model.h>
+#include "ns3/ff-mac-scheduler.h"
 #include <ns3/eps-bearer.h>
 #include <ns3/node-container.h>
 #include <ns3/mobility-helper.h>
@@ -272,14 +273,32 @@ CarrierAggregationTestCase::DoRun (void)
 {
   NS_LOG_FUNCTION (this << m_nUser << m_dist << m_dlBandwidth << m_ulBandwidth << m_numberOfComponentCarriers);
 
+  Config::SetDefault ("ns3::LteEnbNetDevice::DlEarfcn", UintegerValue (100));
+  Config::SetDefault ("ns3::LteEnbNetDevice::UlEarfcn", UintegerValue (100 + 18000));
   Config::SetDefault ("ns3::LteEnbNetDevice::DlBandwidth", UintegerValue (m_dlBandwidth));
   Config::SetDefault ("ns3::LteEnbNetDevice::UlBandwidth", UintegerValue (m_ulBandwidth));
+  Config::SetDefault ("ns3::LteUeNetDevice::DlEarfcn", UintegerValue (100));
+
   Config::SetDefault ("ns3::LteHelper::UseCa", BooleanValue (true));
   Config::SetDefault ("ns3::LteHelper::NumberOfComponentCarriers", UintegerValue (m_numberOfComponentCarriers));
   Config::SetDefault ("ns3::LteHelper::EnbComponentCarrierManager", StringValue ("ns3::RrComponentCarrierManager"));
   Config::SetDefault ("ns3::LteSpectrumPhy::CtrlErrorModelEnabled", BooleanValue (false));
   Config::SetDefault ("ns3::LteSpectrumPhy::DataErrorModelEnabled", BooleanValue (false));
   Config::SetDefault ("ns3::LteHelper::UseIdealRrc", BooleanValue (true));
+
+  Config::SetDefault ("ns3::MacStatsCalculator::DlOutputFilename", StringValue (CreateTempDirFilename ("DlMacStats.txt")));
+  Config::SetDefault ("ns3::MacStatsCalculator::UlOutputFilename", StringValue (CreateTempDirFilename ("UlMacStats.txt")));
+  Config::SetDefault ("ns3::RadioBearerStatsCalculator::DlRlcOutputFilename", StringValue (CreateTempDirFilename ("DlRlcStats.txt")));
+  Config::SetDefault ("ns3::RadioBearerStatsCalculator::UlRlcOutputFilename", StringValue (CreateTempDirFilename ("UlRlcStats.txt")));
+  Config::SetDefault ("ns3::RadioBearerStatsCalculator::DlPdcpOutputFilename", StringValue (CreateTempDirFilename ("DlPdcpStats.txt")));
+  Config::SetDefault ("ns3::RadioBearerStatsCalculator::UlPdcpOutputFilename", StringValue (CreateTempDirFilename ("UlPdcpStats.txt")));
+  Config::SetDefault ("ns3::PhyStatsCalculator::DlRsrpSinrFilename", StringValue (CreateTempDirFilename ("DlRsrpSinrStats.txt")));
+  Config::SetDefault ("ns3::PhyStatsCalculator::UlSinrFilename", StringValue (CreateTempDirFilename ("UlSinrStats.txt")));
+  Config::SetDefault ("ns3::PhyStatsCalculator::UlInterferenceFilename", StringValue (CreateTempDirFilename ("UlInterferenceStats.txt")));
+  Config::SetDefault ("ns3::PhyRxStatsCalculator::DlRxOutputFilename", StringValue (CreateTempDirFilename ("DlRxPhyStats.txt")));
+  Config::SetDefault ("ns3::PhyRxStatsCalculator::UlRxOutputFilename", StringValue (CreateTempDirFilename ("UlRxPhyStats.txt")));
+  Config::SetDefault ("ns3::PhyTxStatsCalculator::DlTxOutputFilename", StringValue (CreateTempDirFilename ("DlTxPhyStats.txt")));
+  Config::SetDefault ("ns3::PhyTxStatsCalculator::UlTxOutputFilename", StringValue (CreateTempDirFilename ("UlTxPhyStats.txt")));
 
   /**
    * Initialize Simulation Scenario: 1 eNB and m_nUser UEs
@@ -288,14 +307,6 @@ CarrierAggregationTestCase::DoRun (void)
   Ptr<LteHelper> lteHelper = CreateObject<LteHelper> ();
   
   lteHelper->SetAttribute ("PathlossModel", StringValue ("ns3::FriisSpectrumPropagationLossModel"));
-
-  auto cch = CreateObject<CcHelper> ();
-  cch->SetDlEarfcn (100); // Same as default value for LteEnbNetDevice
-  cch->SetUlEarfcn (100 + 18000); // Same as default value for LteEnbNetDevice
-  cch->SetDlBandwidth (m_dlBandwidth);
-  cch->SetUlBandwidth (m_ulBandwidth);
-  cch->SetNumberOfComponentCarriers (m_numberOfComponentCarriers);
-  lteHelper->SetCcPhyParams (cch->EquallySpacedCcs ());
 
   // Create Nodes: eNodeB and UE
   NodeContainer enbNodes;
@@ -314,6 +325,7 @@ CarrierAggregationTestCase::DoRun (void)
   NetDeviceContainer enbDevs;
   NetDeviceContainer ueDevs;
   lteHelper->SetSchedulerType ("ns3::PfFfMacScheduler");
+  lteHelper->SetSchedulerAttribute ("UlCqiFilter", EnumValue (FfMacScheduler::SRS_UL_CQI));
   enbDevs = lteHelper->InstallEnbDevice (enbNodes);
   ueDevs = lteHelper->InstallUeDevice (ueNodes);
 
@@ -358,7 +370,7 @@ CarrierAggregationTestCase::DoRun (void)
   Simulator::Run ();
 
   /**
-   * Check that the assignation is done in a RR fashion
+   * Check that the assignment is done in a RR fashion
    */
   NS_LOG_INFO ("DL - Test with " << m_nUser << " user(s) at distance " << m_dist);
   std::vector <uint64_t> dlDataRxed;

@@ -59,7 +59,7 @@ public:
   virtual ~LteRrcSap ();
 
   /// Constraint values
-  static const uint8_t MaxReportCells = 255;
+  static const uint8_t MaxReportCells = 8;
 
   // Information Elements
   /// PlmnIdentityInfo structure
@@ -88,7 +88,7 @@ public:
   struct FreqInfo
   {
     uint32_t ulCarrierFreq; ///< UL carrier frequency
-    uint8_t ulBandwidth; ///< UL bandwidth
+    uint16_t ulBandwidth; ///< UL bandwidth
   };
 
   /// RlcConfig structure
@@ -121,7 +121,7 @@ public:
     {
       SETUP, RESET
     } type; ///< action type
-    uint8_t srsBandwidthConfig; ///< SRS bandwidth config
+    uint16_t srsBandwidthConfig; ///< SRS bandwidth config
     uint8_t srsSubframeConfig; ///< SRS subframe config
   };
 
@@ -133,7 +133,7 @@ public:
     {
       SETUP, RESET
     } type; ///< action type
-    uint8_t srsBandwidth; ///< SRS bandwidth
+    uint16_t srsBandwidth; ///< SRS bandwidth
     uint16_t srsConfigIndex; ///< SRS config index
   };
 
@@ -254,11 +254,18 @@ public:
     uint8_t raResponseWindowSize; ///< RA response window size
   };
 
+  ///TxFailParams structure
+  struct TxFailParam
+  {
+    uint8_t connEstFailCount {0}; ///< Number of times that the UE detects T300 expiry on the same cell
+  };
+
   /// RachConfigCommon structure
   struct RachConfigCommon
   {
     PreambleInfo preambleInfo; ///< preamble info
     RaSupervisionInfo raSupervisionInfo; ///< RA supervision info
+    TxFailParam txFailParam; ///< txFailParams
   };
 
   /// RadioResourceConfigCommon structure
@@ -318,7 +325,7 @@ public:
   struct MeasObjectEutra
   {
     uint32_t carrierFreq; ///< carrier frequency
-    uint8_t allowedMeasBandwidth; ///< allowed measure bandwidth
+    uint16_t allowedMeasBandwidth; ///< allowed measure bandwidth
     bool presenceAntennaPort1; ///< antenna port 1 present?
     uint8_t neighCellConfig; ///< neighbor cell config
     int8_t offsetFreq; ///< offset frequency
@@ -327,7 +334,7 @@ public:
     std::list<uint8_t> blackCellsToRemoveList; ///< black cells to remove list
     std::list<BlackCellsToAddMod> blackCellsToAddModList; ///< black cells to add mod list
     bool haveCellForWhichToReportCGI; ///< have cell for which to report CGI?
-    uint8_t cellForWhichToReportCGI; ///< cell for which to report CGI
+    uint16_t cellForWhichToReportCGI; ///< cell for which to report CGI
   };
 
   /**
@@ -536,8 +543,8 @@ public:
   /// CarrierBandwidthEutra structure
   struct CarrierBandwidthEutra
   {
-    uint8_t dlBandwidth; ///< DL bandwidth
-    uint8_t ulBandwidth; ///< UL bandwidth
+    uint16_t dlBandwidth; ///< DL bandwidth
+    uint16_t ulBandwidth; ///< UL bandwidth
   };
 
   /// RachConfigDedicated structure
@@ -579,8 +586,8 @@ public:
   /// MasterInformationBlock structure
   struct MasterInformationBlock
   {
-    uint8_t dlBandwidth; ///< DL bandwidth
-    uint8_t systemFrameNumber; ///< system frame number
+    uint16_t dlBandwidth; ///< DL bandwidth
+    uint16_t systemFrameNumber; ///< system frame number
   };
 
   /// SystemInformationBlockType1 structure
@@ -970,6 +977,17 @@ public:
    */
   virtual void SendMeasurementReport (MeasurementReport msg) = 0;
 
+  /**
+   * \brief Send UE context remove request function
+   *
+   * Request eNodeB to remove UE context once radio link failure or
+   * random access failure is detected. It is needed since no RLF
+   * detection mechanism at eNodeB is implemented.
+   *
+   * \param rnti the C-RNTI of the UE
+   */
+   virtual void SendIdealUeContextRemoveRequest (uint16_t rnti) = 0;
+
 };
 
 
@@ -1255,6 +1273,17 @@ public:
    */
   virtual void RecvMeasurementReport (uint16_t rnti, MeasurementReport msg) = 0;
 
+  /**
+   * \brief Receive ideal UE context remove request from the UE RRC.
+   *
+   * Receive the notification from UE to remove the UE context
+   * once radio link failure or random access failure is detected.
+   * It is needed since no RLF detection mechanism at eNodeB is implemented.
+   *
+   * \param rnti the C-RNTI of the UE
+   */
+  virtual void RecvIdealUeContextRemoveRequest (uint16_t rnti) = 0;
+
 };
 
 
@@ -1291,6 +1320,7 @@ public:
   virtual void SendRrcConnectionReestablishmentRequest (RrcConnectionReestablishmentRequest msg);
   virtual void SendRrcConnectionReestablishmentComplete (RrcConnectionReestablishmentComplete msg);
   virtual void SendMeasurementReport (MeasurementReport msg);
+  virtual void SendIdealUeContextRemoveRequest (uint16_t rnti);
 
 private:
   MemberLteUeRrcSapUser ();
@@ -1355,6 +1385,13 @@ void
 MemberLteUeRrcSapUser<C>::SendMeasurementReport (MeasurementReport msg)
 {
   m_owner->DoSendMeasurementReport (msg);
+}
+
+template <class C>
+void
+MemberLteUeRrcSapUser<C>::SendIdealUeContextRemoveRequest (uint16_t rnti)
+{
+  m_owner->DoSendIdealUeContextRemoveRequest (rnti);
 }
 
 /**
@@ -1621,6 +1658,7 @@ public:
   virtual void RecvRrcConnectionReestablishmentRequest (uint16_t rnti, RrcConnectionReestablishmentRequest msg);
   virtual void RecvRrcConnectionReestablishmentComplete (uint16_t rnti, RrcConnectionReestablishmentComplete msg);
   virtual void RecvMeasurementReport (uint16_t rnti, MeasurementReport msg);
+  virtual void RecvIdealUeContextRemoveRequest (uint16_t rnti);
 
 private:
   MemberLteEnbRrcSapProvider ();
@@ -1685,6 +1723,12 @@ void
 MemberLteEnbRrcSapProvider<C>::RecvMeasurementReport (uint16_t rnti, MeasurementReport msg)
 {
   Simulator::ScheduleNow (&C::DoRecvMeasurementReport, m_owner, rnti, msg);
+}
+
+template <class C>
+void MemberLteEnbRrcSapProvider<C>::RecvIdealUeContextRemoveRequest (uint16_t rnti)
+{
+  Simulator::ScheduleNow (&C::DoRecvIdealUeContextRemoveRequest, m_owner, rnti);
 }
 
 

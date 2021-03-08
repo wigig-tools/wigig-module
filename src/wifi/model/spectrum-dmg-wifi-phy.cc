@@ -23,14 +23,17 @@
  * with Nicola Baldo and Dean Armstrong
  */
 
-#include "ns3/abort.h"
-#include "ns3/boolean.h"
-#include "ns3/log.h"
 #include "ns3/wifi-spectrum-value-helper.h"
-
+#include "ns3/abort.h"
+#include "ns3/log.h"
+#include "ns3/boolean.h"
+#include "ns3/net-device.h"
+#include "ns3/node.h"
 #include "spectrum-dmg-wifi-phy.h"
-#include "wifi-spectrum-signal-parameters.h"
+#include "dmg-wifi-spectrum-phy-interface.h"
 #include "wifi-utils.h"
+#include "wifi-ppdu.h"
+#include "wifi-psdu.h"
 
 namespace ns3 {
 
@@ -47,9 +50,11 @@ DmgWifiSpectrumSignalParameters::DmgWifiSpectrumSignalParameters (const DmgWifiS
   : SpectrumSignalParameters (p)
 {
   NS_LOG_FUNCTION (this << &p);
-  packet = p.packet;
+  ppdu = p.ppdu;
   plcpFieldType = p.plcpFieldType;
   txVector = p.txVector;
+  antennaId = p.antennaId;
+  txPatternConfig = p.txPatternConfig;
 }
 
 Ptr<SpectrumSignalParameters>
@@ -70,7 +75,7 @@ TypeId
 SpectrumDmgWifiPhy::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::SpectrumDmgWifiPhy")
-    .SetParent<WifiPhy> ()
+    .SetParent<DmgWifiPhy> ()
     .SetGroupName ("Wifi")
     .AddConstructor<SpectrumDmgWifiPhy> ()
     .AddAttribute ("DisableWifiReception", "Prevent Wi-Fi frame sync from ever happening",
@@ -101,14 +106,14 @@ SpectrumDmgWifiPhy::DoDispose (void)
   NS_LOG_FUNCTION (this);
   m_channel = 0;
   m_wifiSpectrumPhyInterface = 0;
-  WifiPhy::DoDispose ();
+  DmgWifiPhy::DoDispose ();
 }
 
 void
 SpectrumDmgWifiPhy::DoInitialize (void)
 {
   NS_LOG_FUNCTION (this);
-  WifiPhy::DoInitialize ();
+  DmgWifiPhy::DoInitialize ();
   // This connection is deferred until frequency and channel width are set
   if (m_channel && m_wifiSpectrumPhyInterface)
     {
@@ -124,7 +129,7 @@ Ptr<const SpectrumModel>
 SpectrumDmgWifiPhy::GetRxSpectrumModel () const
 {
   NS_LOG_FUNCTION (this);
-    if (m_rxSpectrumModel)
+  if (m_rxSpectrumModel)
     {
       return m_rxSpectrumModel;
     }
@@ -138,9 +143,9 @@ SpectrumDmgWifiPhy::GetRxSpectrumModel () const
       else
         {
           uint16_t channelWidth = GetChannelWidth ();
-          NS_LOG_DEBUG ("Creating spectrum model from frequency/width pair of (" << GetFrequency () << ", " << +channelWidth << ")");
-          m_rxSpectrumModel = WifiSpectrumValueHelper::GetDmgSpectrumModel (GetFrequency (), channelWidth, GetBandBandwidth (),
-                                                                            GetGuardBandwidth (channelWidth));
+          NS_LOG_DEBUG ("Creating spectrum model from frequency/width pair of (" << GetFrequency () << ", " << channelWidth << ")");
+          m_rxSpectrumModel = WifiSpectrumValueHelper::GetSpectrumModel (GetFrequency (), channelWidth,
+                                                                         WIGIG_OFDM_SUBCARRIER_SPACING, GetGuardBandwidth ());
         }
     }
   return m_rxSpectrumModel;
@@ -163,51 +168,13 @@ SpectrumDmgWifiPhy::ResetSpectrumModel (void)
 {
   NS_LOG_FUNCTION (this);
   NS_ASSERT_MSG (IsInitialized (), "Executing method before run-time");
-  uint8_t channelWidth = GetChannelWidth ();
-  NS_LOG_DEBUG ("Run-time change of spectrum model from frequency/width pair of (" << GetFrequency () << ", " << +channelWidth << ")");
+  uint16_t channelWidth = GetChannelWidth ();
+  NS_LOG_DEBUG ("Run-time change of spectrum model from frequency/width pair of (" << GetFrequency () << ", " << channelWidth << ")");
   // Replace existing spectrum model with new one, and must call AddRx ()
   // on the SpectrumChannel to provide this new spectrum model to it
-  m_rxSpectrumModel = WifiSpectrumValueHelper::GetSpectrumModel (GetFrequency (), channelWidth, GetBandBandwidth (), GetGuardBandwidth (channelWidth));
+  m_rxSpectrumModel = WifiSpectrumValueHelper::GetSpectrumModel (GetFrequency (), channelWidth,
+                                                                 WIGIG_OFDM_SUBCARRIER_SPACING, GetGuardBandwidth ());
   m_channel->AddRx (m_wifiSpectrumPhyInterface);
-}
-
-uint16_t
-SpectrumDmgWifiPhy::GetGuardBandwidth (uint16_t currentChannelWidth) const
-{
-  uint16_t guardBandwidth = 0;
-  if (currentChannelWidth == 22)
-    {
-      //handle case of use of legacy DSSS transmission
-      guardBandwidth = 10;
-    }
-  else
-    {
-      //In order to properly model out of band transmissions for OFDM, the guard
-      //band has been configured so as to expand the modeled spectrum up to the
-      //outermost referenced point in "Transmit spectrum mask" sections' PSDs of
-      //each PHY specification of 802.11-2016 standard. It thus ultimately corresponds
-      //to the currently considered channel bandwidth (which can be different from
-      //supported channel width).
-      guardBandwidth = currentChannelWidth;
-    }
-  return guardBandwidth;
-}
-
-double
-SpectrumDmgWifiPhy::GetBandBandwidth (void) const
-{
-  double bandBandwidth = 0;
-  switch (GetStandard ())
-    {
-    case WIFI_PHY_STANDARD_80211ad:
-      // Use OFDM subcarrier width of 5.15625 MHz as band granularity
-      bandBandwidth = 5156250;
-      break;
-    default:
-      NS_FATAL_ERROR ("Standard unknown: " << GetStandard ());
-      break;
-    }
-  return bandBandwidth;
 }
 
 void
@@ -233,9 +200,9 @@ SpectrumDmgWifiPhy::SetFrequency (uint16_t freq)
 }
 
 void
-SpectrumDmgWifiPhy::SetChannelWidth (uint16_t channelwidth)  //TR++ ChannelWidth needs to be changed for 802.11ad/ay
+SpectrumDmgWifiPhy::SetChannelWidth (uint16_t channelwidth)
 {
-  NS_LOG_FUNCTION (this << +channelwidth);
+  NS_LOG_FUNCTION (this << channelwidth);
   DmgWifiPhy::SetChannelWidth (channelwidth);
   if (IsInitialized ())
     {
@@ -254,13 +221,24 @@ SpectrumDmgWifiPhy::ConfigureStandard (WifiPhyStandard standard)
     }
 }
 
+double
+SpectrumDmgWifiPhy::FilterSignal (Ptr<SpectrumValue> filter, Ptr<SpectrumValue> receivedSignalPsd)
+{
+  SpectrumValue filteredSignal = (*filter) * (*receivedSignalPsd);
+  // Add receiver antenna gain
+  NS_LOG_DEBUG ("Signal power received (watts) before antenna gain: " << Integral (filteredSignal));
+  double rxPowerW = Integral (filteredSignal) * DbToRatio (GetRxGain ());
+  NS_LOG_DEBUG ("Signal power received after antenna gain: " << rxPowerW << " W (" << WToDbm (rxPowerW) << " dBm)");
+  return rxPowerW;
+}
+
 void
 SpectrumDmgWifiPhy::StartRx (Ptr<SpectrumSignalParameters> rxParams)
 {
   NS_LOG_FUNCTION (this << rxParams);
   Time rxDuration = rxParams->duration;
   Ptr<SpectrumValue> receivedSignalPsd = rxParams->psd;
-  NS_LOG_DEBUG ("Received signal with PSD " << *receivedSignalPsd << " and duration " << rxDuration.As (Time::NS));
+  //NS_LOG_DEBUG ("Received signal with PSD " << *receivedSignalPsd << " and duration " << rxDuration.As (Time::NS));
   uint32_t senderNodeId = 0;
   if (rxParams->txPhy)
     {
@@ -270,20 +248,30 @@ SpectrumDmgWifiPhy::StartRx (Ptr<SpectrumSignalParameters> rxParams)
   // Integrate over our receive bandwidth (i.e., all that the receive
   // spectral mask representing our filtering allows) to find the
   // total energy apparent to the "demodulator".
-
-  //TR++ channelWidth must be uint16_t
   uint16_t channelWidth = GetChannelWidth ();
-  Ptr<SpectrumValue> filter = WifiSpectrumValueHelper::CreateRfFilter (GetFrequency (), channelWidth, GetBandBandwidth (), GetGuardBandwidth (channelWidth));
-  SpectrumValue filteredSignal = (*filter) * (*receivedSignalPsd);
-  // Add receiver antenna gain
-  NS_LOG_DEBUG ("Signal power received (watts) before antenna gain: " << Integral (filteredSignal));
-  double rxPowerW = Integral (filteredSignal) * DbToRatio (GetRxGain ());
-  NS_LOG_DEBUG ("Signal power received after antenna gain: " << rxPowerW << " W (" << WToDbm (rxPowerW) << " dBm)");
+  Ptr<SpectrumValue> filter = WifiSpectrumValueHelper::CreateRfFilter (GetFrequency (), channelWidth,
+                                                                       WIGIG_OFDM_SUBCARRIER_SPACING, GetGuardBandwidth ());
+  double rxPowerW = FilterSignal (filter, receivedSignalPsd);
+
+  /* MIMO calculation */
+//  std::cout << "SISO: " << WToDbm (rxPowerW) << std::endl;
+//  for (auto &psd : rxParams->psdList)
+//    {
+//      std::cout << "MIMO: " << WToDbm (FilterSignal (filter, psd)) << std::endl;
+//    }
 
   Ptr<DmgWifiSpectrumSignalParameters> wifiRxParams = DynamicCast<DmgWifiSpectrumSignalParameters> (rxParams);
 
   // Log the signal arrival to the trace source
   m_signalCb (wifiRxParams ? true : false, senderNodeId, WToDbm (rxPowerW), rxDuration);
+
+  // Do no further processing if signal is too weak
+  // Current implementation assumes constant RX power over the PPDU duration
+  if (WToDbm (rxPowerW) < GetRxSensitivity () && wifiRxParams->plcpFieldType != PLCP_80211AY_TRN_SF)
+    {
+      NS_LOG_INFO ("Received signal too weak to process: " << WToDbm (rxPowerW) << " dBm");
+      return;
+    }
   if (wifiRxParams == 0)
     {
       NS_LOG_INFO ("Received non Wi-Fi signal");
@@ -299,11 +287,27 @@ SpectrumDmgWifiPhy::StartRx (Ptr<SpectrumSignalParameters> rxParams)
       return;
     }
 
-  if (wifiRxParams->plcpFieldType == PLCP_80211AD_PREAMBLE_HDR_DATA)
+  if ((wifiRxParams->plcpFieldType == PLCP_80211AD_PREAMBLE_HDR_DATA) || (wifiRxParams->plcpFieldType == PLCP_80211AY_PREAMBLE_HDR_DATA))
     {
-      NS_LOG_INFO ("Received DMG WiFi signal");
-      Ptr<Packet> packet = wifiRxParams->packet->Copy ();
-      StartReceivePreambleAndHeader (packet, rxPowerW, rxDuration);
+      NS_LOG_INFO ("Received DMG/EDMG WiFi signal");
+      Ptr<WifiPpdu> ppdu = Copy (wifiRxParams->ppdu);
+      if (rxParams->psdList.size () > 0)
+        {
+          NS_LOG_INFO ("Received EDMG WiFi signal in MIMO mode");
+          std::vector<double> rxPowerList;
+          for (auto &psd : rxParams->psdList)
+            {
+             rxPowerList.push_back (FilterSignal (filter, psd));
+            }
+          StartReceivePreamble (ppdu, rxPowerList);
+         }
+      else
+        {
+          NS_LOG_INFO ("Received EDMG WiFi signal in SISO mode");
+          std::vector<double> rxPowerList;
+          rxPowerList.push_back (rxPowerW);
+          StartReceivePreamble (ppdu, rxPowerList);
+        }
     }
   else if (wifiRxParams->plcpFieldType == PLCP_80211AD_AGC_SF)
     {
@@ -319,6 +323,24 @@ SpectrumDmgWifiPhy::StartRx (Ptr<SpectrumSignalParameters> rxParams)
     {
       NS_LOG_INFO ("Received DMG WiFi TRN-SF signal");
       StartReceiveTrnSubfield (wifiRxParams->txVector, WToDbm (rxPowerW));
+    }
+  else if (wifiRxParams->plcpFieldType == PLCP_80211AY_TRN_SF)
+    {
+      if (rxParams->psdList.size () > 0)
+        {
+          NS_LOG_INFO ("Received EDMG WiFi TRN-SF signal in MIMO mode");
+          std::vector<double> rxPowerList;
+          for (auto &psd : rxParams->psdList)
+            {
+             rxPowerList.push_back (WToDbm (FilterSignal (filter, psd)));
+            }
+          StartReceiveEdmgTrnSubfield (wifiRxParams->txVector, rxPowerList);
+        }
+      else
+        {
+          NS_LOG_INFO ("Received EDMG WiFi TRN-SF signal");
+          StartReceiveEdmgTrnSubfield (wifiRxParams->txVector, WToDbm (rxPowerW));
+        }
     }
 }
 
@@ -348,14 +370,19 @@ SpectrumDmgWifiPhy::GetTxPowerSpectralDensity (uint16_t centerFrequency, uint16_
     case WIFI_MOD_CLASS_DMG_CTRL:
     case WIFI_MOD_CLASS_DMG_SC:
     case WIFI_MOD_CLASS_DMG_LP_SC:
-      v = WifiSpectrumValueHelper::CreateDmgControlTxPowerSpectralDensity (centerFrequency, channelWidth, txPowerW,
-                                                                           GetGuardBandwidth (channelWidth));
+      v = WifiSpectrumValueHelper::CreateWigigSingleCarrierTxPowerSpectralDensity (centerFrequency, channelWidth, txPowerW,
+                                                                                   GetGuardBandwidth ());
+      break;
+    case WIFI_MOD_CLASS_EDMG_CTRL:
+    case WIFI_MOD_CLASS_EDMG_SC:
+      v = WifiSpectrumValueHelper::CreateWigigSingleCarrierTxPowerSpectralDensity (centerFrequency, channelWidth, txPowerW,
+                                                                                   GetGuardBandwidth (), m_channelConfiguration.NCB);
       break;
     case WIFI_MOD_CLASS_DMG_OFDM:
-      //TODO VINCENT - We consider that every mode creates the same spectral density which should not be the case
+    case WIFI_MOD_CLASS_EDMG_OFDM:
       // Create one different function for every different case
       v = WifiSpectrumValueHelper::CreateDmgOfdmTxPowerSpectralDensity (centerFrequency, channelWidth, txPowerW,
-                                                                        GetGuardBandwidth (channelWidth));
+                                                                        GetGuardBandwidth ());
       break;
     default:
       NS_FATAL_ERROR ("modulation class unknown: " << modulationClass);
@@ -364,36 +391,54 @@ SpectrumDmgWifiPhy::GetTxPowerSpectralDensity (uint16_t centerFrequency, uint16_
   return v;
 }
 
-uint32_t
+uint16_t
 SpectrumDmgWifiPhy::GetCenterFrequencyForChannelWidth (WifiTxVector txVector) const
 {
   NS_LOG_FUNCTION (this << txVector);
-  uint32_t centerFrequencyForSupportedWidth = GetFrequency ();
-  // TR++ Change supportedWidth and currentWidth to uint16_t
+  uint16_t centerFrequencyForSupportedWidth = GetFrequency ();
   uint16_t supportedWidth = GetChannelWidth ();
   uint16_t currentWidth = txVector.GetChannelWidth ();
-  // TR--
   if (currentWidth != supportedWidth)
     {
-      uint32_t startingFrequency = centerFrequencyForSupportedWidth - static_cast<uint32_t> (supportedWidth / 2);
-      return startingFrequency + static_cast<uint32_t> (currentWidth / 2); // primary channel is in the lower part (for the time being)
+      uint16_t startingFrequency = centerFrequencyForSupportedWidth - (supportedWidth / 2);
+      return startingFrequency + (currentWidth / 2); // primary channel is in the lower part (for the time being)
     }
   return centerFrequencyForSupportedWidth;
 }
 
 void
-SpectrumDmgWifiPhy::StartTx (Ptr<Packet> packet, WifiTxVector txVector, Time txDuration)
+SpectrumDmgWifiPhy::StartTx (Ptr<WifiPpdu> ppdu)
 {
-  NS_LOG_DEBUG ("Start transmission: signal power before antenna gain=" << GetPowerDbm (txVector.GetTxPowerLevel ()) << "dBm");
-  double txPowerWatts = DbmToW (GetPowerDbm (txVector.GetTxPowerLevel ()) + GetTxGain ());
-  Ptr<SpectrumValue> txPowerSpectrum = GetTxPowerSpectralDensity (GetCenterFrequencyForChannelWidth (txVector), txVector.GetChannelWidth (), txPowerWatts, txVector.GetMode ().GetModulationClass ());
+  NS_LOG_FUNCTION (this << ppdu);
+  WifiTxVector txVector = ppdu->GetTxVector ();
+  double txPowerDbm = GetTxPowerForTransmission (txVector) + GetTxGain ();
+  NS_LOG_DEBUG ("Start transmission: signal power before antenna array=" << txPowerDbm << "dBm");
+  double txPowerWatts = DbmToW (txPowerDbm);
+  //// WIGIG ////
+  // The total transmit power is equally divided over the transmit chains.
+  txPowerWatts /= GetCodebook ()->GetNumberOfActiveRFChains ();
+  //// WIGIG ////
+  Ptr<SpectrumValue> txPowerSpectrum = GetTxPowerSpectralDensity (GetCenterFrequencyForChannelWidth (txVector),
+                                                                  txVector.GetChannelWidth (),
+                                                                  txPowerWatts, txVector.GetMode ().GetModulationClass ());
   Ptr<DmgWifiSpectrumSignalParameters> txParams = Create<DmgWifiSpectrumSignalParameters> ();
-  txParams->duration = txDuration;
+  txParams->duration = ppdu->GetTxDuration ();
   txParams->psd = txPowerSpectrum;
   NS_ASSERT_MSG (m_wifiSpectrumPhyInterface, "SpectrumPhy() is not set; maybe forgot to call CreateWifiSpectrumPhyInterface?");
   txParams->txPhy = m_wifiSpectrumPhyInterface->GetObject<SpectrumPhy> ();
-  txParams->packet = packet;
-  txParams->plcpFieldType = PLCP_80211AD_PREAMBLE_HDR_DATA;
+  txParams->ppdu = ppdu;
+  if (GetStandard () == WIFI_PHY_STANDARD_80211ad)
+    {
+      txParams->plcpFieldType = PLCP_80211AD_PREAMBLE_HDR_DATA;
+    }
+  else
+    {
+      txParams->plcpFieldType = PLCP_80211AY_PREAMBLE_HDR_DATA;
+    }
+  txParams->txVector = txVector;
+  txParams->antennaId = GetCodebook ()->GetActiveAntennaID ();
+  txParams->txPatternConfig = GetCodebook ()->GetTxPatternConfig ();
+  txParams->isMimo = (GetCodebook ()->GetNumberOfActiveRFChains () > 1);
   NS_LOG_DEBUG ("Starting transmission with power " << WToDbm (txPowerWatts) << " dBm on channel " << +GetChannelNumber ());
   NS_LOG_DEBUG ("Starting transmission with integrated spectrum power " << WToDbm (Integral (*txPowerSpectrum)) << " dBm; spectrum model Uid: " << txPowerSpectrum->GetSpectrumModel ()->GetUid ());
   m_channel->StartTx (txParams);
@@ -412,6 +457,9 @@ SpectrumDmgWifiPhy::TxSubfield (WifiTxVector txVector, PLCP_FIELD_TYPE fieldType
   txParams->txPhy = m_wifiSpectrumPhyInterface->GetObject<SpectrumPhy> ();
   txParams->plcpFieldType = fieldType;
   txParams->txVector = txVector;
+  txParams->antennaId = GetCodebook ()->GetActiveAntennaID ();
+  txParams->txPatternConfig = GetCodebook ()->GetTxPatternConfig ();
+  txParams->isMimo = (GetCodebook ()->GetNumberOfActiveRFChains () > 1);
   NS_LOG_DEBUG ("Starting transmission with power " << WToDbm (txPowerWatts) << " dBm on channel " << +GetChannelNumber ());
   NS_LOG_DEBUG ("Starting transmission with integrated spectrum power " << WToDbm (Integral (*txPowerSpectrum)) << " dBm; spectrum model Uid: " << txPowerSpectrum->GetSpectrumModel ()->GetUid ());
   m_channel->StartTx (txParams);
@@ -436,6 +484,25 @@ SpectrumDmgWifiPhy::StartTrnSubfieldTx (WifiTxVector txVector)
 {
   NS_LOG_FUNCTION (this);
   TxSubfield (txVector, PLCP_80211AD_TRN_SF, TRN_SUBFIELD_DURATION);
+}
+
+void
+SpectrumDmgWifiPhy::StartEdmgTrnSubfieldTx (WifiTxVector txVector)
+{
+  NS_LOG_FUNCTION (this);
+  //txVector.edmgTrnSubfieldDuration = NanoSeconds (double (0.57) * 6 * txVector.Get_TRN_SEQ_LEN ());
+  TxSubfield (txVector, PLCP_80211AY_TRN_SF, txVector.edmgTrnSubfieldDuration);
+}
+
+uint16_t
+SpectrumDmgWifiPhy::GetGuardBandwidth (void) const
+{
+  uint16_t guardBandwidth = WIGIG_GUARD_BANDWIDTH;
+  if (m_standard == WIFI_PHY_STANDARD_80211ay)
+    {
+      guardBandwidth *= m_channelConfiguration.NCB;
+    }
+  return guardBandwidth;
 }
 
 } //namespace ns3

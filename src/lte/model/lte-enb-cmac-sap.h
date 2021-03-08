@@ -48,8 +48,8 @@ public:
    * @param ulBandwidth
    * @param dlBandwidth
    */
-  virtual void ConfigureMac (uint8_t ulBandwidth,
-                             uint8_t dlBandwidth) = 0;
+  virtual void ConfigureMac (uint16_t ulBandwidth,
+                             uint16_t dlBandwidth) = 0;
 
   /**
    * Add UE function
@@ -139,6 +139,7 @@ public:
     uint8_t numberOfRaPreambles; ///< number of RA preambles
     uint8_t preambleTransMax; ///< preamble transmit maximum
     uint8_t raResponseWindowSize; ///< RA response window size
+    uint8_t connEstFailCount; ///< the counter value for T300 timer expiration
   };
 
   /** 
@@ -219,6 +220,20 @@ public:
    * \param params 
    */
   virtual void RrcConfigurationUpdateInd (UeConfig params) = 0;
+
+  /**
+   * \brief Is random access completed function
+   *
+   * This method is executed to decide if the non contention based
+   * preamble has to be reused or not upon preamble expiry. If the random access
+   * in connected mode is completed, then the preamble can be reused by other UEs.
+   * If not, the same UE retains the preamble and other available preambles are
+   * assigned to the required UEs.
+   *
+   * \param rnti the C-RNTI identifying the user
+   * \return true if the random access in connected mode is completed
+   */
+  virtual bool IsRandomAccessCompleted (uint16_t rnti) = 0;
 };
 
 

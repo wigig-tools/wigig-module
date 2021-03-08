@@ -22,6 +22,7 @@
 
 #include "ns3/simulator.h"
 #include "ns3/node.h"
+#include "ns3/config.h"
 #include "ss-net-device.h"
 #include "wimax-phy.h"
 #include "ns3/packet-burst.h"
@@ -279,6 +280,10 @@ SubscriberStationNetDevice::DoDispose (void)
 
   m_linkManager = 0;
 
+  m_asciiTxQueueEnqueueCb.Nullify ();
+  m_asciiTxQueueDequeueCb.Nullify ();
+  m_asciiTxQueueDropCb.Nullify ();
+
   WimaxNetDevice::DoDispose ();
 }
 
@@ -430,6 +435,27 @@ void
 SubscriberStationNetDevice::SetBasicConnection (Ptr<WimaxConnection> basicConnection)
 {
   m_basicConnection = basicConnection;
+  uint32_t nodeId = GetNode ()->GetId ();
+  uint32_t ifaceId = GetIfIndex ();
+
+  if (!m_asciiTxQueueEnqueueCb.IsNull ())
+    {
+      std::ostringstream oss;
+      oss << "/NodeList/" << nodeId << "/DeviceList/" << ifaceId << "/$ns3::SubscriberStationNetDevice/BasicConnection/TxQueue/Enqueue";
+      Config::Connect (oss.str (), m_asciiTxQueueEnqueueCb);
+    }
+  if (!m_asciiTxQueueDequeueCb.IsNull ())
+    {
+      std::ostringstream oss;
+      oss << "/NodeList/" << nodeId << "/DeviceList/" << ifaceId << "/$ns3::SubscriberStationNetDevice/BasicConnection/TxQueue/Dequeue";
+      Config::Connect (oss.str (), m_asciiTxQueueDequeueCb);
+    }
+  if (!m_asciiTxQueueDropCb.IsNull ())
+    {
+      std::ostringstream oss;
+      oss << "/NodeList/" << nodeId << "/DeviceList/" << ifaceId << "/$ns3::SubscriberStationNetDevice/BasicConnection/TxQueue/Drop";
+      Config::Connect (oss.str (), m_asciiTxQueueDropCb);
+    }
 }
 
 Ptr<WimaxConnection>
@@ -442,6 +468,28 @@ void
 SubscriberStationNetDevice::SetPrimaryConnection (Ptr<WimaxConnection> primaryConnection)
 {
   m_primaryConnection = primaryConnection;
+
+  uint32_t nodeId = GetNode ()->GetId ();
+  uint32_t ifaceId = GetIfIndex ();
+
+  if (!m_asciiTxQueueEnqueueCb.IsNull ())
+    {
+      std::ostringstream oss;
+      oss << "/NodeList/" << nodeId << "/DeviceList/" << ifaceId << "/$ns3::SubscriberStationNetDevice/PrimaryConnection/TxQueue/Enqueue";
+      Config::Connect (oss.str (), m_asciiTxQueueEnqueueCb);
+    }
+  if (!m_asciiTxQueueDequeueCb.IsNull ())
+    {
+      std::ostringstream oss;
+      oss << "/NodeList/" << nodeId << "/DeviceList/" << ifaceId << "/$ns3::SubscriberStationNetDevice/PrimaryConnection/TxQueue/Dequeue";
+      Config::Connect (oss.str (), m_asciiTxQueueDequeueCb);
+    }
+  if (!m_asciiTxQueueDropCb.IsNull ())
+    {
+      std::ostringstream oss;
+      oss << "/NodeList/" << nodeId << "/DeviceList/" << ifaceId << "/$ns3::SubscriberStationNetDevice/PrimaryConnection/TxQueue/Drop";
+      Config::Connect (oss.str (), m_asciiTxQueueDropCb);
+    }
 }
 
 Ptr<WimaxConnection>
@@ -746,7 +794,7 @@ SubscriberStationNetDevice::DoReceive (Ptr<Packet> packet)
   uint32_t pktSize = packet->GetSize ();
   packet->RemoveHeader (gnrcMacHdr);
   FragmentationSubheader fragSubhdr;
-  bool fragmentation = false;  // it becames true when there is a fragmentation subheader
+  bool fragmentation = false;  // it becomes true when there is a fragmentation subheader
 
   if (gnrcMacHdr.GetHt () == MacHeaderType::HEADER_TYPE_GENERIC)
     {
@@ -1191,7 +1239,7 @@ SubscriberStationNetDevice::ProcessDcd (const Dcd &dcd)
   m_nrDcdRecvd++;
   if (dcd.GetConfigurationChangeCount () == GetCurrentDcd ().GetConfigurationChangeCount ())
     {
-      return; // nothing new in DCD so dont read
+      return; // nothing new in DCD so don't read
 
     }
   SetCurrentDcd (dcd);
@@ -1281,6 +1329,24 @@ SubscriberStationNetDevice::SetTimer (EventId eventId, EventId &event)
     }
 
   event = eventId;
+}
+
+void
+SubscriberStationNetDevice::SetAsciiTxQueueEnqueueCallback (AsciiTraceCallback cb)
+{
+  m_asciiTxQueueEnqueueCb = cb;
+}
+
+void
+SubscriberStationNetDevice::SetAsciiTxQueueDequeueCallback (AsciiTraceCallback cb)
+{
+  m_asciiTxQueueDequeueCb = cb;
+}
+
+void
+SubscriberStationNetDevice::SetAsciiTxQueueDropCallback (AsciiTraceCallback cb)
+{
+  m_asciiTxQueueDropCb = cb;
 }
 
 } // namespace ns`

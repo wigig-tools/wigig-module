@@ -8,6 +8,7 @@
 #include "ns3/log.h"
 
 #include "fields-headers.h"
+#include "wifi-utils.h"
 
 namespace ns3 {
 
@@ -35,7 +36,7 @@ DMG_SSW_Field::~DMG_SSW_Field ()
 }
 
 TypeId
-DMG_SSW_Field::GetTypeId(void)
+DMG_SSW_Field::GetTypeId (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
   static TypeId tid = TypeId ("ns3::DMG_SSW_Field")
@@ -364,8 +365,8 @@ NS_OBJECT_ENSURE_REGISTERED (DMG_SSW_FBCK_Field);
 DMG_SSW_FBCK_Field::DMG_SSW_FBCK_Field ()
   : m_sectors (0),
     m_antennas (0),
-    m_snr_report (0),
-    m_poll_required (false),
+    m_snrReport (0),
+    m_pollRequired (false),
     m_reserved (0),
     m_iss (false)
 {
@@ -378,9 +379,9 @@ DMG_SSW_FBCK_Field::~DMG_SSW_FBCK_Field ()
 }
 
 TypeId
-DMG_SSW_FBCK_Field::GetTypeId(void)
+DMG_SSW_FBCK_Field::GetTypeId (void)
 {
-  NS_LOG_FUNCTION_NOARGS();
+  NS_LOG_FUNCTION_NOARGS ();
   static TypeId tid = TypeId ("ns3::DMG_SSW_FBCK_Field")
     .SetParent<Header> ()
     .AddConstructor<DMG_SSW_FBCK_Field> ()
@@ -423,27 +424,24 @@ DMG_SSW_FBCK_Field::Serialize (Buffer::Iterator start) const
   Buffer::Iterator i = start;
   uint8_t ssw[3];
   memset (ssw, 0, sizeof (ssw));
-
   if (m_iss)
     {
       ssw[0] |= m_sectors & 0xFF;
       ssw[1] |= (m_sectors >> 8) & 0x1;
       ssw[1] |= (m_antennas & 0x3) << 1;
-      ssw[1] |= (m_snr_report & 0x1F) << 3;
-      ssw[2] |= m_poll_required & 0x1;
+      ssw[1] |= (m_snrReport & 0x1F) << 3;
+      ssw[2] |= m_pollRequired & 0x1;
       ssw[2] |= (m_reserved & 0x7F) << 1;
     }
   else
     {
       ssw[0] |= m_sectors & 0x3F;
       ssw[0] |= (m_antennas & 0x3) << 6;
-      ssw[1] |= m_snr_report;
-      ssw[2] |= m_poll_required & 0x1;
+      ssw[1] |= m_snrReport;
+      ssw[2] |= m_pollRequired & 0x1;
       ssw[2] |= (m_reserved & 0x7F) << 1;
     }
-
   i.Write (ssw, 3);
-
   return i;
 }
 
@@ -454,24 +452,22 @@ DMG_SSW_FBCK_Field::Deserialize (Buffer::Iterator start)
   Buffer::Iterator i = start;
   uint8_t ssw[3];
   i.Read (ssw, 3);
-
   if (m_iss)
     {
       m_sectors = (ssw[0] & 0xFF) | ((ssw[1] & 0x1) << 8);
       m_antennas = (ssw[1] >> 1) & 0x3;
-      m_snr_report = (ssw[1] >> 3) & 0x1F;
-      m_poll_required = ssw[2] & 0x1;
+      m_snrReport = (ssw[1] >> 3) & 0x1F;
+      m_pollRequired = ssw[2] & 0x1;
       m_reserved = (ssw[2] >> 1) & 0x7F;
     }
   else
     {
       m_sectors = ssw[0] & 0x3F;
       m_antennas = (ssw[0] >> 6) & 0x3;
-      m_snr_report = ssw[1];
-      m_poll_required = ssw[2] & 0x1;
+      m_snrReport = ssw[1];
+      m_pollRequired = ssw[2] & 0x1;
       m_reserved = (ssw[2] >> 1) & 0x7F;
     }
-
   return i;
 }
 
@@ -490,17 +486,26 @@ DMG_SSW_FBCK_Field::SetDMGAntenna (uint8_t value)
 }
 
 void
-DMG_SSW_FBCK_Field::SetSNRReport (uint8_t value)
+DMG_SSW_FBCK_Field::SetSNRReport (double value)
 {
   NS_LOG_FUNCTION (this << value);
-  m_snr_report = value;
+  value = RatioToDb (value);
+  if (value >= 50.75)
+    {
+      value = 50.75;
+    }
+  else if (value <= -13.0)
+    {
+      value = -13.0;
+    }
+  m_snrReport = 4 * (value - 19);
 }
 
 void
 DMG_SSW_FBCK_Field::SetPollRequired (bool value)
 {
   NS_LOG_FUNCTION (this << value);
-  m_poll_required = value;
+  m_pollRequired = value;
 }
 
 void
@@ -520,28 +525,30 @@ DMG_SSW_FBCK_Field::IsPartOfISS (bool value)
 uint16_t
 DMG_SSW_FBCK_Field::GetSector (void) const
 {
-  NS_LOG_FUNCTION (this);
   return m_sectors;
 }
 
 uint8_t
 DMG_SSW_FBCK_Field::GetDMGAntenna (void) const
 {
-  NS_LOG_FUNCTION (this);
   return m_antennas;
+}
+
+double
+DMG_SSW_FBCK_Field::GetSNRReport (void) const
+{
+  return (double (m_snrReport)/4 + 19);
 }
 
 bool
 DMG_SSW_FBCK_Field::GetPollRequired (void) const
 {
-  NS_LOG_FUNCTION (this);
-  return m_poll_required;
+  return m_pollRequired;
 }
 
 uint8_t
 DMG_SSW_FBCK_Field::GetReserved (void) const
 {
-  NS_LOG_FUNCTION (this);
   return m_reserved;
 }
 
@@ -562,6 +569,8 @@ BRP_Request_Field::BRP_Request_Field () :
     m_TXSectorID (0),
     m_OtherAID (0),
     m_TXAntennaID (0),
+    m_edmgShortBrp (false),
+    m_edmgShortFbck (false),
     m_Reserved (0)
 {
     NS_LOG_FUNCTION (this);
@@ -604,6 +613,8 @@ BRP_Request_Field::Print (std::ostream &os) const
      << ", TXSectorID=" << m_TXSectorID
      << ", OtherAID=" << m_OtherAID
      << ", TXAntennaID=" << m_TXAntennaID
+     << ", EDMGShortBRP=" << m_edmgShortBrp
+     << ", EDMGShortFbck=" << m_edmgShortFbck
      << ", Reserved=" << m_Reserved;
 }
 
@@ -631,7 +642,9 @@ BRP_Request_Field::Serialize (Buffer::Iterator start) const
   brp |= ((m_TXSectorID & 0x3F) << 11);
   brp |= (m_OtherAID << 17);
   brp |= ((m_TXAntennaID & 0x3) << 25);
-  brp |= ((m_Reserved & 0x1F) << 27);
+  brp |= ((m_edmgShortBrp & 0x1) << 27);
+  brp |= ((m_edmgShortFbck & 0x1) << 28);
+  brp |= ((m_Reserved & 0x7) << 29);
 
   i.WriteHtolsbU32 (brp);
 
@@ -655,7 +668,9 @@ BRP_Request_Field::Deserialize (Buffer::Iterator start)
   m_TXSectorID = (brp >> 11) & 0x3F;
   m_OtherAID = (brp >> 17) & 0xFF;
   m_TXAntennaID = (brp >> 25) & 0x3;
-  m_Reserved = (brp >> 27) & 0x1F;
+  m_edmgShortBrp = (brp >> 27) & 0x1;
+  m_edmgShortFbck = (brp >> 28) & 0x1;
+  m_Reserved = (brp >> 29) & 0x7;
 
   return i;
 }
@@ -727,6 +742,20 @@ BRP_Request_Field::SetTXAntennaID (uint8_t value)
 {
   NS_LOG_FUNCTION (this << &value);
   m_TXAntennaID = value;
+}
+
+void
+BRP_Request_Field::SetEdmgShortBrp (bool value)
+{
+  NS_LOG_FUNCTION (this << &value);
+  m_edmgShortBrp = value;
+}
+
+void
+BRP_Request_Field::SetEdmgShortFbck (bool value)
+{
+  NS_LOG_FUNCTION (this << &value);
+  m_edmgShortFbck = value;
 }
 
 void
@@ -806,6 +835,20 @@ BRP_Request_Field::GetTXAntennaID (void)
   return m_TXAntennaID;
 }
 
+bool
+BRP_Request_Field::GetEdmgShortBrp (void)
+{
+  NS_LOG_FUNCTION (this);
+  return m_edmgShortBrp;
+}
+
+bool
+BRP_Request_Field::GetEdmgShortFbck (void)
+{
+  NS_LOG_FUNCTION (this);
+  return m_edmgShortFbck;
+}
+
 uint8_t
 BRP_Request_Field::GetReserved (void)
 {
@@ -821,8 +864,8 @@ NS_OBJECT_ENSURE_REGISTERED (BF_Control_Field);
 
 BF_Control_Field::BF_Control_Field ()
   : m_beamformTraining (false),
-    m_isInitiatorTxss (false),
-    m_isResponderTxss (false),
+    m_isInitiatorTXSS (false),
+    m_isResponderTXSS (false),
     m_sectors (0),
     m_antennas (0),
     m_rxssLength(0),
@@ -861,10 +904,10 @@ BF_Control_Field::Print (std::ostream &os) const
   NS_LOG_FUNCTION (this << &os);
 
   os << "Beamforming Training=" << m_beamformTraining
-     << ", IsInitiatorTXSS=" << m_isInitiatorTxss
-     << ", IsResponderTXSS=" << m_isResponderTxss;
+     << ", IsInitiatorTXSS=" << m_isInitiatorTXSS
+     << ", IsResponderTXSS=" << m_isResponderTXSS;
 
-  if (m_isInitiatorTxss && m_isResponderTxss)
+  if (m_isInitiatorTXSS && m_isResponderTXSS)
     {
       os << ", Total Number of Sectors=" << m_sectors
          << ", Number of RX DMG Antennas=" << m_antennas;
@@ -894,10 +937,10 @@ BF_Control_Field::Serialize (Buffer::Iterator start) const
 
   /* Common Subfields */
   value |= m_beamformTraining & 0x1;
-  value |= ((m_isInitiatorTxss & 0x1) << 1);
-  value |= ((m_isResponderTxss & 0x1) << 2);
+  value |= ((m_isInitiatorTXSS & 0x1) << 1);
+  value |= ((m_isResponderTXSS & 0x1) << 2);
 
-  if (m_isInitiatorTxss && m_isResponderTxss)
+  if (m_isInitiatorTXSS && m_isResponderTXSS)
     {
       value |= ((m_sectors & 0x7F) << 3);
       value |= ((m_antennas & 0x3) << 10);
@@ -923,10 +966,10 @@ BF_Control_Field::Deserialize (Buffer::Iterator start)
   uint8_t value = i.ReadLsbtohU16 ();
 
   m_beamformTraining = value & 0x1;
-  m_isInitiatorTxss = ((value >> 1) & 0x1);
-  m_isResponderTxss = ((value >> 2) & 0x1);
+  m_isInitiatorTXSS = ((value >> 1) & 0x1);
+  m_isResponderTXSS = ((value >> 2) & 0x1);
 
-  if (m_isInitiatorTxss && m_isResponderTxss)
+  if (m_isInitiatorTXSS && m_isResponderTXSS)
     {
       m_sectors |= ((value >> 3) & 0x7F);
       m_antennas |= ((value >> 10) & 0x3);
@@ -950,17 +993,17 @@ BF_Control_Field::SetBeamformTraining (bool value)
 }
 
 void
-BF_Control_Field::SetAsInitiatorTxss (bool value)
+BF_Control_Field::SetAsInitiatorTXSS (bool value)
 {
   NS_LOG_FUNCTION (this << value);
-  m_isInitiatorTxss = value;
+  m_isInitiatorTXSS = value;
 }
 
 void
-BF_Control_Field::SetAsResponderTxss (bool value)
+BF_Control_Field::SetAsResponderTXSS (bool value)
 {
   NS_LOG_FUNCTION (this << value);
-  m_isResponderTxss = value;
+  m_isResponderTXSS = value;
 }
 
 void
@@ -978,14 +1021,14 @@ BF_Control_Field::SetNumberOfRxDmgAntennas (uint8_t antennas)
 }
 
 void
-BF_Control_Field::SetRxssLength (uint8_t length)
+BF_Control_Field::SetRXSSLength (uint8_t length)
 {
   NS_LOG_FUNCTION (this << length);
   m_rxssLength = length;
 }
 
 void
-BF_Control_Field::SetRxssTxRate (bool rate)
+BF_Control_Field::SetRXSSTxRate (bool rate)
 {
   NS_LOG_FUNCTION (this << rate);
   m_rxssTXRate = rate;
@@ -999,17 +1042,17 @@ BF_Control_Field::IsBeamformTraining (void) const
 }
 
 bool
-BF_Control_Field::IsInitiatorTxss (void) const
+BF_Control_Field::IsInitiatorTXSS (void) const
 {
   NS_LOG_FUNCTION (this);
-  return m_isInitiatorTxss;
+  return m_isInitiatorTXSS;
 }
 
 bool
-BF_Control_Field::IsResponderTxss (void) const
+BF_Control_Field::IsResponderTXSS (void) const
 {
   NS_LOG_FUNCTION (this);
-  return m_isResponderTxss;
+  return m_isResponderTXSS;
 }
 
 uint8_t
@@ -1027,14 +1070,14 @@ BF_Control_Field::GetNumberOfRxDmgAntennas (void) const
 }
 
 uint8_t
-BF_Control_Field::GetRxssLength (void) const
+BF_Control_Field::GetRXSSLength (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_rxssLength;
 }
 
 bool
-BF_Control_Field::GetRxssTxRate (void) const
+BF_Control_Field::GetRXSSTxRate (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_rxssTXRate;

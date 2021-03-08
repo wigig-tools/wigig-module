@@ -22,21 +22,24 @@
 #define YANS_WIFI_CHANNEL_H
 
 #include "ns3/channel.h"
-#include "yans-wifi-phy.h"
 
 namespace ns3 {
 
 class NetDevice;
 class PropagationLossModel;
 class PropagationDelayModel;
+class YansWifiPhy;
+class Packet;
+class Time;
+class WifiPpdu;
 
 /**
  * \brief a channel to interconnect ns3::YansWifiPhy objects.
  * \ingroup wifi
  *
  * This class is expected to be used in tandem with the ns3::YansWifiPhy
- * class and supports an ns3::PropagationLossModel and an 
- * ns3::PropagationDelayModel.  By default, no propagation models are set; 
+ * class and supports an ns3::PropagationLossModel and an
+ * ns3::PropagationDelayModel.  By default, no propagation models are set;
  * it is the caller's responsibility to set them before using the channel.
  */
 class YansWifiChannel : public Channel
@@ -52,8 +55,8 @@ public:
   virtual ~YansWifiChannel ();
 
   //inherited from Channel.
-  virtual uint32_t GetNDevices (void) const;
-  virtual Ptr<NetDevice> GetDevice (uint32_t i) const;
+  virtual std::size_t GetNDevices (void) const;
+  virtual Ptr<NetDevice> GetDevice (std::size_t i) const;
 
   /**
    * Adds the given YansWifiPhy to the PHY list
@@ -72,17 +75,16 @@ public:
   void SetPropagationDelayModel (const Ptr<PropagationDelayModel> delay);
 
   /**
-   * \param sender the phy object from which the packet is originating.
-   * \param packet the packet to send
-   * \param txPowerDbm the tx power associated to the packet, in dBm
-   * \param duration the transmission duration associated with the packet
+   * \param sender the PHY object from which the packet is originating.
+   * \param ppdu the PPDU to send
+   * \param txPowerDbm the TX power associated to the packet, in dBm
    *
    * This method should not be invoked by normal users. It is
    * currently invoked only from YansWifiPhy::StartTx.  The channel
-   * attempts to deliver the packet to all other YansWifiPhy objects
+   * attempts to deliver the PPDU to all other YansWifiPhy objects
    * on the channel (except for the sender).
    */
-  void Send (Ptr<YansWifiPhy> sender, Ptr<const Packet> packet, double txPowerDbm, Time duration) const;
+  void Send (Ptr<YansWifiPhy> sender, Ptr<const WifiPpdu> ppdu, double txPowerDbm) const;
 
   /**
    * Assign a fixed random variable stream number to the random variables
@@ -105,14 +107,13 @@ private:
   /**
    * This method is scheduled by Send for each associated YansWifiPhy.
    * The method then calls the corresponding YansWifiPhy that the first
-   * bit of the packet has arrived.
+   * bit of the PPDU has arrived.
    *
    * \param receiver the device to which the packet is destined
-   * \param packet the packet being sent
-   * \param txPowerDbm the tx power associated to the packet being sent (dBm)
-   * \param duration the transmission duration associated with the packet being sent
+   * \param ppdu the PPDU being sent
+   * \param txPowerDbm the TX power associated to the packet being sent (dBm)
    */
-  static void Receive (Ptr<YansWifiPhy> receiver, Ptr<Packet> packet, double txPowerDbm, Time duration);
+  static void Receive (Ptr<YansWifiPhy> receiver, Ptr<WifiPpdu> ppdu, double txPowerDbm);
 
   PhyList m_phyList;                   //!< List of YansWifiPhys connected to this YansWifiChannel
   Ptr<PropagationLossModel> m_loss;    //!< Propagation loss model

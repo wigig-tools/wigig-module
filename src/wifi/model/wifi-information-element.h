@@ -23,7 +23,6 @@
 
 #include "ns3/header.h"
 #include "ns3/simple-ref-count.h"
-
 #include "map"
 
 namespace ns3 {
@@ -192,11 +191,12 @@ typedef uint8_t WifiInformationElementIdExtension;
 #define IE_OPERATING_MODE_NOTIFICATION          ((WifiInformationElementId)199)
 // 200 to 220 are reserved
 #define IE_VENDOR_SPECIFIC                      ((WifiInformationElementId)221)
-// 222 to 255 are reserved
-#define IE_HE_CAPABILITIES                      ((WifiInformationElementId)255) //todo: not defined yet in the standard!
-#define IE_HE_OPERATION                         ((WifiInformationElementId)255) //todo: not defined yet in the standard!
+// 222 to 254 are reserved
+#define IE_EXTENSION                            ((WifiInformationElementId)255)
 
-#define IE_EXTENDED_CAPABILITIES               ((WifiInformationElementId)127)
+#define IE_EXT_HE_CAPABILITIES                  ((WifiInformationElementId)35)
+#define IE_EXT_HE_OPERATION                     ((WifiInformationElementId)36)
+
 // 143 to 190 are 802.11ad in 802.11-2012
 #define IE_WAKEUP_SCHEDULE                     ((WifiInformationElementId)143)
 #define IE_EXTENDED_SCHEDULE                   ((WifiInformationElementId)144)
@@ -225,39 +225,36 @@ typedef uint8_t WifiInformationElementIdExtension;
 #define IE_QUIET_PERIOD_REQUEST                ((WifiInformationElementId)175)
 #define IE_QUIET_PERIOD_RESPONSE               ((WifiInformationElementId)177)
 #define IE_ECPAC_POLICY                        ((WifiInformationElementId)182)
-// 128 to 190 are reserved in 802.11-2016
-#define IE_VHT_CAPABILITIES                    ((WifiInformationElementId)191)
-#define IE_VENDOR_SPECIFIC                     ((WifiInformationElementId)221)
-// 222 to 254 are reserved in 802.11-2016
-#define IE_EXTENSION                           ((WifiInformationElementId)255)
 
 /**
- * Definition of the Element ID Extension field in 802.11ay_D2.0
+ * Definition of the Element ID Extension field in 802.11ay_D5.0
  */
-#define IE_EXTENSION_EDMG_CAPABILITIES                    ((WifiInformationElementIdExtension)10)
-#define IE_EXTENSION_EDMG_OPERATION                       ((WifiInformationElementIdExtension)11)
-#define IE_EXTENSION_EDMG_EXTENDED_SCHEDULE               ((WifiInformationElementIdExtension)12)
-#define IE_EXTENSION_EDMG_CHANNEL_MEASUREMENT_FEEDBACK    ((WifiInformationElementIdExtension)13)
-#define IE_EXTENSION_EDMG_GROUP_ID_SET                    ((WifiInformationElementIdExtension)14)
-#define IE_EXTENSION_EDMG_BRP_REQUEST                     ((WifiInformationElementIdExtension)15)
-#define IE_EXTENSION_EDMG_TRAINING_FIELD_SCHEDULE         ((WifiInformationElementIdExtension)16)
-#define IE_EXTENSION_EDMG_PARTIAL_SECTOR_SWEEP            ((WifiInformationElementIdExtension)17)
-#define IE_EXTENSION_MIMO_SETUP_CONTROL                   ((WifiInformationElementIdExtension)18)
-#define IE_EXTENSION_MIMO_POLL_CONTROL                    ((WifiInformationElementIdExtension)19)
-#define IE_EXTENSION_MIMO_FEEDBACK_CONTROL                ((WifiInformationElementIdExtension)20)
-#define IE_EXTENSION_MIMO_SELECTION_CONTROL               ((WifiInformationElementIdExtension)21)
-#define IE_EXTENSION_EDMG_FLOW_CONTROL_EXTENSION          ((WifiInformationElementIdExtension)22)
-#define IE_EXTENSION_QOS_TRIGGERED_UNSCHEDULED            ((WifiInformationElementIdExtension)23)
-#define IE_EXTENSION_UNSLICITED_BLOCK_ACK_EXTENSION       ((WifiInformationElementIdExtension)24)
-#define IE_EXTENSION_SEGMENATION_REASSEMBLY               ((WifiInformationElementIdExtension)25)
-#define IE_EXTENSION_TDD_SLOT_STRUCTURE                   ((WifiInformationElementIdExtension)26)
-#define IE_EXTENSION_TDD_SLOT_SCHEDULE                    ((WifiInformationElementIdExtension)27)
-#define IE_EXTENSION_TDD_ROUTE                            ((WifiInformationElementIdExtension)28)
-#define IE_EXTENSION_DIGITAL_BF_FEEDBACK                  ((WifiInformationElementIdExtension)29)
-#define IE_EXTENSION_TDD_BANDWIDTH_REQUEST                ((WifiInformationElementIdExtension)30)
-#define IE_EXTENSION_TDD_SYNCHRONIZATION                  ((WifiInformationElementIdExtension)31)
-#define IE_EXTENSION_EDMG_WIDE_BANDWIDTH_CHANNEL_SWITCH   ((WifiInformationElementIdExtension)32)
-#define IE_EXTENSION_DMG_DISCOVERY_ASSISTANCE             ((WifiInformationElementIdExtension)33)
+#define IE_EXTENSION_EDMG_CAPABILITIES                    ((WifiInformationElementIdExtension)61)
+#define IE_EXTENSION_EDMG_OPERATION                       ((WifiInformationElementIdExtension)62)
+#define IE_EXTENSION_EDMG_EXTENDED_SCHEDULE               ((WifiInformationElementIdExtension)63)
+#define IE_EXTENSION_EDMG_CHANNEL_MEASUREMENT_FEEDBACK    ((WifiInformationElementIdExtension)64)
+#define IE_EXTENSION_EDMG_GROUP_ID_SET                    ((WifiInformationElementIdExtension)65)
+#define IE_EXTENSION_EDMG_BRP_REQUEST                     ((WifiInformationElementIdExtension)66)
+#define IE_EXTENSION_EDMG_TRAINING_FIELD_SCHEDULE         ((WifiInformationElementIdExtension)67)
+#define IE_EXTENSION_EDMG_PARTIAL_SECTOR_SWEEP            ((WifiInformationElementIdExtension)68)
+#define IE_EXTENSION_MIMO_SETUP_CONTROL                   ((WifiInformationElementIdExtension)69)
+#define IE_EXTENSION_MIMO_POLL_CONTROL                    ((WifiInformationElementIdExtension)70)
+#define IE_EXTENSION_MIMO_FEEDBACK_CONTROL                ((WifiInformationElementIdExtension)71)
+#define IE_EXTENSION_MIMO_SELECTION_CONTROL               ((WifiInformationElementIdExtension)72)
+#define IE_EXTENSION_EDMG_FLOW_CONTROL_EXTENSION          ((WifiInformationElementIdExtension)73)
+#define IE_EXTENSION_QOS_TRIGGERED_UNSCHEDULED            ((WifiInformationElementIdExtension)74)
+#define IE_EXTENSION_UNSLICITED_BLOCK_ACK_EXTENSION       ((WifiInformationElementIdExtension)75)
+#define IE_EXTENSION_SEGMENATION_REASSEMBLY               ((WifiInformationElementIdExtension)76)
+#define IE_EXTENSION_TDD_SLOT_STRUCTURE                   ((WifiInformationElementIdExtension)77)
+#define IE_EXTENSION_TDD_SLOT_SCHEDULE                    ((WifiInformationElementIdExtension)78)
+#define IE_EXTENSION_TDD_ROUTE                            ((WifiInformationElementIdExtension)79)
+#define IE_EXTENSION_DIGITAL_BF_FEEDBACK                  ((WifiInformationElementIdExtension)80)
+#define IE_EXTENSION_TDD_BANDWIDTH_REQUEST                ((WifiInformationElementIdExtension)81)
+#define IE_EXTENSION_TDD_SYNCHRONIZATION                  ((WifiInformationElementIdExtension)82)
+#define IE_EXTENSION_EDMG_WIDE_BANDWIDTH_CHANNEL_SWITCH   ((WifiInformationElementIdExtension)83)
+#define IE_EXTENSION_DMG_DISCOVERY_ASSISTANCE             ((WifiInformationElementIdExtension)84)
+#define IE_EXTENSION_EXTENDED_LINK_MEASUREMENT            ((WifiInformationElementIdExtension)85)
+#define IE_EXTENSION_DMG_STA_TRANSCEIVER_PARAMETERS       ((WifiInformationElementIdExtension)86)
 
 /**
  * Deserialize IE ID, length and Extension ID. The iterator passed in  must be
@@ -363,7 +360,7 @@ public:
    * Get the size of the serialized IE including Element ID and
    * length fields.
    *
-   * \return the size of the serialized IE
+   * \return the size of the serialized IE in bytes
    */
   uint16_t GetSerializedSize () const;
 
@@ -372,11 +369,6 @@ public:
    * \returns Own unique Element ID
    */
   virtual WifiInformationElementId ElementId () const = 0;
-
-  /**
-   * \returns Own unique Element ID extension.
-   */
-  virtual WifiInformationElementId ElementIdExtension () const;
   /**
    * Length of serialized information (i.e., the length of the body
    * of the IE, not including the Element ID and length octets. This
@@ -406,6 +398,11 @@ public:
   virtual uint8_t DeserializeInformationField (Buffer::Iterator start,
                                                uint8_t length) = 0;
 
+  /**
+   * \returns Own unique Element ID Extension
+   */
+  virtual WifiInformationElementId ElementIdExt () const;
+
   // In addition, a subclass may optionally override the following...
   /**
    * Generate human-readable form of IE
@@ -427,8 +424,10 @@ public:
 };
 
 typedef std::vector<Ptr<WifiInformationElement> > WifiInfoElementList;
-typedef std::vector<WifiInformationElementId> WifiInformationElementIdList;
-typedef std::map<WifiInformationElementId, Ptr<WifiInformationElement> > WifiInformationElementMap;
+typedef std::pair<WifiInformationElementId, WifiInformationElementIdExtension> WifiInfoElementId;
+typedef std::vector<WifiInfoElementId> WifiInformationElementIdList;
+typedef std::map<WifiInfoElementId, Ptr<WifiInformationElement> > WifiInformationElementMap;
+typedef std::map<WifiInformationElementId, Ptr<WifiInformationElement> > WifiInformationSubelementMap;
 
 } //namespace ns3
 

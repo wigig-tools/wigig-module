@@ -270,14 +270,6 @@ public:
   void SetUeAntennaModelAttribute (std::string n, const AttributeValue &v);
 
   /**
-   * This method is used to send the ComponentCarrier map created with CcHelper
-   * to the helper, the structure will be used within InstallSingleEnbDevice
-   *
-   * \param ccmap the component carrier map
-   */
-   void SetCcPhyParams (std::map< uint8_t, ComponentCarrier> ccmap);
-
-  /**
    * Set the type of spectrum channel to be used in both DL and UL.
    *
    * \param type type of spectrum channel model, must be a type name of any
@@ -685,14 +677,14 @@ protected:
 private:
 
   /**
-   * A private function used for component carrier configuration.
+   * Configure the component carriers
    *
-   * \param ulEarfcn uplink EARFCN - not control on the validity at this point
-   * \param dlEarfcn downlink EARFCN - not control on the validity at this point	
-   * \param ulbw uplink bandwidth for the current CC
-   * \param dlbw downlink bandwidth for the current CC
+   * \param ulEarfcn uplink EARFCN
+   * \param dlEarfcn downlink EARFCN
+   * \param ulbw uplink bandwidth for each CC
+   * \param dlbw downlink bandwidth for each CC
    */
-  void DoComponentCarrierConfigure (uint32_t ulEarfcn, uint32_t dlEarfcn, uint8_t ulbw, uint8_t dlbw);
+  void DoComponentCarrierConfigure (uint32_t ulEarfcn, uint32_t dlEarfcn, uint16_t ulbw, uint16_t dlbw);
   /**
    * Create an eNodeB device (LteEnbNetDevice) on the given node.
    * \param n the node where the device is to be installed
@@ -778,7 +770,7 @@ private:
   /// Factory of fading model object for both the downlink and uplink channels.
   ObjectFactory m_fadingModelFactory;
   /// The fading model used in both the downlink and uplink channels.
-  Ptr<SpectrumPropagationLossModel> m_fadingModule;
+  Ptr<SpectrumPropagationLossModel> m_fadingModel;
   /**
    * True if a random variable stream number has been assigned for the fading
    * model. Used to prevent such assignment to be done more than once.

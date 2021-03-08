@@ -25,6 +25,7 @@
 #include "ns3/point-to-point-channel.h"
 #include "ns3/point-to-point-remote-channel.h"
 #include "ns3/queue.h"
+#include "ns3/net-device-queue-interface.h"
 #include "ns3/config.h"
 #include "ns3/packet.h"
 #include "ns3/names.h"
@@ -81,7 +82,6 @@ PointToPointHelper::SetSnapshotLength (uint32_t length)
 {
   m_snaplen = length;
 }
-
 uint32_t
 PointToPointHelper::GetSnapshotLength (void) const
 {
@@ -251,6 +251,14 @@ PointToPointHelper::Install (Ptr<Node> a, Ptr<Node> b)
   b->AddDevice (devB);
   Ptr<Queue<Packet> > queueB = m_queueFactory.Create<Queue<Packet> > ();
   devB->SetQueue (queueB);
+  // Aggregate NetDeviceQueueInterface objects
+  Ptr<NetDeviceQueueInterface> ndqiA = CreateObject<NetDeviceQueueInterface> ();
+  ndqiA->GetTxQueue (0)->ConnectQueueTraces (queueA);
+  devA->AggregateObject (ndqiA);
+  Ptr<NetDeviceQueueInterface> ndqiB = CreateObject<NetDeviceQueueInterface> ();
+  ndqiB->GetTxQueue (0)->ConnectQueueTraces (queueB);
+  devB->AggregateObject (ndqiB);
+
   // If MPI is enabled, we need to see if both nodes have the same system id 
   // (rank), and the rank is the same as this instance.  If both are true, 
   //use a normal p2p channel, otherwise use a remote channel

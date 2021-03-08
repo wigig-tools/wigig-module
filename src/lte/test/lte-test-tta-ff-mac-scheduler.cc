@@ -23,7 +23,6 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-
 #include <ns3/object.h>
 #include <ns3/spectrum-interference.h>
 #include <ns3/spectrum-error-model.h>
@@ -34,6 +33,7 @@
 #include <ns3/ptr.h>
 #include "ns3/radio-bearer-stats-calculator.h"
 #include <ns3/constant-position-mobility-model.h>
+#include <ns3/ff-mac-scheduler.h>
 #include "lte-test-tta-ff-mac-scheduler.h"
 #include <ns3/eps-bearer.h>
 #include <ns3/node-container.h>
@@ -49,9 +49,6 @@
 #include <ns3/lte-ue-phy.h>
 #include <ns3/boolean.h>
 #include <ns3/enum.h>
-
-
-#include "lte-test-tta-ff-mac-scheduler.h"
 
 using namespace ns3;
 
@@ -197,6 +194,10 @@ LenaTtaFfMacSchedulerTestCase::DoRun (void)
     }
 
   Config::SetDefault ("ns3::LteHelper::UseIdealRrc", BooleanValue (true));
+  Config::SetDefault ("ns3::MacStatsCalculator::DlOutputFilename", StringValue (CreateTempDirFilename ("DlMacStats.txt")));
+  Config::SetDefault ("ns3::MacStatsCalculator::UlOutputFilename", StringValue (CreateTempDirFilename ("UlMacStats.txt")));
+  Config::SetDefault ("ns3::RadioBearerStatsCalculator::DlRlcOutputFilename", StringValue (CreateTempDirFilename ("DlRlcStats.txt")));
+  Config::SetDefault ("ns3::RadioBearerStatsCalculator::UlRlcOutputFilename", StringValue (CreateTempDirFilename ("UlRlcStats.txt")));
 
   //Disable Uplink Power Control
   Config::SetDefault ("ns3::LteUePhy::EnableUplinkPowerControl", BooleanValue (false));
@@ -225,6 +226,7 @@ LenaTtaFfMacSchedulerTestCase::DoRun (void)
   NetDeviceContainer enbDevs;
   NetDeviceContainer ueDevs;
   lteHelper->SetSchedulerType ("ns3::TtaFfMacScheduler");
+  lteHelper->SetSchedulerAttribute ("UlCqiFilter", EnumValue (FfMacScheduler::SRS_UL_CQI));
   enbDevs = lteHelper->InstallEnbDevice (enbNodes);
   ueDevs = lteHelper->InstallUeDevice (ueNodes);
 
@@ -269,7 +271,7 @@ LenaTtaFfMacSchedulerTestCase::DoRun (void)
   Simulator::Run ();
 
   /**
-   * Check that the downlink assignation is done in a "Throughput to Average" manner
+   * Check that the downlink assignment is done in a "Throughput to Average" manner
    */
   NS_LOG_INFO ("DL - Test with " << m_nUser << " user(s) at distance " << m_dist);
   std::vector <uint64_t> dlDataRxed;
@@ -283,7 +285,7 @@ LenaTtaFfMacSchedulerTestCase::DoRun (void)
     }
 
   /**
-  * Check that the assignation is done in a "Throughput to Average" manner among users
+  * Check that the assignment is done in a "Throughput to Average" manner among users
   * with maximum SINRs: without fading, current FD MT always assign all resources to one UE
   */
 
@@ -305,7 +307,7 @@ LenaTtaFfMacSchedulerTestCase::DoRun (void)
     }
 
   /**
-  * Check that the uplink assignation is done in a "proportional fair" manner
+  * Check that the uplink assignment is done in a "proportional fair" manner
   */
   NS_LOG_INFO ("UL - Test with " << m_nUser << " user(s) at distance " << m_dist);
   std::vector <uint64_t> ulDataRxed;
@@ -319,8 +321,8 @@ LenaTtaFfMacSchedulerTestCase::DoRun (void)
       NS_LOG_INFO ("\tUser " << i << " imsi " << imsi << " bytes rxed " << (double)ulDataRxed.at (i) << "  thr " << (double)ulDataRxed.at (i) / statsDuration << " ref " << m_thrRefUl);
     }
   /**
-  * Check that the assignation is done in a "proportional fair" manner among users
-  * with equal SINRs: the bandwidht should be distributed according to the 
+  * Check that the assignment is done in a "proportional fair" manner among users
+  * with equal SINRs: the bandwidth should be distributed according to the 
   * ratio of the estimated throughput per TTI of each user; therefore equally 
   * partitioning the whole bandwidth achievable from a single users in a TTI
   */

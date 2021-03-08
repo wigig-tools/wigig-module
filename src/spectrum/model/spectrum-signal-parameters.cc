@@ -33,6 +33,7 @@ NS_LOG_COMPONENT_DEFINE ("SpectrumSignalParameters");
 SpectrumSignalParameters::SpectrumSignalParameters ()
 {
   NS_LOG_FUNCTION (this);
+  isMimo = false;
 }
 
 SpectrumSignalParameters::~SpectrumSignalParameters ()
@@ -47,6 +48,8 @@ SpectrumSignalParameters::SpectrumSignalParameters (const SpectrumSignalParamete
   duration = p.duration;
   txPhy = p.txPhy;
   txAntenna = p.txAntenna;
+  psdList = p.psdList;
+  isMimo = p.isMimo;
 }
 
 Ptr<SpectrumSignalParameters>

@@ -26,13 +26,14 @@
 namespace ns3 {
 
 class WifiMac;
+class NetDevice;
 
 /**
  * \brief create MAC layers for a ns3::WifiNetDevice.
  *
  * This class can create MACs of type ns3::ApWifiMac, ns3::StaWifiMac and ns3::AdhocWifiMac.
  * Its purpose is to allow a WifiHelper to configure and install WifiMac objects on a collection
- * of nodes. The WifiMac objects themselves are mainly composed of TxMiddle, RxMiddle, DcfManager,
+ * of nodes. The WifiMac objects themselves are mainly composed of TxMiddle, RxMiddle, ChannelAccessManager,
  * MacLow, WifiRemoteStationManager, MpduAggregator and MsduAggregartor objects, so this helper
  * offers the opportunity to configure attribute values away from their default values, on a
  * per-NodeContainer basis. By default, it creates an Adhoc MAC layer without QoS. Typically,
@@ -83,7 +84,7 @@ public:
    * \param v10 the value of the attribute to set
    *
    * All the attributes specified in this method should exist
-   * in the requested mac.
+   * in the requested MAC.
    */
   virtual void SetType (std::string type,
                         std::string n0 = "", const AttributeValue &v0 = EmptyAttributeValue (),
@@ -138,11 +139,12 @@ public:
                              std::string n10 = "", const AttributeValue &v10 = EmptyAttributeValue ());
 
   /**
+   * \param device the device within which the MAC object will reside
    * \returns a new MAC object.
    *
    * This allows the ns3::WifiHelper class to create MAC objects from ns3::WifiHelper::Install.
    */
-  virtual Ptr<WifiMac> Create (void) const;
+  virtual Ptr<WifiMac> Create (Ptr<NetDevice> device) const;
 
 
 protected:

@@ -45,7 +45,7 @@ int main (int argc, char *argv[])
   uint32_t numUes = 1;
 
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("enbDist", "distance between the two eNBs", enbDist);
   cmd.AddValue ("radius", "the radius of the disc where UEs are placed around an eNB", radius);
   cmd.AddValue ("numUes", "how many UEs are attached to each eNB", numUes);
@@ -60,7 +60,7 @@ int main (int argc, char *argv[])
   // determine the string tag that identifies this simulation run
   // this tag is then appended to all filenames
 
-  IntegerValue runValue;
+  UintegerValue runValue;
   GlobalValue::GetValueByName ("RngRun", runValue);
 
   std::ostringstream tag;

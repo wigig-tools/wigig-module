@@ -147,10 +147,11 @@ public:
    * Enqueue an IP packet on the proper bearer for uplink transmission
    * 
    * \param p the packet
+   * \param protocolNumber the protocol number of the packet
    * 
    * \return true if successful, false if an error occurred
    */
-  bool Send (Ptr<Packet> p);
+  bool Send (Ptr<Packet> p, uint16_t protocolNumber);
 
 
   /**
@@ -247,6 +248,13 @@ private:
   };
 
   std::list<BearerToBeActivated> m_bearersToBeActivatedList; ///< bearers to be activated list
+
+  /**
+   * bearers to be activated list maintained and to be used for reconnecting
+   * an out-of-sync UE
+   *
+   */
+  std::list<BearerToBeActivated> m_bearersToBeActivatedListForReconnection;
 
 };
 

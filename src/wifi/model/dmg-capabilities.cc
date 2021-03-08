@@ -1,6 +1,6 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -15,7 +15,22 @@ NS_LOG_COMPONENT_DEFINE ("DmgCapabilities");
 namespace ns3 {
 
 DmgCapabilities::DmgCapabilities ()
-  : m_reverseDirection (0),
+  : m_staAddress (),
+    m_aid (0),
+    m_dmgStaBeamTrackingTimeLimit (0),
+    m_maximumExtendedScTxMcs (EXTENDED_NONE),
+    m_codeRate7_8_Tx (false),
+    m_maximumExtendedScRxMcs (EXTENDED_NONE),
+    m_codeRate7_8_Rx (false),
+    m_maximumNumberOfBasicAMSDU (BASIC_AMSDU_NUMBER_NONE),
+    m_maximumNumberOfShortAMSDU (SHORT_AMSDU_NUMBER_NONE),
+    m_tddChannelAccessSupported (false),
+    m_parametersAcrossRXChainsSupported (false),
+    m_ppduStatisticsSupported (false),
+    m_ldpcStatisticsSupported (false),
+    m_scOFDM_StatisticsSupported (false),
+    m_tddSynchronizationMode (false),
+    m_reverseDirection (0),
     m_higherLayerTimerSynchronziation (0),
     m_tpc (0),
     m_spsh (0),
@@ -24,7 +39,7 @@ DmgCapabilities::DmgCapabilities ()
     m_sectorsNumber (0),
     m_rxssLength (0),
     m_dmgAntennaReciprocity (0),
-    m_ampduMaximumLength (0),
+    m_ampduExponent (5),
     m_ampduMinimumSpacing (0),
     m_baFlowControl (0),
     m_maximumScRxMcs (0),
@@ -40,7 +55,7 @@ DmgCapabilities::DmgCapabilities ()
     m_antennaPatternReciprocity (0),
     m_heartbeatElapsedIndication (0),
     m_GrantAckSupported (0),
-    m_RxssTxRateSupported (0),
+    m_rxssTxRateSupported (0),
     m_tddti (0),
     m_pseudoStaticAllocations (0),
     m_pcpHandover (0),
@@ -62,7 +77,7 @@ uint8_t
 DmgCapabilities::GetInformationFieldSize () const
 {
   //we should not be here if dmg is not supported
-  return 17;
+  return 24;
 }
 
 Buffer::Iterator
@@ -84,6 +99,28 @@ DmgCapabilities::SerializeInformationField (Buffer::Iterator start) const
   start.WriteU8 (GetAID ());
   start.WriteHtolsbU64 (GetDmgStaCapabilityInfo ());
   start.WriteHtolsbU16 (GetDmgPcpApCapabilityInfo ());
+
+  /* IEEE 802.11-2016 */
+  start.WriteHtolsbU16 (m_dmgStaBeamTrackingTimeLimit);
+  uint8_t extendedCapabilities = 0;
+  extendedCapabilities |= m_maximumExtendedScTxMcs & 0x7;
+  extendedCapabilities |= (m_codeRate7_8_Tx & 0x1) << 3;
+  extendedCapabilities |= (m_maximumExtendedScRxMcs & 0x7) << 4;
+  extendedCapabilities |= (m_codeRate7_8_Rx & 0x1) << 7;
+  start.WriteU8 (extendedCapabilities);
+  start.WriteU8 (m_maximumNumberOfBasicAMSDU);
+  start.WriteU8 (m_maximumNumberOfShortAMSDU);
+
+  /* IEEE 802.11ay D4.0 */
+  uint16_t tddCapability = 0;
+  tddCapability |= m_tddChannelAccessSupported & 0x1;
+  tddCapability |= (m_parametersAcrossRXChainsSupported & 0x1) << 1;
+  tddCapability |= (m_ppduStatisticsSupported & 0x1) << 2;
+  tddCapability |= (m_ldpcStatisticsSupported & 0x1) << 3;
+  tddCapability |= (m_scOFDM_StatisticsSupported & 0x1) << 4;
+  tddCapability |= (m_tddSynchronizationMode & 0x1) << 5;
+
+  start.WriteHtolsbU16 (tddCapability);
 }
 
 uint8_t
@@ -102,6 +139,24 @@ DmgCapabilities::DeserializeInformationField (Buffer::Iterator start,
   SetAID (aid);
   SetDmgStaCapabilityInfo (staCapability);
   SetDmgPcpApCapabilityInfo (apCapability);
+
+  m_dmgStaBeamTrackingTimeLimit = i.ReadLsbtohU16 ();
+  uint8_t extendedCapabilities = i.ReadU8 ();
+  m_maximumExtendedScTxMcs = static_cast<EXTENDED_MCS_NAME> (extendedCapabilities & 0x7);
+  m_codeRate7_8_Tx = (extendedCapabilities  >> 3) & 0x1;
+  m_maximumExtendedScRxMcs = (extendedCapabilities >> 4) & 0x7;
+  m_codeRate7_8_Rx = (extendedCapabilities >> 7) & 0x1;
+  m_maximumNumberOfBasicAMSDU = static_cast<MAXIMUM_BASIC_AMSDU_NUMBER> (i.ReadU8 ());
+  m_maximumNumberOfShortAMSDU = static_cast<MAXIMUM_SHORT_AMSDU_NUMBER> (i.ReadU8 ());
+
+  /* IEEE 802.11ay D4.0 */
+  uint16_t tddCapability = i.ReadLsbtohU16 ();
+  m_tddChannelAccessSupported = tddCapability & 0x1;
+  m_parametersAcrossRXChainsSupported = (tddCapability >> 1) & 0x1;
+  m_ppduStatisticsSupported = (tddCapability >> 2) & 0x1;
+  m_ldpcStatisticsSupported = (tddCapability >> 3) & 0x1;
+  m_scOFDM_StatisticsSupported = (tddCapability >> 4) & 0x1;
+  m_tddSynchronizationMode = (tddCapability >> 5) & 0x1;
 
   return length;
 }
@@ -143,7 +198,7 @@ DmgCapabilities::SetDmgStaCapabilityInfo (uint64_t info)
   m_rxssLength = (info >> 14) & 0x3F;
   m_dmgAntennaReciprocity = (info >> 20) & 0x1;
 
-  m_ampduMaximumLength = (info >> 21) & 0x7;
+  m_ampduExponent = (info >> 21) & 0x7;
   m_ampduMinimumSpacing= (info >> 24) & 0x7;
 
   m_baFlowControl = (info >> 27) & 0x1;
@@ -162,7 +217,7 @@ DmgCapabilities::SetDmgStaCapabilityInfo (uint64_t info)
   m_antennaPatternReciprocity = (info >> 56) & 0x1;
   m_heartbeatElapsedIndication = (info >> 57) & 0x7;
   m_GrantAckSupported = (info >> 60) & 0x1;
-  m_RxssTxRateSupported = (info >> 61) & 0x1;
+  m_rxssTxRateSupported = (info >> 61) & 0x1;
 }
 
 uint64_t
@@ -180,7 +235,7 @@ DmgCapabilities::GetDmgStaCapabilityInfo (void) const
   val |= uint64_t (m_rxssLength & 0x3F) << 14;
   val |= uint64_t (m_dmgAntennaReciprocity & 0x1) << 20;
 
-  val |= uint64_t (m_ampduMaximumLength & 0x7) << 21;
+  val |= uint64_t (m_ampduExponent & 0x7) << 21;
   val |= uint64_t (m_ampduMinimumSpacing & 0x7) << 24;
 
   val |= uint64_t (m_baFlowControl & 0x1) << 27;
@@ -199,7 +254,7 @@ DmgCapabilities::GetDmgStaCapabilityInfo (void) const
   val |= uint64_t (m_antennaPatternReciprocity & 0x1) << 56;
   val |= uint64_t (m_heartbeatElapsedIndication & 0x7) << 57;
   val |= uint64_t (m_GrantAckSupported  & 0x1) << 60;
-  val |= uint64_t (m_RxssTxRateSupported & 0x1) << 61;
+  val |= uint64_t (m_rxssTxRateSupported & 0x1) << 61;
 
   return val;
 }
@@ -232,6 +287,160 @@ DmgCapabilities::GetDmgPcpApCapabilityInfo (void) const
   val |= (m_centralizedClustering & 0x1) << 14;
 
   return val;
+}
+
+void
+DmgCapabilities::SetDmgStaBeamTrackingTimeLimit (uint16_t limit)
+{
+  m_dmgStaBeamTrackingTimeLimit = limit;
+}
+
+void
+DmgCapabilities::SetMaximumExtendedScTxMcs (EXTENDED_MCS_NAME maximum)
+{
+  m_maximumExtendedScTxMcs = maximum;
+}
+
+void
+DmgCapabilities::SetCodeRate7_8_Tx (bool value)
+{
+  m_codeRate7_8_Tx = value;
+}
+
+void
+DmgCapabilities::SetMaximumExtendedScRxMcs (uint8_t maximum)
+{
+  m_maximumExtendedScRxMcs = maximum;
+}
+
+void
+DmgCapabilities::SetCodeRate7_8_Rx (bool value)
+{
+  m_codeRate7_8_Rx = value;
+}
+
+void
+DmgCapabilities::SetMaximumNumberOfBasicAMSDU (MAXIMUM_BASIC_AMSDU_NUMBER maximum)
+{
+  m_maximumNumberOfBasicAMSDU = maximum;
+}
+
+void
+DmgCapabilities::SetMaximumNumberOfShortAMSDU (MAXIMUM_SHORT_AMSDU_NUMBER maximum)
+{
+  m_maximumNumberOfShortAMSDU = maximum;
+}
+
+void
+DmgCapabilities::SetTDD_ChannelAccessSupported (bool supported)
+{
+  m_tddChannelAccessSupported = supported;
+}
+
+void
+DmgCapabilities::SetParameters_Across_RX_ChainsSupported (bool supported)
+{
+  m_parametersAcrossRXChainsSupported = supported;
+}
+
+void
+DmgCapabilities::SetPPDU_StatisticsSupported (bool supported)
+{
+  m_ppduStatisticsSupported = supported;
+}
+
+void
+DmgCapabilities::SetLDPC_StatisticsSupported (bool supported)
+{
+  m_ldpcStatisticsSupported = supported;
+}
+
+void
+DmgCapabilities::SetSC_OFDM_StatisticsSupported (bool supported)
+{
+  m_scOFDM_StatisticsSupported = supported;
+}
+
+void
+DmgCapabilities::SetTDD_SynchronizationMode (bool mode)
+{
+  m_tddSynchronizationMode = mode;
+}
+
+uint16_t
+DmgCapabilities::GetDmgStaBeamTrackingTimeLimit (void) const
+{
+  return m_dmgStaBeamTrackingTimeLimit;
+}
+
+EXTENDED_MCS_NAME
+DmgCapabilities::GetMaximumExtendedScTxMcs (void) const
+{
+  return m_maximumExtendedScTxMcs;
+}
+
+bool
+DmgCapabilities::GetCodeRate7_8_Tx (void) const
+{
+  return m_codeRate7_8_Tx;
+}
+
+uint8_t DmgCapabilities::GetMaximumExtendedScRxMcs (void) const
+{
+  return m_maximumExtendedScRxMcs;
+}
+
+bool DmgCapabilities::GetCodeRate7_8_Rx (void) const
+{
+  return m_codeRate7_8_Rx;
+}
+
+MAXIMUM_BASIC_AMSDU_NUMBER
+DmgCapabilities::GetMaximumNumberOfBasicAMSDU (void) const
+{
+  return m_maximumNumberOfBasicAMSDU;
+}
+
+MAXIMUM_SHORT_AMSDU_NUMBER
+DmgCapabilities::GetMaximumNumberOfShortAMSDU (void) const
+{
+  return m_maximumNumberOfShortAMSDU;
+}
+
+bool
+DmgCapabilities::GetTDD_ChannelAccessSupported (void) const
+{
+  return m_tddChannelAccessSupported;
+}
+
+bool
+DmgCapabilities::GetParameters_AcrossRXChainsSupported (void) const
+{
+  return m_parametersAcrossRXChainsSupported;
+}
+
+bool
+DmgCapabilities::GetPPDU_StatisticsSupported (void) const
+{
+  return m_ppduStatisticsSupported;
+}
+
+bool
+DmgCapabilities::GetLDPC_StatisticsSupported (void) const
+{
+  return m_ldpcStatisticsSupported;
+}
+
+bool
+DmgCapabilities::GetSC_OFDM_StatisticsSupported (void) const
+{
+  return m_scOFDM_StatisticsSupported;
+}
+
+bool
+DmgCapabilities::GetTDD_SynchronizationMode (void) const
+{
+  return m_tddSynchronizationMode;
 }
 
 void
@@ -279,10 +488,10 @@ DmgCapabilities::SetNumberOfSectors (uint8_t number)
 }
 
 void
-DmgCapabilities::SetRxssLength (uint8_t length)
+DmgCapabilities::SetRXSSLength (uint8_t length)
 {
-  NS_ASSERT ((0 <= length) && (length <= 63));
-  m_rxssLength = length;
+//  NS_ASSERT ((2 <= length) && (length <= 128));
+  m_rxssLength = (length/2)-1;
 }
 
 void
@@ -292,11 +501,11 @@ DmgCapabilities::SetDmgAntennaReciprocity (bool reciprocity)
 }
 
 void
-DmgCapabilities::SetAmpduParameters (uint8_t maximumLength, uint8_t minimumMpduSpacing)
+DmgCapabilities::SetAmpduParameters (uint8_t ampduExponent, uint8_t minimumMpduSpacing)
 {
-  NS_ASSERT ((0 <= maximumLength) && (maximumLength <= 5));
+  NS_ASSERT ((0 <= ampduExponent) && (ampduExponent <= 5));
   NS_ASSERT ((0 <= minimumMpduSpacing) && (minimumMpduSpacing <= 7));
-  m_ampduMaximumLength = maximumLength;
+  m_ampduExponent = ampduExponent;
   m_ampduMinimumSpacing = minimumMpduSpacing;
 }
 
@@ -363,7 +572,7 @@ DmgCapabilities::SetGrantAckSupported (bool value)
 void
 DmgCapabilities::SetRXSSTxRateSupported (bool value)
 {
-  m_RxssTxRateSupported = value;
+  m_rxssTxRateSupported = value;
 }
 
 bool
@@ -409,9 +618,9 @@ DmgCapabilities::GetNumberOfSectors (void) const
 }
 
 uint8_t
-DmgCapabilities::GetRxssLength (void) const
+DmgCapabilities::GetRXSSLength (void) const
 {
-  return m_rxssLength;
+  return (m_rxssLength + 1)*2;
 }
 
 bool
@@ -421,15 +630,21 @@ DmgCapabilities::GetDmgAntennaReciprocity (void) const
 }
 
 uint8_t
-DmgCapabilities::GetAmpduMaximumLength (void) const
+DmgCapabilities::GetAmpduExponent (void) const
 {
-  return m_ampduMaximumLength;
+  return m_ampduExponent;
 }
 
 uint8_t
 DmgCapabilities::GetAmpduMinimumSpacing (void) const
 {
   return m_ampduMinimumSpacing;
+}
+
+uint32_t
+DmgCapabilities::GetMaxAmpduLength (void) const
+{
+  return (1ul << (13 + m_ampduExponent)) - 1;
 }
 
 bool
@@ -519,7 +734,7 @@ DmgCapabilities::GetGrantAckSupported (void) const
 bool
 DmgCapabilities::GetRXSSTxRateSupported (void) const
 {
-  return m_RxssTxRateSupported;
+  return m_rxssTxRateSupported;
 }
 
 /* DMG PCP/AP Capability Info fields */
@@ -622,25 +837,25 @@ DmgCapabilities::GetCentralizedClustering (void) const
 ATTRIBUTE_HELPER_CPP (DmgCapabilities)
 
 std::ostream &
-operator << (std::ostream &os, const DmgCapabilities &DmgCapabilities)
+operator << (std::ostream &os, const DmgCapabilities &dmgCapabilities)
 {
-  os <<  DmgCapabilities.GetAID () << "|" <<
-         DmgCapabilities.GetDmgStaCapabilityInfo () << "|" <<
-         DmgCapabilities.GetDmgPcpApCapabilityInfo ();
+  os <<  dmgCapabilities.GetAID () << "|" <<
+         dmgCapabilities.GetDmgStaCapabilityInfo () << "|" <<
+         dmgCapabilities.GetDmgPcpApCapabilityInfo ();
   return os;
 }
 
 std::istream &
-operator >> (std::istream &is,DmgCapabilities &DmgCapabilities)
+operator >> (std::istream &is,DmgCapabilities &dmgCapabilities)
 {
   uint8_t c1;
   uint64_t c2;
   uint16_t c3;
   is >> c1 >> c2 >> c3;
 
-  DmgCapabilities.SetAID (c1);
-  DmgCapabilities.SetDmgStaCapabilityInfo (c2);
-  DmgCapabilities.SetDmgPcpApCapabilityInfo (c3);
+  dmgCapabilities.SetAID (c1);
+  dmgCapabilities.SetDmgStaCapabilityInfo (c2);
+  dmgCapabilities.SetDmgPcpApCapabilityInfo (c3);
 
   return is;
 }

@@ -16,12 +16,12 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
-#include "tcp-error-model.h"
 
 #include "ns3/node.h"
 #include "ns3/log.h"
 #include "ns3/tcp-westwood.h"
 #include "ns3/simple-channel.h"
+#include "ns3/rtt-estimator.h"
 #include "tcp-general-test.h"
 #include "tcp-error-model.h"
 

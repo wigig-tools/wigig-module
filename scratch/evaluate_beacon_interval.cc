@@ -42,7 +42,7 @@ Ptr<DmgApWifiMac> apWifiMac;
 Ptr<DmgStaWifiMac> staWifiMac;
 
 int
-main(int argc, char *argv[])
+main (int argc, char *argv[])
 {
   uint32_t beaconInterval = 102400;       /* The interval between two Target Beacon Transmission Times (TBTTs). */
   bool beaconRandomization = false;       /* Whether to change the sequence of DMG Beacons at each BI. */
@@ -100,9 +100,17 @@ main(int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
+  /* Set the correct error model */
+  wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
+                             "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
+  // The value correspond to DMG MCS-0.
+  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
+  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
+  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
+  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
+  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
+  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue ("DMG_MCS12"),
                                                                 "DataMode", StringValue ("DMG_MCS12"));

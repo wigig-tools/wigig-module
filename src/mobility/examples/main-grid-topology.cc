@@ -25,7 +25,7 @@ using namespace ns3;
 
 int main (int argc, char *argv[])
 {
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
 
   NodeContainer nodes;
@@ -34,7 +34,7 @@ int main (int argc, char *argv[])
   nodes.Create (120);
 
   MobilityHelper mobility;
-  // setup the grid itself: objects are layed out
+  // setup the grid itself: objects are laid out
   // started from (-100,-100) with 20 objects per row, 
   // the x interval between each object is 5 meters
   // and the y interval between each object is 20 meters

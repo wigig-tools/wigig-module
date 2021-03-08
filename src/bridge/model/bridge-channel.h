@@ -22,6 +22,12 @@
 #include "ns3/channel.h"
 #include <vector>
 
+/**
+ * \file
+ * \ingroup bridge
+ * ns3::BridgeChannel declaration.
+ */
+
 namespace ns3 {
 
 /**
@@ -51,8 +57,8 @@ public:
   void AddChannel (Ptr<Channel> bridgedChannel);
 
   // virtual methods implementation, from Channel
-  virtual uint32_t GetNDevices (void) const;
-  virtual Ptr<NetDevice> GetDevice (uint32_t i) const;
+  virtual std::size_t GetNDevices (void) const;
+  virtual Ptr<NetDevice> GetDevice (std::size_t i) const;
 
 private:
 

@@ -31,10 +31,12 @@
 #include "ns3/ipv6-header.h"
 #include "ns3/udp-header.h"
 #include "ns3/tcp-header.h"
+#include "ns3/ipv4-l3-protocol.h"
+#include "ns3/icmpv4-l4-protocol.h"
 #include "ns3/udp-l4-protocol.h"
 #include "ns3/tcp-l4-protocol.h"
+#include "ns3/ipv6-l3-protocol.h"
 #include "ns3/icmpv6-l4-protocol.h"
-#include "ns3/icmpv4-l4-protocol.h"
 
 namespace ns3 {
 
@@ -48,10 +50,9 @@ EpcTftClassifier::EpcTftClassifier ()
 void
 EpcTftClassifier::Add (Ptr<EpcTft> tft, uint32_t id)
 {
-  NS_LOG_FUNCTION (this << tft);
-  
-  m_tftMap[id] = tft;  
-  
+  NS_LOG_FUNCTION (this << tft << id);
+  m_tftMap[id] = tft;
+
   // simple sanity check: there shouldn't be more than 16 bearers (hence TFTs) per UE
   NS_ASSERT (m_tftMap.size () <= 16);
 }
@@ -63,17 +64,12 @@ EpcTftClassifier::Delete (uint32_t id)
   m_tftMap.erase (id);
 }
 
- 
 uint32_t 
-EpcTftClassifier::Classify (Ptr<Packet> p, EpcTft::Direction direction)
+EpcTftClassifier::Classify (Ptr<Packet> p, EpcTft::Direction direction, uint16_t protocolNumber)
 {
-  NS_LOG_FUNCTION (this << p << direction);
+  NS_LOG_FUNCTION (this << p << p->GetSize () << direction);
 
   Ptr<Packet> pCopy = p->Copy ();
-
-  uint8_t ipType;
-  pCopy->CopyData (&ipType, 1);
-  ipType = (ipType>>4) & 0x0f;
 
   Ipv4Address localAddressIpv4;
   Ipv4Address remoteAddressIpv4;
@@ -87,7 +83,7 @@ EpcTftClassifier::Classify (Ptr<Packet> p, EpcTft::Direction direction)
   uint16_t localPort = 0;
   uint16_t remotePort = 0;
 
-  if (ipType == 0x04)
+  if (protocolNumber == Ipv4L3Protocol::PROT_NUMBER)
     {
       Ipv4Header ipv4Header;
       pCopy->RemoveHeader (ipv4Header);
@@ -105,10 +101,105 @@ EpcTftClassifier::Classify (Ptr<Packet> p, EpcTft::Direction direction)
         }
       NS_LOG_INFO ("local address: " << localAddressIpv4 << " remote address: " << remoteAddressIpv4);
 
+      uint16_t payloadSize = ipv4Header.GetPayloadSize ();
+      uint16_t fragmentOffset = ipv4Header.GetFragmentOffset ();
+      bool isLastFragment = ipv4Header.IsLastFragment ();
+
+      // NS_LOG_DEBUG ("PayloadSize = " << payloadSize);
+      // NS_LOG_DEBUG ("fragmentOffset " << fragmentOffset << " isLastFragment " << isLastFragment);
+
       protocol = ipv4Header.GetProtocol ();
       tos = ipv4Header.GetTos ();
+
+      // Port info only can be get if it is the first fragment and
+      // there is enough data in the payload
+      // We keep the port info for fragmented packets,
+      // i.e. it is the first one but it is not the last one
+      if (fragmentOffset == 0)
+        {
+          if (protocol == UdpL4Protocol::PROT_NUMBER && payloadSize >= 8)
+            {
+              UdpHeader udpHeader;
+              pCopy->RemoveHeader (udpHeader);
+              if (direction ==  EpcTft::UPLINK)
+                {
+                  localPort = udpHeader.GetSourcePort ();
+                  remotePort = udpHeader.GetDestinationPort ();
+                }
+              else
+                {
+                  remotePort = udpHeader.GetSourcePort ();
+                  localPort = udpHeader.GetDestinationPort ();
+                }
+              if (!isLastFragment)
+                {
+                  std::tuple<uint32_t, uint32_t, uint8_t, uint16_t> fragmentKey =
+                      std::make_tuple (ipv4Header.GetSource ().Get (),
+                                       ipv4Header.GetDestination ().Get (),
+                                       protocol,
+                                       ipv4Header.GetIdentification ());
+
+                  m_classifiedIpv4Fragments[fragmentKey] = std::make_pair (localPort, remotePort);
+                }
+            }
+          else if (protocol == TcpL4Protocol::PROT_NUMBER && payloadSize >= 20)
+            {
+              TcpHeader tcpHeader;
+              pCopy->RemoveHeader (tcpHeader);
+              if (direction ==  EpcTft::UPLINK)
+                {
+                  localPort = tcpHeader.GetSourcePort ();
+                  remotePort = tcpHeader.GetDestinationPort ();
+                }
+              else
+                {
+                  remotePort = tcpHeader.GetSourcePort ();
+                  localPort = tcpHeader.GetDestinationPort ();
+                }
+
+              if (!isLastFragment)
+                {
+                  std::tuple<uint32_t, uint32_t, uint8_t, uint16_t> fragmentKey =
+                      std::make_tuple (ipv4Header.GetSource ().Get (),
+                                       ipv4Header.GetDestination ().Get (),
+                                       protocol,
+                                       ipv4Header.GetIdentification ());
+
+                  m_classifiedIpv4Fragments[fragmentKey] = std::make_pair (localPort, remotePort);
+                }
+            }
+
+          // else
+          //   First fragment but not enough data for port info or not UDP/TCP protocol.
+          //   Nothing can be done, i.e. we cannot get port info from packet.
+        }
+      else
+        {
+          // Not first fragment, so port info is not available but
+          // port info should already be known (if there is not fragment reordering)
+          std::tuple<uint32_t, uint32_t, uint8_t, uint16_t> fragmentKey =
+              std::make_tuple (ipv4Header.GetSource ().Get (),
+                               ipv4Header.GetDestination ().Get (),
+                               protocol,
+                               ipv4Header.GetIdentification ());
+
+          std::map< std::tuple<uint32_t, uint32_t, uint8_t, uint16_t>,
+                    std::pair<uint32_t, uint32_t> >::iterator it =
+              m_classifiedIpv4Fragments.find (fragmentKey);
+
+          if (it != m_classifiedIpv4Fragments.end ())
+            {
+              localPort = it->second.first;
+              remotePort = it->second.second;
+
+              if (isLastFragment)
+                {
+                  m_classifiedIpv4Fragments.erase (fragmentKey);
+                }
+            }
+        }
     }
-  else if (ipType == 0x06)
+  else if (protocolNumber == Ipv6L3Protocol::PROT_NUMBER)
     {
       Ipv6Header ipv6Header;
       pCopy->RemoveHeader (ipv6Header);
@@ -128,55 +219,46 @@ EpcTftClassifier::Classify (Ptr<Packet> p, EpcTft::Direction direction)
 
       protocol = ipv6Header.GetNextHeader ();
       tos = ipv6Header.GetTrafficClass ();
+
+      if (protocol == UdpL4Protocol::PROT_NUMBER)
+        {
+          UdpHeader udpHeader;
+          pCopy->RemoveHeader (udpHeader);
+
+          if (direction ==  EpcTft::UPLINK)
+            {
+              localPort = udpHeader.GetSourcePort ();
+              remotePort = udpHeader.GetDestinationPort ();
+            }
+          else
+            {
+              remotePort = udpHeader.GetSourcePort ();
+              localPort = udpHeader.GetDestinationPort ();
+            }
+        }
+      else if (protocol == TcpL4Protocol::PROT_NUMBER)
+        {
+          TcpHeader tcpHeader;
+          pCopy->RemoveHeader (tcpHeader);
+          if (direction ==  EpcTft::UPLINK)
+            {
+              localPort = tcpHeader.GetSourcePort ();
+              remotePort = tcpHeader.GetDestinationPort ();
+            }
+          else
+            {
+              remotePort = tcpHeader.GetSourcePort ();
+              localPort = tcpHeader.GetDestinationPort ();
+            }
+        }
     }
   else
     {
       NS_ABORT_MSG ("EpcTftClassifier::Classify - Unknown IP type...");
     }
 
-  if (protocol == UdpL4Protocol::PROT_NUMBER)
-    {
-      UdpHeader udpHeader;
-      pCopy->RemoveHeader (udpHeader);
 
-      if (direction ==  EpcTft::UPLINK)
-        {
-          localPort = udpHeader.GetSourcePort ();
-          remotePort = udpHeader.GetDestinationPort ();
-        }
-      else
-        {
-          remotePort = udpHeader.GetSourcePort ();
-          localPort = udpHeader.GetDestinationPort ();
-        }
-    }
-  else if (protocol == TcpL4Protocol::PROT_NUMBER)
-    {
-      TcpHeader tcpHeader;
-      pCopy->RemoveHeader (tcpHeader);
-      if (direction ==  EpcTft::UPLINK)
-        {
-          localPort = tcpHeader.GetSourcePort ();
-          remotePort = tcpHeader.GetDestinationPort ();
-        }
-      else
-        {
-          remotePort = tcpHeader.GetSourcePort ();
-          localPort = tcpHeader.GetDestinationPort ();
-        }
-    }
-  else if (protocol == Icmpv6L4Protocol::PROT_NUMBER || protocol == Icmpv4L4Protocol::PROT_NUMBER)
-    {
-      remotePort = 0;
-      localPort = 0;
-    }
-  else
-    {
-      NS_LOG_INFO ("Unknown protocol: " << protocol);
-      return 0;  // no match
-    }
-
-  if (ipType == 0x04)
+  if (protocolNumber == Ipv4L3Protocol::PROT_NUMBER)
     {
       NS_LOG_INFO ("Classifying packet:"
           << " localAddr="  << localAddressIpv4
@@ -203,7 +285,7 @@ EpcTftClassifier::Classify (Ptr<Packet> p, EpcTft::Direction direction)
             }
         }
     }
-  else if (ipType == 0x06)
+  else if (protocolNumber == Ipv6L3Protocol::PROT_NUMBER)
     {
       NS_LOG_INFO ("Classifying packet:"
           << " localAddr="  << localAddressIpv6

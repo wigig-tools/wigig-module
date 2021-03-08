@@ -203,17 +203,18 @@ GetRandomStream (std::string filename)
 int main (int argc, char *argv[])
 {
 
-  bool schedCal  = false;
-  bool schedHeap = false;
-  bool schedList = false;
-  bool schedMap  = true;
+  bool schedCal           = false;
+  bool schedHeap          = false;
+  bool schedList          = false;
+  bool schedMap           = true;
+  bool schedPriorityQueue = false;
 
   uint32_t pop   =  100000;
   uint32_t total = 1000000;
   uint32_t runs  =       1;
   std::string filename = "";
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Usage ("Benchmark the simulator scheduler.\n"
              "\n"
              "Event intervals are taken from one of:\n"
@@ -226,6 +227,7 @@ int main (int argc, char *argv[])
   cmd.AddValue ("heap",  "use HeapScheduler",             schedHeap);
   cmd.AddValue ("list",  "use ListSheduler",              schedList);
   cmd.AddValue ("map",   "use MapScheduler (default)",    schedMap);
+  cmd.AddValue ("pri",   "use PriorityQueue",             schedPriorityQueue);
   cmd.AddValue ("debug", "enable debugging output",       g_debug);
   cmd.AddValue ("pop",   "event population size (default 1E5)",         pop);
   cmd.AddValue ("total", "total number of events to run (default 1E6)", total);
@@ -249,6 +251,11 @@ int main (int argc, char *argv[])
     {
       factory.SetTypeId ("ns3::ListScheduler");
     }
+  if (schedPriorityQueue)
+    {
+      factory.SetTypeId ("ns3::PriorityQueueScheduler");
+    }
+      
   Simulator::SetScheduler (factory);
 
   LOGME (std::setprecision (g_fwidth - 6));

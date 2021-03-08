@@ -51,7 +51,7 @@
 //     So for Linux systems, make sure to configure:
 //     # echo 1 > /proc/sys/net/ipv4/ip_forward
 //
-//     Also enable natting so the ICMP replys from the remote host can reach 
+//     Also enable natting so the ICMP replies from the remote host can reach 
 //     back the TAP. 
 //     - TAP-network-address is the same as 'tapNetwork'
 //     - TAP-network-mask is the same as 'tapMask'
@@ -103,7 +103,7 @@ main (int argc, char *argv[])
   // Allow the user to override any of the defaults at run-time, via
   // command-line arguments
   //
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("deviceName", "Device name", deviceName);
   cmd.AddValue ("remote", "Remote IP address (dotted decimal only please)", remote);
   cmd.AddValue ("tapNetwork", "Network address to assign the TAP device IP address (dotted decimal only please)", network);

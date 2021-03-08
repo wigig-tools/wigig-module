@@ -10,7 +10,7 @@
 #include "ns3/boolean.h"
 #include "ns3/double.h"
 
-#include "dcf-manager.h"
+#include "channel-access-manager.h"
 #include "dmg-capabilities.h"
 #include "dmg-adhoc-wifi-mac.h"
 #include "ext-headers.h"
@@ -38,7 +38,6 @@ DmgAdhocWifiMac::GetTypeId (void)
 DmgAdhocWifiMac::DmgAdhocWifiMac ()
 {
   NS_LOG_FUNCTION (this);
-  // Let the lower layers know that we are acting as a non-AP DMG STA in an infrastructure BSS.
   SetTypeOfStation (DMG_ADHOC);
 }
 
@@ -51,7 +50,12 @@ void
 DmgAdhocWifiMac::DoInitialize (void)
 {
   NS_LOG_FUNCTION (this);
-  DmgWifiMac::DoInitialize ();
+  for (EdcaQueues::const_iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+    {
+      i->second->SetAllocationType (CBAP_ALLOCATION);
+    }
+  /* Initialize Codebook */
+  m_codebook->Initialize ();
 }
 
 void
@@ -72,56 +76,45 @@ void
 DmgAdhocWifiMac::SetAddress (Mac48Address address)
 {
   NS_LOG_FUNCTION (this << address);
-  //In an IBSS, the BSSID is supposed to be generated per Section
-  //11.1.3 of IEEE 802.11. We don't currently do this - instead we
-  //make an IBSS STA a bit like an AP, with the BSSID for frames
-  //transmitted by each STA set to that STA's address.
-  //
-  //This is why we're overriding this method.
   RegularWifiMac::SetAddress (address);
   RegularWifiMac::SetBssid (address);
 }
 
 void
-DmgAdhocWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to)
+DmgAdhocWifiMac::Enqueue (Ptr<Packet> packet, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << to);
   if (m_stationManager->IsBrandNew (to))
     {
-      //In ad hoc mode, we assume that every destination supports all
-      //the rates we support.
       m_stationManager->AddAllSupportedMcs (to);
       m_stationManager->AddStationDmgCapabilities (to, GetDmgCapabilities ());
-      m_stationManager->AddAllSupportedModes (to);
       m_stationManager->RecordDisassociated (to);
+      if (m_isEdmgSupported)
+        {
+          m_stationManager->AddStationEdmgCapabilities (to, GetEdmgCapabilities ());
+        }
     }
 
   WifiMacHeader hdr;
 
-  // If we are not a QoS AP then we definitely want to use AC_BE to
-  // transmit the packet. A TID of zero will map to AC_BE (through \c
-  // QosUtilsMapTidToAc()), so we use that as our default here.
+  //If we are not a QoS STA then we definitely want to use AC_BE to
+  //transmit the packet. A TID of zero will map to AC_BE (through \c
+  //QosUtilsMapTidToAc()), so we use that as our default here.
   uint8_t tid = 0;
-
-  // For now, an AP that supports QoS does not support non-QoS
-  // associations, and vice versa. In future the AP model should
-  // support simultaneously associated QoS and non-QoS STAs, at which
-  // point there will need to be per-association QoS state maintained
-  // by the association state machine, and consulted here.
-
-  /* The QoS Data and QoS Null subtypes are the only Data subtypes transmitted by a DMG STA. */
+  hdr.SetAsDmgPpdu ();
   hdr.SetType (WIFI_MAC_QOSDATA);
   hdr.SetQosAckPolicy (WifiMacHeader::NORMAL_ACK);
   hdr.SetQosNoEosp ();
   hdr.SetQosNoAmsdu ();
-  // Transmission of multiple frames in the same TXOP is not
-  // supported for now.
+  //Transmission of multiple frames in the same TXOP is not
+  //supported for now
   hdr.SetQosTxopLimit (0);
-  // Fill in the QoS control field in the MAC header
+
+  //Fill in the QoS control field in the MAC header
   tid = QosUtilsGetTidForPacket (packet);
-  // Any value greater than 7 is invalid and likely indicates that
-  // the packet had no QoS tag, so we revert to zero, which'll
-  // mean that AC_BE is used.
+  //Any value greater than 7 is invalid and likely indicates that
+  //the packet had no QoS tag, so we revert to zero, which will
+  //mean that AC_BE is used.
   if (tid > 7)
     {
       tid = 0;
@@ -134,9 +127,6 @@ DmgAdhocWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to)
    * subfield of the Frame Control field, as specified in 8.2.4.1.10.*/
   hdr.SetNoOrder ();
 
-  // Sanity check that the TID is valid
-  NS_ASSERT (tid < 8);
-
   /* We are in DMG Ad-Hoc Mode (Experimental Mode) */
   hdr.SetAddr1 (to);
   hdr.SetAddr2 (m_low->GetAddress ());
@@ -148,39 +138,57 @@ DmgAdhocWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to)
 }
 
 void
+DmgAdhocWifiMac::SetLinkUpCallback (Callback<void> linkUp)
+{
+  NS_LOG_FUNCTION (this << &linkUp);
+  RegularWifiMac::SetLinkUpCallback (linkUp);
+
+  //The approach taken here is that, from the point of view of a STA
+  //in IBSS mode, the link is always up, so we immediately invoke the
+  //callback if one is set
+  linkUp ();
+}
+
+void
 DmgAdhocWifiMac::StartBeaconInterval (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 void
 DmgAdhocWifiMac::EndBeaconInterval (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 void
 DmgAdhocWifiMac::StartBeaconTransmissionInterval (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 void
 DmgAdhocWifiMac::StartAssociationBeamformTraining (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 void
 DmgAdhocWifiMac::StartAnnouncementTransmissionInterval (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 void
 DmgAdhocWifiMac::StartDataTransmissionInterval (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 void
@@ -202,12 +210,14 @@ void
 DmgAdhocWifiMac::BrpSetupCompleted (Mac48Address address)
 {
   NS_LOG_FUNCTION (this << address);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 void
 DmgAdhocWifiMac::NotifyBrpPhaseCompleted (void)
 {
   NS_LOG_FUNCTION (this);
+  NS_FATAL_ERROR ("This method should not be called in DmgAdhocWifiMac class");
 }
 
 Ptr<MultiBandElement>
@@ -230,45 +240,59 @@ DmgAdhocWifiMac::AddAntennaConfig (SectorID txSectorID, AntennaID txAntennaID,
                                    SectorID rxSectorID, AntennaID rxAntennaID,
                                    Mac48Address address)
 {
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (txSectorID, txAntennaID);
-  ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (rxSectorID, rxAntennaID);
-  m_bestAntennaConfig[address] = std::make_pair (antennaConfigTx, antennaConfigRx);
+  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (txAntennaID, txSectorID);
+  ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (rxAntennaID, rxSectorID);
+  m_bestAntennaConfig[address] = std::make_tuple (antennaConfigTx, antennaConfigRx, 0.0);
+  m_codebook->SetReceivingInDirectionalMode ();
 }
 
 void
-DmgAdhocWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
+DmgAdhocWifiMac::AddAntennaConfig (SectorID txSectorID, AntennaID txAntennaID,
+                                   Mac48Address address)
 {
-  NS_LOG_FUNCTION (this << packet << hdr);
+  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (txAntennaID, txSectorID);
+  ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (NO_ANTENNA_CONFIG, NO_ANTENNA_CONFIG);
+  m_bestAntennaConfig[address] = std::make_tuple (antennaConfigTx, antennaConfigRx, 0.0);
+  m_codebook->SetReceivingInQuasiOmniMode ();
+}
+
+void
+DmgAdhocWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
+{
+  NS_LOG_FUNCTION (this << *mpdu);
+
+  const WifiMacHeader* hdr = &mpdu->GetHeader ();
   NS_ASSERT (!hdr->IsCtl ());
   Mac48Address from = hdr->GetAddr2 ();
   Mac48Address to = hdr->GetAddr1 ();
+
   if (m_stationManager->IsBrandNew (to))
     {
       //In ad hoc mode, we assume that every destination supports all
       //the rates we support.
       m_stationManager->AddAllSupportedMcs (to);
       m_stationManager->AddStationDmgCapabilities (to, GetDmgCapabilities ());
-      m_stationManager->AddAllSupportedModes (to);
       m_stationManager->RecordDisassociated (to);
+      if (m_isEdmgSupported)
+        {
+          m_stationManager->AddStationEdmgCapabilities (to, GetEdmgCapabilities ());
+        }
     }
   if (hdr->IsData ())
     {
-      if (hdr->IsData ())
+      if (hdr->IsQosData () && hdr->IsQosAmsdu ())
         {
-          if (hdr->IsQosData () && hdr->IsQosAmsdu ())
-            {
-              NS_LOG_DEBUG ("Received A-MSDU from" << from);
-              DeaggregateAmsduAndForward (packet, hdr);
-            }
-          else
-            {
-              ForwardUp (packet, from, to);
-            }
-          return;
+          NS_LOG_DEBUG ("Received A-MSDU from" << from);
+          DeaggregateAmsduAndForward (mpdu);
         }
+      else
+        {
+          ForwardUp (mpdu->GetPacket ()->Copy (), from, to);
+        }
+      return;
     }
 
-  DmgWifiMac::Receive (packet, hdr);
+  DmgWifiMac::Receive (mpdu);
 }
 
 Ptr<DmgCapabilities>

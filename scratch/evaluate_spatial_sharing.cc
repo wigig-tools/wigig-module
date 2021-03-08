@@ -29,7 +29,7 @@
  *
  * Simulation: Description:
  * Once all the stations have assoicated successfully with the PCP/AP. The PCP/AP allocates two SPs
- * to perform TxSS between all the stations. Once West DMG STA has completed TxSS phase with East and
+ * to perform TXSS between all the stations. Once West DMG STA has completed TXSS phase with East and
  * South DMG STAs. The PCP/AP will allocate two static service periods at the time (Spatial Sharing)
  * for communication as following:
  *
@@ -105,15 +105,14 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address)
 }
 
 void
-SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, SlsCompletionAttrbitutes attributes)
 {
-  if (accessPeriod == CHANNEL_ACCESS_DTI)
+  if (attributes.accessPeriod == CHANNEL_ACCESS_DTI)
     {
-      std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-      std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
-                << ", AntennaID=" << uint32_t (antennaId) << std::endl;
+      std::cout << "DMG STA " << staWifiMac->GetAddress ()
+                << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
+      std::cout << "The best antenna configuration is AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
       if ((westWifiMac->GetAddress () == staWifiMac->GetAddress ()) || (southWifiMac->GetAddress () == staWifiMac->GetAddress ()))
         {
           stationsTrained++;
@@ -194,10 +193,17 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("RxNoiseFigure", DoubleValue (3));
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
+  /* Set the correct error model */
+  wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
+                             "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
+  // The value correspond to DMG MCS-0.
+  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
+  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
+  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
+  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
+  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
+  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));

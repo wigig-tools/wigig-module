@@ -43,19 +43,17 @@
  *  parameters.
  */
 
-
+#include <iostream>
+#include <sstream>
+#include <fstream>
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
-#include "ns3/wifi-module.h"
 #include "ns3/mesh-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/mesh-helper.h"
-
-#include <iostream>
-#include <sstream>
-#include <fstream>
+#include "ns3/yans-wifi-helper.h"
 
 using namespace ns3;
 
@@ -133,7 +131,7 @@ MeshTest::MeshTest () :
 void
 MeshTest::Configure (int argc, char *argv[])
 {
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("x-size", "Number of nodes in a row grid", m_xSize);
   cmd.AddValue ("y-size", "Number of rows in a grid", m_ySize);
   cmd.AddValue ("step",   "Size of edge in our grid (meters)", m_step);

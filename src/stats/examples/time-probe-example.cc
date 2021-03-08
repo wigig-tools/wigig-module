@@ -81,7 +81,7 @@ Emitter::GetTypeId (void)
     .AddTraceSource ("Interval",
                      "Trace source",
                      MakeTraceSourceAccessor (&Emitter::m_interval),
-                     "ns3::Time::TracedValueCallback")
+                     "ns3::TracedValueCallback::Time")
   ;
   return tid;
 }
@@ -143,7 +143,7 @@ int main (int argc, char *argv[])
   double stopTime = 100.0;
   bool verbose = false;
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("stopTime", "Time (seconds) to terminate simulation", stopTime);
   cmd.AddValue ("verbose", "Whether to enable verbose output", verbose);
   cmd.Parse (argc, argv);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -14,7 +14,7 @@
 
 /**
  * Simulation Objective:
- * This script is used to evaluate allocation of Beamforming Service Periods in IEEE 802.11ad.
+ * Evaluate contention-based TXSS SLS beamforming training in the DTI channel access period.
  *
  * Network Topology:
  * The scenario consists of 2 DMG STAs (West + East) and one PCP/AP as following:
@@ -26,11 +26,11 @@
  *
  * Simulation Description:
  * Once all the stations have assoicated successfully with the PCP/AP, the PCP/AP allocates three SPs
- * to perform Beamforming Training (TxSS) as following:
+ * to perform Beamforming Training (TXSS) as following:
  *
  * Running the Simulation:
  * To run the script with the default parameters:
- * ./waf --run "evaluate_beamforming_cbap
+ * ./waf --run "evaluate_beamforming_cbap"
  *
  * Simulation Output:
  * The simulation generates the following traces:
@@ -68,15 +68,6 @@ uint8_t stationsTrained = 0;              /* Number of BF trained stations */
 /*** Beamforming Service Periods ***/
 uint8_t beamformedLinks = 0;              /* Number of beamformed links */
 
-double
-CalculateSingleStreamThroughput (Ptr<PacketSink> sink, uint64_t &lastTotalRx, double &averageThroughput)
-{
-  double thr = (sink->GetTotalRx() - lastTotalRx) * (double) 8/1e5;     /* Convert Application RX Packets to MBits. */
-  lastTotalRx = sink->GetTotalRx ();
-  averageThroughput += thr;
-  return thr;
-}
-
 void
 CalculateThroughput (void)
 {
@@ -91,32 +82,33 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t
 {
   std::cout << "DMG STA " << staWifiMac->GetAddress () << " associated with DMG AP " << address << std::endl;
   std::cout << "Association ID (AID) = " << aid << std::endl;
-  staWifiMac->InitiateTxssCbap (apWifiMac->GetAddress ());
+  staWifiMac->Perform_TXSS_TXOP (apWifiMac->GetAddress ());
 }
 
 void
-SLSCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> wifiMac, SlsCompletionAttrbitutes attributes)
 {
-  if (accessPeriod == CHANNEL_ACCESS_BHI)
+  if (attributes.accessPeriod == CHANNEL_ACCESS_BHI)
     {
       if (wifiMac == apWifiMac)
         {
-          std::cout << "DMG AP " << apWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
+          std::cout << "DMG AP " << apWifiMac->GetAddress () <<
+                       " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
         }
       else
         {
-          std::cout << "DMG STA " << wifiMac->GetAddress () << " completed SLS phase with DMG AP " << address << std::endl;
+          std::cout << "DMG STA " << wifiMac->GetAddress ()
+                    << " completed SLS phase with DMG AP " << attributes.peerStation << std::endl;
         }
-      std::cout << "Best Tx Antenna Configuration: SectorID=" << uint (sectorId) << ", AntennaID=" << uint (antennaId) << std::endl;
+      std::cout << "Best Tx Antenna Configuration: AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
     }
-  else if (accessPeriod == CHANNEL_ACCESS_DTI)
+  else if (attributes.accessPeriod == CHANNEL_ACCESS_DTI)
     {
       beamformedLinks++;
-      std::cout << "DMG STA " << wifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-      std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
-                << ", AntennaID=" << uint32_t (antennaId) << std::endl;
+      std::cout << "DMG STA " << wifiMac->GetAddress () << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
+      std::cout << "The best antenna configuration is AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
       if (beamformedLinks == 2)
         {
           apWifiMac->PrintSnrTable ();
@@ -142,25 +134,13 @@ main (int argc, char *argv[])
   string tcpVariant = "NewReno";                /* TCP Variant Type. */
   uint32_t bufferSize = 131072;                 /* TCP Send/Receive Buffer Size. */
   uint32_t maxPackets = 0;                      /* Maximum Number of Packets */
-  uint32_t msduAggregationSize = 0;             /* The maximum aggregation size for A-MSDU in Bytes. */
-  uint32_t mpduAggregationSize = 3000;         /* The maximum aggregation size for A-MSPU in Bytes. */
-  uint32_t queueSize = 1000;                    /* Wifi MAC Queue Size. */
+  string msduAggSize = "0";                     /* The maximum aggregation size for A-MSDU in Bytes. */
+  string mpduAggSize = "3000";                  /* The maximum aggregation size for A-MSPU in Bytes. */
+  string queueSize = "4000p";                   /* Wifi MAC Queue Size. */
   string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
   bool verbose = false;                         /* Print Logging Information. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
   bool pcapTracing = false;                     /* PCAP Tracing is enabled or not. */
-  std::map<std::string, std::string> tcpVariants; /* List of the tcp Variants */
-
-  /** TCP Variants **/
-  tcpVariants.insert (std::make_pair ("NewReno",       "ns3::TcpNewReno"));
-  tcpVariants.insert (std::make_pair ("Hybla",         "ns3::TcpHybla"));
-  tcpVariants.insert (std::make_pair ("HighSpeed",     "ns3::TcpHighSpeed"));
-  tcpVariants.insert (std::make_pair ("Vegas",         "ns3::TcpVegas"));
-  tcpVariants.insert (std::make_pair ("Scalable",      "ns3::TcpScalable"));
-  tcpVariants.insert (std::make_pair ("Veno",          "ns3::TcpVeno"));
-  tcpVariants.insert (std::make_pair ("Bic",           "ns3::TcpBic"));
-  tcpVariants.insert (std::make_pair ("Westwood",      "ns3::TcpWestwood"));
-  tcpVariants.insert (std::make_pair ("WestwoodPlus",  "ns3::TcpWestwoodPlus"));
 
   /* Command line argument parser setup. */
   CommandLine cmd;
@@ -169,42 +149,25 @@ main (int argc, char *argv[])
   cmd.AddValue ("packetSize", "Application packet size in bytes", packetSize);
   cmd.AddValue ("dataRate", "Application data rate", dataRate);
   cmd.AddValue ("maxPackets", "Maximum number of packets to send", maxPackets);
-  cmd.AddValue ("tcpVariant", "Transport protocol to use: TcpTahoe, TcpReno, TcpNewReno, TcpWestwood, TcpWestwoodPlus", tcpVariant);
+  cmd.AddValue ("tcpVariant", TCP_VARIANTS_NAMES, tcpVariant);
   cmd.AddValue ("socketType", "Type of the Socket (ns3::TcpSocketFactory, ns3::UdpSocketFactory)", socketType);
   cmd.AddValue ("bufferSize", "TCP Buffer Size (Send/Receive) in Bytes", bufferSize);
-  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
-  cmd.AddValue ("mpduAggregation", "The maximum aggregation size for A-MPDU in Bytes", mpduAggregationSize);
+  cmd.AddValue ("msduAggSize", "The maximum aggregation size for A-MSDU in Bytes", msduAggSize);
+  cmd.AddValue ("mpduAggSize", "The maximum aggregation size for A-MPDU in Bytes", mpduAggSize);
   cmd.AddValue ("verbose", "Turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
   cmd.Parse (argc, argv);
 
-  /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
-  Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::QueueBase::MaxPackets", UintegerValue (queueSize));
+  /* Validate A-MSDU and A-MPDU values */
+  ValidateFrameAggregationAttributes (msduAggSize, mpduAggSize);
+  /* Configure RTS/CTS and Fragmentation */
+  ConfigureRtsCtsAndFragmenatation ();
+  /* Wifi MAC Queue Parameters */
+  ChangeQueueSize (queueSize);
 
   /*** Configure TCP Options ***/
-  /* Select TCP variant */
-  std::map<std::string, std::string>::const_iterator iter = tcpVariants.find (tcpVariant);
-  NS_ASSERT_MSG (iter != tcpVariants.end (), "Cannot find Tcp Variant");
-  TypeId tid = TypeId::LookupByName (iter->second);
-  Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (tid));
-  if (tcpVariant.compare ("Westwood") == 0)
-    {
-      Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOOD));
-      Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
-    }
-  else if (tcpVariant.compare ("WestwoodPlus") == 0)
-    {
-      Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOODPLUS));
-      Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
-    }
-
-  /* Configure TCP Segment Size */
-  Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (packetSize));
-  Config::SetDefault ("ns3::TcpSocket::SndBufSize", UintegerValue (bufferSize));
-  Config::SetDefault ("ns3::TcpSocket::RcvBufSize", UintegerValue (bufferSize));
+  ConfigureTcpOptions (tcpVariant, packetSize, bufferSize);
 
   /**** DmgWifiHelper is a meta-helper ****/
   DmgWifiHelper wifi;
@@ -236,9 +199,6 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));
 
@@ -255,11 +215,10 @@ main (int argc, char *argv[])
   Ssid ssid = Ssid ("BeamformingCBAP");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue(ssid),
-                   "BE_MaxAmpduSize", UintegerValue (mpduAggregationSize),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
-                   "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "ATIPresent", BooleanValue (false));
+                   "BeaconInterval", TimeValue (MicroSeconds (102400)));
 
   /* Set Analytical Codebook for the DMG Devices */
   wifi.SetCodebook ("ns3::CodebookAnalytical",
@@ -273,8 +232,8 @@ main (int argc, char *argv[])
   /* Install DMG STA Nodes */
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "BE_MaxAmpduSize", UintegerValue (mpduAggregationSize),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize));
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize));
 
   staDevices = wifi.Install (wifiPhy, wifiMac, staNode);
 
@@ -319,7 +278,7 @@ main (int argc, char *argv[])
       if (applicationType == "onoff")
         {
           OnOffHelper src (socketType, dest);
-          src.SetAttribute ("MaxBytes", UintegerValue (maxPackets));
+          src.SetAttribute ("MaxPackets", UintegerValue (maxPackets));
           src.SetAttribute ("PacketSize", UintegerValue (packetSize));
           src.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1e6]"));
           src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
@@ -374,30 +333,30 @@ main (int argc, char *argv[])
       Simulator::Schedule (Seconds (2.1), &CalculateThroughput);
     }
 
-  /* Schedule many TxSS CBAP during data transmission. */
-  Simulator::Schedule (Seconds (2.1), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (2.3), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (2.5), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (2.7), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (2.9), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (3.1), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (3.6), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (4.2), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (4.7), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (4.8), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (5.0), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (5.0), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (5.2), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (5.5), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (5.7), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (6.0), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (6.32), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (6.567), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (7.123), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (8.0), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (8.1), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (8.5), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
-  Simulator::Schedule (Seconds (8.5), &DmgWifiMac::InitiateTxssCbap, staWifiMac, apWifiMac->GetAddress ());
+  /* Schedule many TXSS CBAPs during the data transmission interval. */
+  Simulator::Schedule (Seconds (2.1), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (2.3), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (2.5), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (2.7), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (2.9), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (3.1), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (3.6), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (4.2), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (4.7), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (4.8), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (5.0), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (5.0), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (5.2), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (5.5), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (5.7), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (6.0), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (6.32), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (6.567), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (7.123), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (8.0), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (8.1), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (8.5), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
+  Simulator::Schedule (Seconds (8.5), &DmgWifiMac::Perform_TXSS_TXOP, staWifiMac, apWifiMac->GetAddress ());
 
   Simulator::Stop (Seconds (simulationTime + 0.101));
   Simulator::Run ();
@@ -405,24 +364,10 @@ main (int argc, char *argv[])
 
   if (activateApp)
     {
-      /* Print per flow statistics */
-      monitor->CheckForLostPackets ();
-      Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
-      FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
-      for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
-        {
-          Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-          std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")" << std::endl;;
-          std::cout << "  Tx Packets: " << i->second.txPackets << std::endl;
-          std::cout << "  Tx Bytes:   " << i->second.txBytes << std::endl;
-          std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
-          std::cout << "  Rx Packets: " << i->second.rxPackets << std::endl;;
-          std::cout << "  Rx Bytes:   " << i->second.rxBytes << std::endl;
-          std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / ((simulationTime - 1) * 1e6)  << " Mbps" << std::endl;;
-        }
+      PrintFlowMonitorStatistics (flowmon, monitor, simulationTime - 1);
 
       /* Print Application Layer Results Summary */
-      std::cout << "\nApplication Layer Statistics:" << std::endl;;
+      std::cout << "\nApplication Layer Statistics:" << std::endl;
       if (applicationType == "onoff")
         {
           std::cout << "  Tx Packets: " << onoff->GetTotalTxPackets () << std::endl;

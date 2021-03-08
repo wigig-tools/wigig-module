@@ -21,8 +21,9 @@
 #ifndef WIFI_PHY_TAG_H
 #define WIFI_PHY_TAG_H
 
-#include <ns3/tag.h>
-#include "wifi-phy.h"
+#include "ns3/tag.h"
+#include "wifi-preamble.h"
+#include "wifi-mode.h"
 
 namespace ns3 {
 
@@ -48,25 +49,25 @@ public:
   WifiPhyTag ();
   /**
    * Constructor
-   * \param txVector the WifiTxVector
-   * \param mpdutype the mpduType
+   * \param preamble the preamble type
+   * \param modulation the modulation
    * \param frameComplete the frameComplete
    */
-  WifiPhyTag (WifiTxVector txVector, MpduType mpdutype, uint8_t frameComplete);
+  WifiPhyTag (WifiPreamble preamble, WifiModulationClass modulation, uint8_t frameComplete);
   /**
-   * Getter for WifiTxVector parameter
-   * \return the WifiTxVector
+   * Getter for preamble parameter
+   * \return the preamble type
    */
-  WifiTxVector GetWifiTxVector (void) const;
+  WifiPreamble GetPreambleType (void) const;
   /**
-   * Getter for mpduType parameter
-   * \return mpduType the mpduType
+   * Getter for modulation parameter
+   * \return the modulation
    */
-  MpduType GetMpduType (void) const;
-    /**
-     * Getter for frameComplete parameter
-     * \return the frameComplete parameter, i.e. 0 if the frame is not complete, 1 otherwise.
-     */
+  WifiModulationClass GetModulation (void) const;
+  /**
+   * Getter for frameComplete parameter
+   * \return the frameComplete parameter, i.e. 0 if the frame is not complete, 1 otherwise.
+   */
   uint8_t GetFrameComplete (void) const;
 
   // From class Tag
@@ -77,9 +78,9 @@ public:
 
 
 private:
-  WifiTxVector m_wifiTxVector; ///< wifi transmit vector
-  MpduType m_mpduType; ///< MPDU type
-  uint8_t m_frameComplete; ///< Used to indicate that TX stopped sending before the end of the frame
+  WifiPreamble m_preamble;          ///< preamble type
+  WifiModulationClass m_modulation; ///< modulation used for transmission
+  uint8_t m_frameComplete;          ///< Used to indicate that TX stopped sending before the end of the frame
 };
 
 } // namespace ns3

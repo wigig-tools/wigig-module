@@ -10,7 +10,7 @@
 #include "ns3/log.h"
 #include "ns3/multi-band-net-device.h"
 #include "ns3/wifi-remote-station-manager.h"
-
+#include "ns3/mobility-model.h"
 #include "multi-band-wifi-helper.h"
 
 namespace ns3 {
@@ -38,7 +38,7 @@ MultiBandWifiHelper::Install (const WifiTechnologyHelperList list, NodeContainer
       for (WifiTechnologyHelperList::const_iterator j = list.begin (); j != list.end (); ++j)
         {
           /* Create MAC and PHY from helper classes */
-          Ptr<WifiMac> mac = j->MacHelper->Create ();
+          Ptr<WifiMac> mac = j->MacHelper->Create (device);
           Ptr<WifiPhy> phy = j->PhyHelper->Create (node, device);
           Ptr<WifiRemoteStationManager> stationManager = j->RemoteStationManagerFactory.Create<WifiRemoteStationManager> ();
           /* Configure MAC Address (Common for all (MACs)) */

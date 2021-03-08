@@ -39,9 +39,9 @@ Figure :ref:`fig-clear-channel-80211b`.
 
    Clear channel (AWGN) error model for 802.11b
 
-Validation results for the 802.11 OFDM error model are available in this
+Validation results for the 802.11a/g OFDM error model are available in this
 `technical report <https://www.nsnam.org/~pei/80211ofdm.pdf>`__.  The curves
-can be reproduced by running the ``ofdm-validation.cc`` example program
+can be reproduced by running the ``wifi-ofdm-validation.cc`` example program
 in the ``examples/wireless`` directory, and the figure is reproduced below
 in Figure :ref:`fig-nist-frame-success-rate`.
 
@@ -50,11 +50,41 @@ in Figure :ref:`fig-nist-frame-success-rate`.
 .. figure:: figures/nist-frame-success-rate.*
    :align: center
 
-   Frame error rate (NIST model) for OFDM Wi-Fi
+   Frame error rate (NIST model) for 802.11a/g (OFDM) Wi-Fi
+
+Similar curves for 802.11n/ac/ax can be obtained by running the ``wifi-ofdm-ht-validation.cc``,
+``wifi-ofdm-vht-validation.cc`` and ``wifi-ofdm-he-validation.cc`` example programs
+in the ``examples/wireless`` directory, and the figures are reproduced below
+in Figure :ref:`fig-nist-frame-success-rate-n`, Figure :ref:`fig-nist-frame-success-rate-ac`
+and Figure :ref:`fig-nist-frame-success-rate-ax`, respectively.
+There is no validation for those curves yet.
+
+.. _fig-nist-frame-success-rate-n:
+
+.. figure:: figures/nist-frame-success-rate-n.*
+   :align: center
+
+   Frame error rate (NIST model) for 802.11n (HT OFDM) Wi-Fi
+
+.. _fig-nist-frame-success-rate-ac:
+
+.. figure:: figures/nist-frame-success-rate-ac.*
+   :align: center
+
+   Frame error rate (NIST model) for 802.11ac (VHT OFDM) Wi-Fi
+
+.. _fig-nist-frame-success-rate-ax:
+
+.. figure:: figures/nist-frame-success-rate-ax.*
+   :align: center
+
+   Frame error rate (NIST model) for 802.11ax (HE OFDM) Wi-Fi
 
 MAC validation
 **************
-Validation of the MAC layer has been performed in [baldo2010]_.
+Validation of the 802.11 DCF MAC layer has been performed in [baldo2010]_.
+
+802.11 PCF operation has been verified by running 'wifi-pcf' example with PCAP files generation enabled, and observing the frame exchange using Wireshark.
 
 SpectrumWiFiPhy
 ***************
@@ -91,16 +121,16 @@ intervals):
 
   wifiType: ns3::SpectrumWifiPhy distance: 1m
   index   MCS   width Rate (Mb/s) Tput (Mb/s) Received 
-    0     0      20       6.5     5.96219    5063
-    1     1      20        13     11.9491   10147
-    2     2      20      19.5     17.9172   15215
-    3     3      20        26     23.9241   20316
-    4     4      20        39     35.9427   30522
-    5     5      20        52     47.9283   40700
-    6     6      20      58.5     53.7445   45639
-    7     7      20        65     59.4629   50495
-   ...
-   63    15      40       300     240.884  204555
+      0     0      20       6.5     5.81381    4937
+      1     1      20        13     11.8266   10043
+      2     2      20      19.5     17.7935   15110
+      3     3      20        26     23.7958   20207
+      4     4      20        39     35.7331   30344
+      5     5      20        52     47.6174   40436
+      6     6      20      58.5     53.6102   45525
+      7     7      20        65     59.5501   50569
+    ...
+     63    15      40       300     254.902  216459
 
 
 The above output shows the first 8 (of 32) modes, and last mode, that will be
@@ -117,13 +147,11 @@ When run with the legacy YansWifiPhy, as in ``./waf --run "wifi-spectrum-saturat
 
   wifiType: ns3::YansWifiPhy distance: 1m
   index   MCS   width Rate (Mb/s) Tput (Mb/s) Received 
-      0     0      20       6.5     5.96219    5063
-      1     1      20        13     11.9491   10147
-      2     2      20      19.5     17.9172   15215
-      3     3      20        26     23.9241   20316
-      4     4      20        39     35.9427   30522
-      5     5      20        52     47.9283   40700
-      6     6      20      58.5     53.7445   45639
+      0     0      20       6.5     5.81381    4937
+      1     1      20        13     11.8266   10043
+      2     2      20      19.5     17.7935   15110
+      3     3      20        26     23.7958   20207
+    ...
 
 This is to be expected since YansWifiPhy and SpectrumWifiPhy use the 
 same error rate model in this case.
@@ -134,25 +162,25 @@ Packet error rate performance
 The program ``examples/wireless/wifi-spectrum-per-example.cc`` allows users
 to select either `SpectrumWifiPhy` or `YansWifiPhy`, as above, and select
 the distance between the nodes, and to log the reception statistics and
-received SNR (as observed by the MonitorRx trace source), using a
+received SNR (as observed by the WifiPhy::MonitorSnifferRx trace source), using a
 Friis propagation loss model.  The transmit power is lowered from the default
 of 40 mW (16 dBm) to 1 dBm to lower the baseline SNR; the distance between
 the nodes can be changed to further change the SNR.  By default, it steps 
 through the same index values as in the saturation example (0 through 31) 
-for a 50m distance, producing output such as:
+for a 50m distance, for 10 seconds of simulation time, producing output such as:
 
 ::
 
-  wifiType: ns3::SpectrumWifiPhy distance: 50m; sent: 1000 TxPower: 1 dBm (1.3 mW)
-  index   MCS Rate (Mb/s) Tput (Mb/s) Received Signal (dBm) Noise (dBm)  SNR (dB)
-      0     0       6.5      0.7776    1000    -77.6633    -100.966     23.3027
-      1     1        13      0.7776    1000    -77.6633    -100.966     23.3027
-      2     2      19.5      0.7776    1000    -77.6633    -100.966     23.3027
-      3     3        26      0.7776    1000    -77.6633    -100.966     23.3027
-      4     4        39      0.7776    1000    -77.6633    -100.966     23.3027
-      5     5        52           0       0         N/A         N/A         N/A
-      6     6      58.5           0       0         N/A         N/A         N/A
-      7     7        65           0       0         N/A         N/A         N/A
+  wifiType: ns3::SpectrumWifiPhy distance: 50m; time: 10; TxPower: 1 dBm (1.3 mW)
+  index   MCS  Rate (Mb/s) Tput (Mb/s) Received Signal (dBm) Noise (dBm) SNR (dB)
+      0     0      6.50        5.77    7414      -79.71      -93.97       14.25
+      1     1     13.00       11.58   14892      -79.71      -93.97       14.25
+      2     2     19.50       17.39   22358      -79.71      -93.97       14.25
+      3     3     26.00       22.96   29521      -79.71      -93.97       14.25
+      4     4     39.00        0.00       0         N/A         N/A         N/A
+      5     5     52.00        0.00       0         N/A         N/A         N/A
+      6     6     58.50        0.00       0         N/A         N/A         N/A
+      7     7     65.00        0.00       0         N/A         N/A         N/A
   
 As in the above saturation example, running this program with YansWifiPhy
 will yield identical output.
@@ -178,15 +206,16 @@ Some sample output with default arguments (no interference) is:
 
   ./waf --run "wifi-spectrum-per-interference"
 
-  wifiType: ns3::SpectrumWifiPhy distance: 50m; sent: 1000 TxPower: 16 dBm (40 mW)
-  index   MCS Rate (Mb/s) Tput (Mb/s) Received Signal (dBm)Noi+Inf(dBm)  SNR (dB)
-      0     0       6.5      0.7776    1000    -62.6427    -100.966     38.3233
-      1     1        13      0.7776    1000    -62.6427    -100.966     38.3233
-      2     2      19.5      0.7776    1000    -62.6427    -100.966     38.3233
-      3     3        26      0.7776    1000    -62.6427    -100.966     38.3233
-      4     4        39      0.7776    1000    -62.6427    -100.966     38.3233
-      5     5        52      0.7776    1000    -62.6427    -100.966     38.3233
-      6     6      58.5      0.7776    1000    -62.6427    -100.966     38.3233
+  wifiType: ns3::SpectrumWifiPhy distance: 50m; time: 10; TxPower: 16 dBm (40 mW)
+  index   MCS  Rate (Mb/s) Tput (Mb/s) Received Signal (dBm)Noi+Inf(dBm) SNR (dB)
+      0     0      6.50        5.77    7414      -64.69      -93.97       29.27
+      1     1     13.00       11.58   14892      -64.69      -93.97       29.27
+      2     2     19.50       17.39   22358      -64.69      -93.97       29.27
+      3     3     26.00       23.23   29875      -64.69      -93.97       29.27
+      4     4     39.00       34.90   44877      -64.69      -93.97       29.27
+      5     5     52.00       46.51   59813      -64.69      -93.97       29.27
+      6     6     58.50       52.39   67374      -64.69      -93.97       29.27
+      7     7     65.00       58.18   74819      -64.69      -93.97       29.27
     ...
 
 while a small amount of waveform power will cause frame losses to occur at
@@ -198,13 +227,14 @@ higher order modulations, due to lower SNR:
 
   wifiType: ns3::SpectrumWifiPhy distance: 50m; sent: 1000 TxPower: 16 dBm (40 mW)
   index   MCS Rate (Mb/s) Tput (Mb/s) Received Signal (dBm)Noi+Inf(dBm)  SNR (dB)
-      0     0       6.5      0.7776    1000    -62.6427    -86.1031     23.4604
-      1     1        13      0.7776    1000    -62.6427    -86.1031     23.4604
-      2     2      19.5      0.7776    1000    -62.6427    -86.1032     23.4605
-      3     3        26      0.7776    1000    -62.6427    -86.1031     23.4604
-      4     4        39      0.7776    1000    -62.6427    -86.1032     23.4605
-      5     5        52           0       0         N/A         N/A         N/A
-      6     6      58.5           0       0         N/A         N/A         N/A
+      0     0      6.50        5.77    7414      -64.69      -80.08       15.38
+      1     1     13.00       11.58   14892      -64.69      -80.08       15.38
+      2     2     19.50       17.39   22358      -64.69      -80.08       15.38
+      3     3     26.00       23.23   29873      -64.69      -80.08       15.38
+      4     4     39.00        0.41     531      -64.69      -80.08       15.38
+      5     5     52.00        0.00       0         N/A         N/A         N/A
+      6     6     58.50        0.00       0         N/A         N/A         N/A
+      7     7     65.00        0.00       0         N/A         N/A         N/A
     ...
 
 If ns3::YansWifiPhy is selected as the wifiType, the waveform generator will
@@ -215,3 +245,49 @@ The interference signal as received by the sending node is typically below
 the default -62 dBm CCA Mode 1 threshold in this example.  If it raises
 above, the sending node will suppress all transmissions.
 
+Bianchi validation
+******************
+
+The program ``src/wifi/examples/wifi-bianchi.cc`` allows user to
+compare ns-3 simulation results against the Bianchi model
+presented in [bianchi2000]_ and [bianchi2005]_.
+
+The MATLAB code used to generate the Bianchi model,
+as well as the generated outputs, are provided in
+the folder ``src/wifi/examples/reference``.
+User can regenerate Bianchi results by running
+``generate_bianchi.m`` in MATLAB.
+
+By default, the program ``src/wifi/examples/wifi-bianchi.cc``
+simulates an 802.11a adhoc ring scenario, with a PHY rate set to 
+54 Mbit/s, and loop from 5 stations to 50 stations, by a step of 
+5 stations. It generates a plt file, which allows user to quickly
+generate an eps file using gnuplot and vizualize the graph.
+
+::
+
+  ./waf --run "wifi-bianchi"
+
+.. _fig-wifi-bianchi-11a-54-adhoc:
+
+.. figure:: figures/wifi-11a-p-1500-adhoc-r-54-min-5-max-50-step-5-throughput.*
+   :align: center
+
+   Bianchi throughput validation results for 802.11a 54 Mbps in adhoc configuration
+
+The user has the possibility to select the standard (only
+11a, 11b or 11g currently supported), to select the PHY rate (in Mbit/s),
+as well as to choose between an adhoc or an infrastructure configuration.
+
+When run for 802.11g 6 Mbit/s in infrastucture mode, the output is:
+
+::
+
+  ./waf --run "wifi-bianchi --standard=11g --phyRate=6 --duration=500 --infra"
+
+.. _fig-wifi-bianchi-11g-6-infra:
+
+.. figure:: figures/wifi-11g-p-1500-infrastructure-r-6-min-5-max-50-step-5-throughput.*
+   :align: center
+
+   Bianchi throughput validation results for 802.11g 6 Mbps in infrastructure configuration

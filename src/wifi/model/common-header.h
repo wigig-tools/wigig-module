@@ -26,7 +26,7 @@ public:
    * \param id The ID of the Wifi Information Element.
    * \return
    */
-  Ptr<WifiInformationElement> GetInformationElement (WifiInformationElementId id);
+  Ptr<WifiInformationElement> GetInformationElement (WifiInfoElementId id);
   /**
    * Get List of Information Element associated with this frame.
    * \return

@@ -90,7 +90,7 @@ int main (int argc, char *argv[])
   uint32_t    nLeaf = 0; // If non-zero, number of both left and right
   std::string animFile = "dynamic_linknode.xml" ;  // Name of file for animation output
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("nLeftLeaf", "Number of left side leaf nodes", nLeftLeaf);
   cmd.AddValue ("nRightLeaf","Number of right side leaf nodes", nRightLeaf);
   cmd.AddValue ("nLeaf",     "Number of left and right side leaf nodes", nLeaf);
@@ -151,7 +151,7 @@ int main (int argc, char *argv[])
   pAnim = new AnimationInterface (animFile);
   Simulator::Schedule (Seconds (1), modify);
   
-  // Set up the acutal simulation
+  // Set up the actual simulation
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
   Simulator::Run ();

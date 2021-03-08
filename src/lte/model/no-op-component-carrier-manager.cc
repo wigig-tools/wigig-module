@@ -99,28 +99,28 @@ NoOpComponentCarrierManager::DoReportBufferStatus (LteMacSapProvider::ReportBuff
 }
 
 void
-NoOpComponentCarrierManager::DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId, uint8_t componentCarrierId, uint16_t rnti, uint8_t lcid)
+NoOpComponentCarrierManager::DoNotifyTxOpportunity (LteMacSapUser::TxOpportunityParameters txOpParams)
 {
   NS_LOG_FUNCTION (this);
-  std::map <uint16_t, std::map<uint8_t, LteMacSapUser*> >::iterator rntiIt = m_ueAttached.find (rnti);
-  NS_ASSERT_MSG (rntiIt != m_ueAttached.end (), "could not find RNTI" << rnti);
-  std::map<uint8_t, LteMacSapUser*>::iterator lcidIt = rntiIt->second.find (lcid);
-  NS_ASSERT_MSG (lcidIt != rntiIt->second.end (), "could not find LCID " << (uint16_t) lcid);
-  NS_LOG_DEBUG (this << " rnti= " << rnti << " lcid= " << (uint32_t) lcid << " layer= " << (uint32_t)layer<<" ccId="<< (uint32_t)componentCarrierId);
-  (*lcidIt).second->NotifyTxOpportunity (bytes, layer, harqId, componentCarrierId, rnti, lcid);
+  std::map <uint16_t, std::map<uint8_t, LteMacSapUser*> >::iterator rntiIt = m_ueAttached.find (txOpParams.rnti);
+  NS_ASSERT_MSG (rntiIt != m_ueAttached.end (), "could not find RNTI" << txOpParams.rnti);
+  std::map<uint8_t, LteMacSapUser*>::iterator lcidIt = rntiIt->second.find (txOpParams.lcid);
+  NS_ASSERT_MSG (lcidIt != rntiIt->second.end (), "could not find LCID " << (uint16_t) txOpParams.lcid);
+  NS_LOG_DEBUG (this << " rnti= " << txOpParams.rnti << " lcid= " << (uint32_t) txOpParams.lcid << " layer= " << (uint32_t)txOpParams.layer<<" ccId="<< (uint32_t)txOpParams.componentCarrierId);
+  (*lcidIt).second->NotifyTxOpportunity (txOpParams);
 
 }
 
 void
-NoOpComponentCarrierManager::DoReceivePdu (Ptr<Packet> p, uint16_t rnti, uint8_t lcid)
+NoOpComponentCarrierManager::DoReceivePdu (LteMacSapUser::ReceivePduParameters rxPduParams)
 {
   NS_LOG_FUNCTION (this);
-  std::map <uint16_t, std::map<uint8_t, LteMacSapUser*> >::iterator rntiIt = m_ueAttached.find (rnti);
-  NS_ASSERT_MSG (rntiIt != m_ueAttached.end (), "could not find RNTI" << rnti);
-  std::map<uint8_t, LteMacSapUser*>::iterator lcidIt = rntiIt->second.find (lcid);
+  std::map <uint16_t, std::map<uint8_t, LteMacSapUser*> >::iterator rntiIt = m_ueAttached.find (rxPduParams.rnti);
+  NS_ASSERT_MSG (rntiIt != m_ueAttached.end (), "could not find RNTI" << rxPduParams.rnti);
+  std::map<uint8_t, LteMacSapUser*>::iterator lcidIt = rntiIt->second.find (rxPduParams.lcid);
   if (lcidIt != rntiIt->second.end ())
     {
-      (*lcidIt).second->ReceivePdu (p, rnti, lcid);
+      (*lcidIt).second->ReceivePdu (rxPduParams);
     }
 }
 
@@ -210,6 +210,18 @@ NoOpComponentCarrierManager::DoRemoveUe (uint16_t rnti)
   NS_ASSERT_MSG (stateIt != m_ueState.end (), "request to remove UE info with unknown rnti ");
   NS_ASSERT_MSG (eccIt != m_enabledComponentCarrier.end (), "request to remove UE info with unknown rnti ");
 
+  //std::map <uint16_t, std::map<uint8_t, LteEnbCmacSapProvider::LcInfo> >::iterator lcsIt;
+  auto rlcLcIt = m_rlcLcInstantiated.find (rnti);
+  NS_ASSERT_MSG (rlcLcIt != m_rlcLcInstantiated.end (), "request to Release Data Radio Bearer on UE without Logical Channels enabled");
+
+  auto rntiIt = m_ueAttached.find (rnti);
+
+  NS_ASSERT_MSG (rntiIt != m_ueAttached.end (), "request to Release Data Radio Bearer on unattached UE");
+
+  m_ueState.erase (rnti);
+  m_enabledComponentCarrier.erase (rnti);
+  m_rlcLcInstantiated.erase (rnti);
+  m_ueAttached.erase (rnti);
 }
 
 std::vector<LteCcmRrcSapProvider::LcsConfig>
@@ -411,6 +423,18 @@ NoOpComponentCarrierManager::DoUlReceiveMacCe (MacCeListElement_s bsr, uint8_t c
     }
 }
 
+void
+NoOpComponentCarrierManager::DoUlReceiveSr (uint16_t rnti, uint8_t componentCarrierId)
+{
+  NS_LOG_FUNCTION (this);
+
+  auto sapIt = m_ccmMacSapProviderMap.find (componentCarrierId);
+  NS_ABORT_MSG_IF (sapIt == m_ccmMacSapProviderMap.end (),
+                   "Sap not found in the CcmMacSapProviderMap");
+
+  sapIt->second->ReportSrToScheduler (rnti);
+}
+
 
 //////////////////////////////////////////
 
@@ -512,6 +536,23 @@ RrComponentCarrierManager::DoUlReceiveMacCe (MacCeListElement_s bsr, uint8_t com
     {
       auto ueManager = m_ccmRrcSapUser->GetUeManager (bsr.m_rnti);
       m_ccmMacSapProviderMap.at (ueManager->GetComponentCarrierId ())->ReportMacCeToScheduler (bsr);
+    }
+}
+
+void
+RrComponentCarrierManager::DoUlReceiveSr(uint16_t rnti, uint8_t componentCarrierId)
+{
+  NS_LOG_FUNCTION (this);
+  NS_UNUSED (componentCarrierId);
+  // split traffic in uplink equally among carriers
+  uint32_t numberOfCarriersForUe = m_enabledComponentCarrier.find (rnti)->second;
+
+  m_ccmMacSapProviderMap.find (m_lastCcIdForSr)->second->ReportSrToScheduler (rnti);
+
+  m_lastCcIdForSr++;
+  if (m_lastCcIdForSr > numberOfCarriersForUe - 1)
+    {
+      m_lastCcIdForSr = 0;
     }
 }
 

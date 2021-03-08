@@ -1,6 +1,7 @@
 /* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
 /*
  * Copyright (c) 2011, 2012 Centre Tecnologic de Telecomunicacions de Catalunya (CTTC)
+ * Copyright (c) 2018 Fraunhofer ESK : RLF extensions
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -20,6 +21,7 @@
  * Modified by:
  *          Danilo Abrignani <danilo.abrignani@unibo.it> (Carrier Aggregation - GSoC 2015)
  *          Biljana Bojovic <biljana.bojovic@cttc.es> (Carrier Aggregation)
+ *          Vignesh Babu <ns3-dev@esk.fraunhofer.de> (RLF extensions)
  */
 
 #include "lte-ue-rrc.h"
@@ -146,6 +148,11 @@ LteUeRrc::LteUeRrc ()
     m_hasReceivedSib1 (false),
     m_hasReceivedSib2 (false),
     m_csgWhiteList (0),
+    m_noOfSyncIndications (0),
+    m_leaveConnectedMode (false),
+    m_previousCellId (0),
+    m_connEstFailCountLimit (0),
+    m_connEstFailCount (0),
     m_numberOfComponentCarriers (MIN_NO_CC)
 {
   NS_LOG_FUNCTION (this);
@@ -217,10 +224,30 @@ LteUeRrc::GetTypeId (void)
                    MakeUintegerChecker<uint16_t> ())
     .AddAttribute ("T300",
                    "Timer for the RRC Connection Establishment procedure "
-                   "(i.e., the procedure is deemed as failed if it takes longer than this)",
-                   TimeValue (MilliSeconds (100)),
+                   "(i.e., the procedure is deemed as failed if it takes longer than this). "
+                   "Standard values: 100ms, 200ms, 300ms, 400ms, 600ms, 1000ms, 1500ms, 2000ms",
+                   TimeValue (MilliSeconds (100)), //see 3GPP 36.331 UE-TimersAndConstants & RLF-TimersAndConstants
                    MakeTimeAccessor (&LteUeRrc::m_t300),
-                   MakeTimeChecker ())
+                   MakeTimeChecker (MilliSeconds (100), MilliSeconds (2000)))
+    .AddAttribute ("T310",
+                   "Timer for detecting the Radio link failure "
+                   "(i.e., the radio link is deemed as failed if this timer expires). "
+                   "Standard values: 0ms 50ms, 100ms, 200ms, 500ms, 1000ms, 2000ms",
+                   TimeValue (MilliSeconds (1000)), //see 3GPP 36.331 UE-TimersAndConstants & RLF-TimersAndConstants
+                   MakeTimeAccessor (&LteUeRrc::m_t310),
+                   MakeTimeChecker (MilliSeconds (0), MilliSeconds (2000)))
+    .AddAttribute ("N310",
+                   "This specifies the maximum number of out-of-sync indications. "
+                   "Standard values: 1, 2, 3, 4, 6, 8, 10, 20",
+                   UintegerValue (6), //see 3GPP 36.331 UE-TimersAndConstants & RLF-TimersAndConstants
+                   MakeUintegerAccessor (&LteUeRrc::m_n310),
+                   MakeUintegerChecker<uint8_t> (1, 20))
+    .AddAttribute ("N311",
+                   "This specifies the maximum number of in-sync indications. "
+                   "Standard values: 1, 2, 3, 4, 5, 6, 8, 10",
+                   UintegerValue (2), //see 3GPP 36.331 UE-TimersAndConstants & RLF-TimersAndConstants
+                   MakeUintegerAccessor (&LteUeRrc::m_n311),
+                   MakeUintegerChecker<uint8_t> (1, 10))
     .AddTraceSource ("MibReceived",
                      "trace fired upon reception of Master Information Block",
                      MakeTraceSourceAccessor (&LteUeRrc::m_mibReceivedTrace),
@@ -260,7 +287,7 @@ LteUeRrc::GetTypeId (void)
     .AddTraceSource ("ConnectionTimeout",
                      "trace fired upon timeout RRC connection establishment because of T300",
                      MakeTraceSourceAccessor (&LteUeRrc::m_connectionTimeoutTrace),
-                     "ns3::LteUeRrc::ImsiCidRntiTracedCallback")
+                     "ns3::LteUeRrc::ImsiCidRntiCountTracedCallback")
     .AddTraceSource ("ConnectionReconfiguration",
                      "trace fired upon RRC connection reconfiguration",
                      MakeTraceSourceAccessor (&LteUeRrc::m_connectionReconfigurationTrace),
@@ -277,6 +304,26 @@ LteUeRrc::GetTypeId (void)
                      "trace fired upon failure of a handover procedure",
                      MakeTraceSourceAccessor (&LteUeRrc::m_handoverEndErrorTrace),
                      "ns3::LteUeRrc::ImsiCidRntiTracedCallback")
+    .AddTraceSource ("SCarrierConfigured",
+                     "trace fired after configuring secondary carriers",
+                     MakeTraceSourceAccessor (&LteUeRrc::m_sCarrierConfiguredTrace),
+                     "ns3::LteUeRrc::SCarrierConfiguredTracedCallback")
+    .AddTraceSource ("Srb1Created",
+                     "trace fired after SRB1 is created",
+                     MakeTraceSourceAccessor (&LteUeRrc::m_srb1CreatedTrace),
+                     "ns3::LteUeRrc::ImsiCidRntiTracedCallback")
+    .AddTraceSource ("DrbCreated",
+                     "trace fired after DRB is created",
+                     MakeTraceSourceAccessor (&LteUeRrc::m_drbCreatedTrace),
+                     "ns3::LteUeRrc::ImsiCidRntiLcIdTracedCallback")
+   .AddTraceSource ("RadioLinkFailure",
+                    "trace fired upon failure of radio link",
+                    MakeTraceSourceAccessor (&LteUeRrc::m_radioLinkFailureTrace),
+                    "ns3::LteUeRrc::ImsiCidRntiTracedCallback")
+   .AddTraceSource ("PhySyncDetection",
+                    "trace fired upon receiving in Sync or out of Sync indications from UE PHY",
+                    MakeTraceSourceAccessor (&LteUeRrc::m_phySyncDetectionTrace),
+                    "ns3::LteUeRrc::PhySyncDetectionTracedCallback")
   ;
   return tid;
 }
@@ -390,6 +437,20 @@ LteUeRrc::SetImsi (uint64_t imsi)
 {
   NS_LOG_FUNCTION (this << imsi);
   m_imsi = imsi;
+
+  //Communicate the IMSI to MACs and PHYs for all the component carriers
+  for (uint16_t i = 0; i < m_numberOfComponentCarriers; i++)
+    {
+      m_cmacSapProvider.at(i)->SetImsi (m_imsi);
+      m_cphySapProvider.at(i)->SetImsi (m_imsi);
+    }
+}
+
+void
+LteUeRrc::StorePreviousCellId (uint16_t cellId)
+{
+  NS_LOG_FUNCTION (this << cellId);
+  m_previousCellId = cellId;
 }
 
 uint64_t
@@ -447,6 +508,13 @@ LteUeRrc::GetState (void) const
   return m_state;
 }
 
+uint16_t
+LteUeRrc::GetPreviousCellId () const
+{
+  NS_LOG_FUNCTION (this);
+  return m_previousCellId;
+}
+
 void
 LteUeRrc::SetUseRlcSm (bool val) 
 {
@@ -482,7 +550,8 @@ LteUeRrc::DoInitialize (void)
   lcConfig.prioritizedBitRateKbps = 65535; // maximum
   lcConfig.bucketSizeDurationMs = 65535; // maximum
   lcConfig.logicalChannelGroup = 0; // all SRBs mapped to LCG 0
-  m_cmacSapProvider.at(0)->AddLc (lcid, lcConfig, rlc->GetLteMacSapUser ());
+  LteMacSapUser* msu = m_ccmRrcSapProvider->ConfigureSignalBearer(lcid, lcConfig, rlc->GetLteMacSapUser ());
+  m_cmacSapProvider.at (0)->AddLc (lcid, lcConfig, msu);
 }
 
 void
@@ -490,9 +559,9 @@ LteUeRrc::InitializeSap (void)
 {
   if (m_numberOfComponentCarriers < MIN_NO_CC || m_numberOfComponentCarriers > MAX_NO_CC)
     {
-      // this check is neede in order to maintain backward compatibility with scripts and tests
+      // this check is needed in order to maintain backward compatibility with scripts and tests
       // if case lte-helper is not used (like in several tests) the m_numberOfComponentCarriers
-      // is not set and then an error is rised
+      // is not set and then an error is raised
       // In this case m_numberOfComponentCarriers is set to 1
       m_numberOfComponentCarriers = MIN_NO_CC;
     }
@@ -624,6 +693,7 @@ LteUeRrc::DoNotifyRandomAccessSuccessful ()
           }
 
         SwitchToState (CONNECTED_NORMALLY);
+        m_cmacSapProvider.at (0)->NotifyConnectionSuccessful (); //RA successful during handover
         m_handoverEndOkTrace (m_imsi, m_cellId, m_rnti);
       }
       break;
@@ -928,6 +998,11 @@ LteUeRrc::DoRecvSystemInformation (LteRrcSap::SystemInformation msg)
           rc.numberOfRaPreambles = msg.sib2.radioResourceConfigCommon.rachConfigCommon.preambleInfo.numberOfRaPreambles;
           rc.preambleTransMax = msg.sib2.radioResourceConfigCommon.rachConfigCommon.raSupervisionInfo.preambleTransMax;
           rc.raResponseWindowSize = msg.sib2.radioResourceConfigCommon.rachConfigCommon.raSupervisionInfo.raResponseWindowSize;
+          rc.connEstFailCount = msg.sib2.radioResourceConfigCommon.rachConfigCommon.txFailParam.connEstFailCount;
+          m_connEstFailCountLimit = rc.connEstFailCount;
+          NS_ASSERT_MSG (m_connEstFailCountLimit > 0 && m_connEstFailCountLimit < 5,
+                         "SIB2 msg contains wrong value "
+                         << m_connEstFailCountLimit << "of connEstFailCount");
           m_cmacSapProvider.at (0)->ConfigureRach (rc);
           m_cphySapProvider.at (0)->ConfigureUplink (m_ulEarfcn, m_ulBandwidth);
           m_cphySapProvider.at (0)->ConfigureReferenceSignalPower (msg.sib2.radioResourceConfigCommon.pdschConfigCommon.referenceSignalPower);
@@ -956,13 +1031,18 @@ LteUeRrc::DoRecvRrcConnectionSetup (LteRrcSap::RrcConnectionSetup msg)
     case IDLE_CONNECTING:
       {
         ApplyRadioResourceConfigDedicated (msg.radioResourceConfigDedicated);
+        m_connEstFailCount = 0;
         m_connectionTimeout.Cancel ();
         SwitchToState (CONNECTED_NORMALLY);
+        m_leaveConnectedMode = false;
         LteRrcSap::RrcConnectionSetupCompleted msg2;
         msg2.rrcTransactionIdentifier = msg.rrcTransactionIdentifier;
         m_rrcSapUser->SendRrcConnectionSetupCompleted (msg2);
         m_asSapUser->NotifyConnectionSuccessful ();
+        m_cmacSapProvider.at (0)->NotifyConnectionSuccessful ();
         m_connectionEstablishedTrace (m_imsi, m_cellId, m_rnti);
+        NS_ABORT_MSG_IF (m_noOfSyncIndications > 0, "Sync indications should be zero "
+                         "when a new RRC connection is established. Current value = " << (uint16_t) m_noOfSyncIndications);
       }
       break;
 
@@ -976,7 +1056,7 @@ void
 LteUeRrc::DoRecvRrcConnectionReconfiguration (LteRrcSap::RrcConnectionReconfiguration msg)
 {
   NS_LOG_FUNCTION (this << " RNTI " << m_rnti);
-  NS_LOG_INFO ("DoRecvRrcConnectionReconfiguration haveNonCriticalExtension:" << msg.haveNonCriticalExtension );
+  NS_LOG_INFO ("DoRecvRrcConnectionReconfiguration haveNonCriticalExtension:" << msg.haveNonCriticalExtension);
   switch (m_state)
     {
     case CONNECTED_NORMALLY:
@@ -986,8 +1066,14 @@ LteUeRrc::DoRecvRrcConnectionReconfiguration (LteRrcSap::RrcConnectionReconfigur
           SwitchToState (CONNECTED_HANDOVER);
           const LteRrcSap::MobilityControlInfo& mci = msg.mobilityControlInfo;
           m_handoverStartTrace (m_imsi, m_cellId, m_rnti, mci.targetPhysCellId);
-          m_cmacSapProvider.at(0)->Reset ();
-          m_cphySapProvider.at(0)->Reset ();
+          //We should reset the MACs and PHYs for all the component carriers
+          for (uint16_t i = 0; i < m_numberOfComponentCarriers; i++)
+            {
+              m_cmacSapProvider.at(i)->Reset ();
+              m_cphySapProvider.at(i)->Reset ();
+            }
+          m_ccmRrcSapProvider->Reset();
+          StorePreviousCellId (m_cellId);
           m_cellId = mci.targetPhysCellId;
           NS_ASSERT (mci.haveCarrierFreq);
           NS_ASSERT (mci.haveCarrierBandwidth);
@@ -1012,6 +1098,11 @@ LteUeRrc::DoRecvRrcConnectionReconfiguration (LteRrcSap::RrcConnectionReconfigur
 
           m_drbMap.clear (); // dispose all DRBs
           ApplyRadioResourceConfigDedicated (msg.radioResourceConfigDedicated);
+          if (msg.haveNonCriticalExtension)
+            {
+              NS_LOG_DEBUG (this << "RNTI " << m_rnti << " Handover. Configuring secondary carriers");
+              ApplyRadioResourceConfigDedicatedSecondaryCarrier (msg.nonCriticalExtension);
+            }
 
           if (msg.haveMeasConfig)
             {
@@ -1026,7 +1117,7 @@ LteUeRrc::DoRecvRrcConnectionReconfiguration (LteRrcSap::RrcConnectionReconfigur
           if (msg.haveNonCriticalExtension)
             {
               ApplyRadioResourceConfigDedicatedSecondaryCarrier (msg.nonCriticalExtension);
-              NS_LOG_FUNCTION ( this << "RNTI " << m_rnti << " Configured for CA" );
+              NS_LOG_DEBUG (this << "RNTI " << m_rnti << " Configured for CA" );
             }
           if (msg.haveRadioResourceConfigDedicated)
             {
@@ -1085,7 +1176,7 @@ LteUeRrc::DoRecvRrcConnectionReestablishmentReject (LteRrcSap::RrcConnectionRees
          * \todo After receiving RRC Connection Re-establishment Reject, stop
          *       timer T301. See Section 5.3.7.8 of 3GPP TS 36.331.
          */
-        LeaveConnectedMode ();
+        m_asSapUser->NotifyConnectionReleased (); // Inform upper layers
       }
       break;
 
@@ -1107,11 +1198,20 @@ LteUeRrc::DoRecvRrcConnectionReject (LteRrcSap::RrcConnectionReject msg)
 {
   NS_LOG_FUNCTION (this);
   m_connectionTimeout.Cancel ();
-
-  m_cmacSapProvider.at (0)->Reset ();       // reset the MAC
+  for (uint16_t i = 0; i < m_numberOfComponentCarriers; i++)
+    {
+      m_cmacSapProvider.at(i)->Reset (); // reset the MAC
+    }
   m_hasReceivedSib2 = false;         // invalidate the previously received SIB2
   SwitchToState (IDLE_CAMPED_NORMALLY);
   m_asSapUser->NotifyConnectionFailed ();  // inform upper layer
+}
+
+void
+LteUeRrc::DoSetNumberOfComponentCarriers (uint16_t noOfComponentCarriers)
+{
+  NS_LOG_FUNCTION (this);
+  m_numberOfComponentCarriers = noOfComponentCarriers;
 }
 
 
@@ -1124,6 +1224,7 @@ LteUeRrc::SynchronizeToStrongestCell ()
 
   uint16_t maxRsrpCellId = 0;
   double maxRsrp = -std::numeric_limits<double>::infinity ();
+  double minRsrp = -140.0; // Minimum RSRP in dBm a UE can report
 
   std::map<uint16_t, MeasValues>::iterator it;
   for (it = m_storedMeasValues.begin (); it != m_storedMeasValues.end (); it++)
@@ -1132,7 +1233,7 @@ LteUeRrc::SynchronizeToStrongestCell ()
        * This block attempts to find a cell with strongest RSRP and has not
        * yet been identified as "acceptable cell".
        */
-      if (maxRsrp < it->second.rsrp)
+      if (maxRsrp < it->second.rsrp && it->second.rsrp > minRsrp)
         {
           std::set<uint16_t>::const_iterator itCell;
           itCell = m_acceptableCell.find (it->first);
@@ -1200,6 +1301,20 @@ LteUeRrc::EvaluateCellForSelection ()
       m_cphySapProvider.at(0)->SynchronizeWithEnb (cellId, m_dlEarfcn);
       m_cphySapProvider.at(0)->SetDlBandwidth (m_dlBandwidth);
       m_initialCellSelectionEndOkTrace (m_imsi, cellId);
+      // Once the UE is connected, m_connectionPending is
+      // set to false. So, when RLF occurs and UE performs
+      // cell selection upon leaving RRC_CONNECTED state,
+      // the following call to DoConnect will make the
+      // m_connectionPending to be true again. Thus,
+      // upon calling SwitchToState (IDLE_CAMPED_NORMALLY)
+      // UE state is instantly change to IDLE_WAIT_SIB2.
+      // This will make the UE to read the SIB2 message
+      // and start random access.
+      if (!m_connectionPending)
+        {
+          NS_LOG_DEBUG ("Calling DoConnect in state = " << ToString (m_state));
+          DoConnect ();
+        }
       SwitchToState (IDLE_CAMPED_NORMALLY);
     }
   else
@@ -1231,6 +1346,8 @@ LteUeRrc::ApplyRadioResourceConfigDedicatedSecondaryCarrier (LteRrcSap::NonCriti
 {
   NS_LOG_FUNCTION (this);
 
+  m_sCellToAddModList = nonCec.sCellsToAddModList;
+
   for(std::list<LteRrcSap::SCellToAddMod>::iterator it = nonCec.sCellsToAddModList.begin(); it!=nonCec.sCellsToAddModList.end(); it++)
     {
       LteRrcSap::SCellToAddMod scell = *it;
@@ -1238,9 +1355,9 @@ LteUeRrc::ApplyRadioResourceConfigDedicatedSecondaryCarrier (LteRrcSap::NonCriti
 
 
       uint16_t physCellId = scell.cellIdentification.physCellId;
-      uint8_t ulBand = scell.radioResourceConfigCommonSCell.ulConfiguration.ulFreqInfo.ulBandwidth;
+      uint16_t ulBand = scell.radioResourceConfigCommonSCell.ulConfiguration.ulFreqInfo.ulBandwidth;
       uint32_t ulEarfcn = scell.radioResourceConfigCommonSCell.ulConfiguration.ulFreqInfo.ulCarrierFreq;
-      uint8_t dlBand = scell.radioResourceConfigCommonSCell.nonUlConfiguration.dlBandwidth;
+      uint16_t dlBand = scell.radioResourceConfigCommonSCell.nonUlConfiguration.dlBandwidth;
       uint32_t dlEarfcn = scell.cellIdentification.dlCarrierFreq;
       uint8_t txMode = scell.radioResourceConfigDedicateSCell.physicalConfigDedicatedSCell.antennaInfo.transmissionMode;
       uint8_t srsIndex = scell.radioResourceConfigDedicateSCell.physicalConfigDedicatedSCell.soundingRsUlConfigDedicated.srsConfigIndex;
@@ -1258,6 +1375,8 @@ LteUeRrc::ApplyRadioResourceConfigDedicatedSecondaryCarrier (LteRrcSap::NonCriti
       m_cphySapProvider.at (ccId)->SetPa (paDouble);
       m_cphySapProvider.at (ccId)->SetSrsConfigurationIndex (srsIndex);
     }
+
+  m_sCarrierConfiguredTrace (this, m_sCellToAddModList);
 }
 
 void 
@@ -1311,7 +1430,8 @@ LteUeRrc::ApplyRadioResourceConfigDedicated (LteRrcSap::RadioResourceConfigDedic
           m_srb1->m_rlc = rlc;
           m_srb1->m_pdcp = pdcp;
           m_srb1->m_srbIdentity = 1;
-          
+          m_srb1CreatedTrace (m_imsi, m_cellId, m_rnti);
+
           m_srb1->m_logicalChannelConfig.priority = stamIt->logicalChannelConfig.priority;
           m_srb1->m_logicalChannelConfig.prioritizedBitRateKbps = stamIt->logicalChannelConfig.prioritizedBitRateKbps;
           m_srb1->m_logicalChannelConfig.bucketSizeDurationMs = stamIt->logicalChannelConfig.bucketSizeDurationMs;
@@ -1322,7 +1442,8 @@ LteUeRrc::ApplyRadioResourceConfigDedicated (LteRrcSap::RadioResourceConfigDedic
           lcConfig.prioritizedBitRateKbps = stamIt->logicalChannelConfig.prioritizedBitRateKbps;
           lcConfig.bucketSizeDurationMs = stamIt->logicalChannelConfig.bucketSizeDurationMs;
           lcConfig.logicalChannelGroup = stamIt->logicalChannelConfig.logicalChannelGroup;
-          m_cmacSapProvider.at (0)->AddLc (lcid, lcConfig, rlc->GetLteMacSapUser ());
+          LteMacSapUser* msu = m_ccmRrcSapProvider->ConfigureSignalBearer(lcid, lcConfig, rlc->GetLteMacSapUser ());
+          m_cmacSapProvider.at (0)->AddLc (lcid, lcConfig, msu);
           ++stamIt;
           NS_ASSERT_MSG (stamIt == rrcd.srbToAddModList.end (), "at most one SrbToAdd supported");
           
@@ -1404,20 +1525,35 @@ LteUeRrc::ApplyRadioResourceConfigDedicated (LteRrcSap::RadioResourceConfigDedic
           m_bid2DrbidMap[dtamIt->epsBearerIdentity] = dtamIt->drbIdentity;
   
           m_drbMap.insert (std::pair<uint8_t, Ptr<LteDataRadioBearerInfo> > (dtamIt->drbIdentity, drbInfo));
-  
+
+          m_drbCreatedTrace (m_imsi, m_cellId, m_rnti, dtamIt->drbIdentity, rlcTypeId.GetName ());
+
 
           struct LteUeCmacSapProvider::LogicalChannelConfig lcConfig;
           lcConfig.priority = dtamIt->logicalChannelConfig.priority;
           lcConfig.prioritizedBitRateKbps = dtamIt->logicalChannelConfig.prioritizedBitRateKbps;
           lcConfig.bucketSizeDurationMs = dtamIt->logicalChannelConfig.bucketSizeDurationMs;
-          lcConfig.logicalChannelGroup = dtamIt->logicalChannelConfig.logicalChannelGroup;      
+          lcConfig.logicalChannelGroup = dtamIt->logicalChannelConfig.logicalChannelGroup;
 
-          for (uint32_t i = 0; i < m_numberOfComponentCarriers; i++)
-          {
-            m_cmacSapProvider.at (i)->AddLc (dtamIt->logicalChannelIdentity,
-                                    lcConfig,
-                                    rlc->GetLteMacSapUser ());
-          }
+          NS_LOG_DEBUG (this << " UE RRC RNTI " << m_rnti << " Number Of Component Carriers "<<m_numberOfComponentCarriers<< " lcID " << (uint16_t) dtamIt->logicalChannelIdentity);
+          //Call AddLc of UE component carrier manager
+          std::vector <LteUeCcmRrcSapProvider::LcsConfig> lcOnCcMapping = m_ccmRrcSapProvider->AddLc (dtamIt->logicalChannelIdentity, lcConfig, rlc->GetLteMacSapUser ());
+
+         NS_LOG_DEBUG ("Size of lcOnCcMapping vector "<<lcOnCcMapping.size());
+         std::vector<LteUeCcmRrcSapProvider::LcsConfig>::iterator itLcOnCcMapping = lcOnCcMapping.begin ();
+         NS_ASSERT_MSG (itLcOnCcMapping != lcOnCcMapping.end (), "Component carrier manager failed to add LC for data radio bearer");
+
+         for (itLcOnCcMapping = lcOnCcMapping.begin (); itLcOnCcMapping != lcOnCcMapping.end (); ++itLcOnCcMapping)
+           {
+             NS_LOG_DEBUG ("RNTI " << m_rnti
+                           << " LCG id " << (uint16_t) itLcOnCcMapping->lcConfig.logicalChannelGroup
+                           << " ComponentCarrierId " << (uint16_t) itLcOnCcMapping->componentCarrierId);
+             uint8_t index = itLcOnCcMapping->componentCarrierId;
+             LteUeCmacSapProvider::LogicalChannelConfig lcConfigFromCcm = itLcOnCcMapping->lcConfig;
+             LteMacSapUser *msu = itLcOnCcMapping->msu;
+             m_cmacSapProvider.at (index)->AddLc (dtamIt->logicalChannelIdentity, lcConfigFromCcm, msu);
+           }
+
           rlc->Initialize ();
         }
       else
@@ -1434,7 +1570,7 @@ LteUeRrc::ApplyRadioResourceConfigDedicated (LteRrcSap::RadioResourceConfigDedic
        ++dtdmIt)
     {
       uint8_t drbid = *dtdmIt;
-      NS_LOG_INFO (this << " IMSI " << m_imsi << " releasing DRB " << (uint32_t) drbid << drbid);
+      NS_LOG_INFO (this << " IMSI " << m_imsi << " releasing DRB " << (uint32_t) drbid);
       std::map<uint8_t, Ptr<LteDataRadioBearerInfo> >::iterator it =   m_drbMap.find (drbid);
       NS_ASSERT_MSG (it != m_drbMap.end (), "could not find bearer with given lcid");
       m_drbMap.erase (it);      
@@ -1591,6 +1727,11 @@ LteUeRrc::ApplyMeasConfig (LteRrcSap::MeasConfig mc)
     {
       NS_LOG_LOGIC (this << " setting quantityConfig");
       m_varMeasConfig.quantityConfig = mc.quantityConfig;
+      //Convey the filter coefficient to PHY layer so it can configure the power control parameter
+      for (uint16_t i = 0; i < m_numberOfComponentCarriers; i++)
+        {
+          m_cphySapProvider.at (i)->SetRsrpFilterCoefficient (mc.quantityConfig.filterCoefficientRSRP);
+        }
       // we calculate here the coefficient a used for Layer 3 filtering, see 3GPP TS 36.331 section 5.5.3.2
       m_varMeasConfig.aRsrp = std::pow (0.5, mc.quantityConfig.filterCoefficientRSRP / 4.0);
       m_varMeasConfig.aRsrq = std::pow (0.5, mc.quantityConfig.filterCoefficientRSRQ / 4.0);
@@ -2930,28 +3071,75 @@ void
 LteUeRrc::LeaveConnectedMode ()
 {
   NS_LOG_FUNCTION (this << m_imsi);
-  m_asSapUser->NotifyConnectionReleased ();
-  m_cmacSapProvider.at (0)->RemoveLc (1);
-  std::map<uint8_t, Ptr<LteDataRadioBearerInfo> >::iterator it;
-  for (it = m_drbMap.begin (); it != m_drbMap.end (); ++it)
+  m_leaveConnectedMode = true;
+  m_radioLinkFailureDetected.Cancel ();
+  m_storedMeasValues.clear ();
+  m_noOfSyncIndications = 0;
+
+  std::map<uint8_t, LteRrcSap::MeasIdToAddMod>::iterator measIdIt;
+  for (measIdIt = m_varMeasConfig.measIdList.begin ();
+       measIdIt != m_varMeasConfig.measIdList.end (); ++measIdIt)
     {
-      m_cmacSapProvider.at (0)->RemoveLc (it->second->m_logicalChannelIdentity);
+      VarMeasReportListClear (measIdIt->second.measId);
     }
+  m_varMeasConfig.measIdList.clear ();
+
+  m_ccmRrcSapProvider->Reset ();
+
+  for (uint32_t i = 0; i < m_numberOfComponentCarriers; i++)
+    {
+      m_cmacSapProvider.at (i)->Reset ();  // reset the MAC
+    }
+
   m_drbMap.clear ();
   m_bid2DrbidMap.clear ();
-  m_srb1 = 0;
-  SwitchToState (IDLE_CAMPED_NORMALLY);
+  m_srb1 = nullptr;
+  m_hasReceivedMib = false;
+  m_hasReceivedSib1 = false;
+  m_hasReceivedSib2 = false;
+
+  for (uint32_t i = 0; i < m_numberOfComponentCarriers; i++)
+    {
+      m_cphySapProvider.at (i)->ResetPhyAfterRlf ();  //reset the PHY
+    }
+  SwitchToState (IDLE_START);
+  DoStartCellSelection (m_dlEarfcn);
+  //Save the cell id UE was attached to
+  StorePreviousCellId (m_cellId);
+  m_cellId = 0;
+  m_rnti = 0;
+  m_srb0->m_rlc->SetRnti (m_rnti);
 }
 
 void
 LteUeRrc::ConnectionTimeout ()
 {
   NS_LOG_FUNCTION (this << m_imsi);
-  m_cmacSapProvider.at (0)->Reset ();       // reset the MAC
-  m_hasReceivedSib2 = false;         // invalidate the previously received SIB2
-  SwitchToState (IDLE_CAMPED_NORMALLY);
-  m_connectionTimeoutTrace (m_imsi, m_cellId, m_rnti);
-  m_asSapUser->NotifyConnectionFailed ();  // inform upper layer
+  ++m_connEstFailCount;
+  if (m_connEstFailCount >= m_connEstFailCountLimit)
+    {
+      m_connectionTimeoutTrace (m_imsi, m_cellId, m_rnti, m_connEstFailCount);
+      SwitchToState (CONNECTED_PHY_PROBLEM);
+      //Assumption: The eNB connection request timer would expire
+      //before the expiration of T300 at UE. Upon which, the eNB deletes
+      //the UE context. Therefore, here we don't need to send the UE context
+      //deletion request to the eNB.
+      m_asSapUser->NotifyConnectionReleased ();
+      m_connEstFailCount = 0;
+    }
+  else
+    {
+      for (uint16_t i = 0; i < m_numberOfComponentCarriers; i++)
+          {
+            m_cmacSapProvider.at(i)->Reset (); // reset the MAC
+          }
+        m_hasReceivedSib2 = false;         // invalidate the previously received SIB2
+        SwitchToState (IDLE_CAMPED_NORMALLY);
+        m_connectionTimeoutTrace (m_imsi, m_cellId, m_rnti, m_connEstFailCount);
+        //Following call to UE NAS will force the UE to immediately
+        //perform the random access to the same cell again.
+        m_asSapUser->NotifyConnectionFailed ();  // inform upper layer
+    }
 }
 
 void
@@ -2989,7 +3177,14 @@ LteUeRrc::SwitchToState (State newState)
   switch (newState)
     {
     case IDLE_START:
-      NS_FATAL_ERROR ("cannot switch to an initial state");
+      if (m_leaveConnectedMode)
+        {
+          NS_LOG_INFO ("Starting initial cell selection after RLF");
+        }
+      else
+        {
+          NS_FATAL_ERROR ("cannot switch to an initial state");
+        }
       break;
 
     case IDLE_CELL_SEARCH:
@@ -3026,11 +3221,6 @@ LteUeRrc::SwitchToState (State newState)
     }
 }
 
-void
-LteUeRrc::DoComponentCarrierEnabling (std::vector<uint8_t> res)
-  {
-    NS_LOG_INFO (this);
-  }
 
 void
 LteUeRrc::SaveScellUeMeasurements (uint16_t sCellId, double rsrp, double rsrq,
@@ -3093,6 +3283,61 @@ LteUeRrc::SaveScellUeMeasurements (uint16_t sCellId, double rsrp, double rsrq,
     }
 
 }   // end of void SaveUeMeasurements
+
+void
+LteUeRrc::RadioLinkFailureDetected ()
+{
+  NS_LOG_FUNCTION (this << m_imsi << m_rnti);
+  m_radioLinkFailureTrace (m_imsi, m_cellId, m_rnti);
+  SwitchToState (CONNECTED_PHY_PROBLEM);
+  m_rrcSapUser->SendIdealUeContextRemoveRequest (m_rnti);
+  m_asSapUser->NotifyConnectionReleased ();
+}
+
+void
+LteUeRrc::DoNotifyInSync ()
+{
+  NS_LOG_FUNCTION (this << m_imsi);
+  m_noOfSyncIndications++;
+  NS_LOG_INFO ("noOfSyncIndications " << (uint16_t) m_noOfSyncIndications);
+  m_phySyncDetectionTrace (m_imsi, m_rnti, m_cellId, "Notify in sync", m_noOfSyncIndications);
+  if (m_noOfSyncIndications == m_n311)
+    {
+      m_radioLinkFailureDetected.Cancel ();
+      m_noOfSyncIndications = 0;
+      m_cphySapProvider.at (0)->ResetRlfParams ();
+    }
+}
+
+void
+LteUeRrc::DoNotifyOutOfSync ()
+{
+  NS_LOG_FUNCTION (this << m_imsi);
+  m_noOfSyncIndications++;
+  NS_LOG_INFO (this << " Total Number of Sync indications from PHY "
+               << (uint16_t) m_noOfSyncIndications << "N310 value : " << (uint16_t) m_n310);
+  m_phySyncDetectionTrace (m_imsi, m_rnti, m_cellId, "Notify out of sync", m_noOfSyncIndications);
+  if (m_noOfSyncIndications == m_n310)
+    {
+      m_radioLinkFailureDetected = Simulator::Schedule (m_t310, &LteUeRrc::RadioLinkFailureDetected, this);
+      if (m_radioLinkFailureDetected.IsRunning ())
+        {
+          NS_LOG_INFO ("t310 started");
+        }
+      m_cphySapProvider.at (0)->StartInSnycDetection ();
+      m_noOfSyncIndications = 0;
+    }
+}
+
+void
+LteUeRrc::DoResetSyncIndicationCounter ()
+{
+  NS_LOG_FUNCTION (this << m_imsi);
+
+  NS_LOG_DEBUG ("The number of sync indication received by RRC from PHY: " << (uint16_t) m_noOfSyncIndications);
+  m_noOfSyncIndications = 0;
+}
+
 
 
 } // namespace ns3

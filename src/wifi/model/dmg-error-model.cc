@@ -100,7 +100,7 @@ SNR2BER_STRUCT::GetBitErrorRate (double snr)
     {
       NS_LOG_DEBUG ("Performing linear interpolation on snr for bit error rate lookup.");
       InterpolParams iParams;
-      double ber;
+      double ber; //bit error rate to return
       iParams = FindDatapointBounds (snr);
       ber = InterpolateAndRetrieveData (snr, iParams.snrLoBound, iParams.snrHiBound);
       return ber;
@@ -168,7 +168,7 @@ SNR2BER_STRUCT::InterpolateAndRetrieveData (double xd, double x1d, double x2d)
   int x1 = DoubleToHashKeyInt (x1d);
   int x2 = DoubleToHashKeyInt (x2d);
   std::map<int, double>::iterator elemIter;
-  double fp;
+  double fp; //retrieved value after any interpolation
   double fq1, fq2;
   elemIter = bitErrorRateTable.find (x1);
   if (elemIter == bitErrorRateTable.end ())
@@ -196,7 +196,7 @@ SNR2BER_STRUCT::InterpolateAndRetrieveData (double xd, double x1d, double x2d)
 TypeId
 DmgErrorModel::GetTypeId (void)
 {
-  static TypeId tid = TypeId("ns3::DmgErrorModel")
+  static TypeId tid = TypeId ("ns3::DmgErrorModel")
     .SetParent<ErrorRateModel> ()
     .AddConstructor<DmgErrorModel> ()
     .AddAttribute ("FileName",
@@ -225,14 +225,18 @@ DmgErrorModel::~DmgErrorModel ()
 double
 DmgErrorModel::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, double snr, uint64_t nbits) const
 {
-  NS_LOG_FUNCTION (this << mode.GetModulationClass () << uint16_t (mode.GetMcsValue ()) << nbits);
+  NS_LOG_FUNCTION (this << mode.GetModulationClass () << uint16_t (mode.GetMcsValue ()) << RatioToDb (snr) << nbits);
   NS_ASSERT_MSG (mode.GetModulationClass () == WIFI_MOD_CLASS_DMG_CTRL ||
-    mode.GetModulationClass() == WIFI_MOD_CLASS_DMG_SC ||
-    mode.GetModulationClass() == WIFI_MOD_CLASS_DMG_OFDM, "Expecting 802.11ad DMG CTRL, SC or OFDM modulation");
+    mode.GetModulationClass () == WIFI_MOD_CLASS_DMG_SC ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_DMG_OFDM ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_CTRL ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_SC ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_OFDM,
+    "Expecting 802.11ad DMG CTRL, SC or OFDM modulation or 802.11ay EDMG CTRL, SC or OFDM modulation");
 
   Ptr<SNR2BER_STRUCT> snr2ber = m_snr2berList.find (mode.GetMcsValue ())->second;
   double ber = snr2ber->GetBitErrorRate (RatioToDb (snr));
-  double psr = pow (1 - ber, nbits);
+  double psr = pow (1 - ber, nbits); /* Compute Packet Success Rate (PSR) from BER */
   NS_LOG_DEBUG ("PSR=" << psr);
 
   return psr;
@@ -263,14 +267,17 @@ DmgErrorModel::LoadErrorRateTables (void)
 
   MCS_IDX idx;
   std::string value;
-  int snrInt;
+  int snrInt;  /* SNR converted to an integer to use as hash key */
 
+  /* Read the number of MCSs in the file */
   std::getline (file, line);
   m_numMCSs = std::stod (line);
 
+  /* Read number of SNR Decimal Places */
   std::getline (file, line);
   m_numSnrDecPlaces = std::stoul (line);
 
+  /* Read SNR Spacing value */
   std::getline (file, line);
   m_snrSpacing = std::stod (line);
 
@@ -279,27 +286,35 @@ DmgErrorModel::LoadErrorRateTables (void)
       std::vector<double> snrs, bers;
       Ptr<SNR2BER_STRUCT> snr2berStruct = Create<SNR2BER_STRUCT> ();
 
+      /* Assign the global SNR Spacing and number of decimal places */
       snr2berStruct->numSnrDecPlaces = m_numSnrDecPlaces;
       snr2berStruct->snrSpacing = m_snrSpacing;
 
+      /* Read MCS Index */
       std::getline (file, line);
       idx = std::stoul (line);
 
+      /* Read SNR min value */
       std::getline (file, line);
       snr2berStruct->snrMin = std::stod (line);
 
+      /* Read SNR max value */
       std::getline (file, line);
       snr2berStruct->snrMax = std::stod (line);
 
+      /* Read BER value corresponding to the min SNR value */
       std::getline (file, line);
       snr2berStruct->berMin = std::stod (line);
 
+      /* Read BER value corresponding to the max SNR value */
       std::getline (file, line);
       snr2berStruct->berMax = std::stod (line);
 
+      /* Read the number of SNR values */
       std::getline (file, line);
       snr2berStruct->numDataPoints = std::stoul (line);
 
+      /* Read SNR Values */
       std::getline (file, line);
       std::istringstream split1 (line);
       for (uint16_t n = 0; n < snr2berStruct->numDataPoints; n++)
@@ -308,6 +323,7 @@ DmgErrorModel::LoadErrorRateTables (void)
           snrs.push_back (std::stod (value));
         }
 
+      /* Read BER Values */
       std::getline (file, line);
       std::istringstream split2 (line);
       for (uint16_t n = 0; n < snr2berStruct->numDataPoints; n++)
@@ -316,19 +332,23 @@ DmgErrorModel::LoadErrorRateTables (void)
           bers.push_back (std::stod (value));
         }
 
+      /* Build SNR to BER Table using integer SNR values */
       for (uint16_t n = 0; n < snr2berStruct->numDataPoints; n++)
         {
           snrInt = snr2berStruct->DoubleToHashKeyInt (snrs[n]);
+          /* Add datapoint to hash map */
           ret = snr2berStruct->bitErrorRateTable.insert (std::pair<int, double> (snrInt, bers[n]));
           NS_ASSERT_MSG (ret.second, "element with SNR hash of " << snrInt <<
                                      " already exists in bit error table hash map with value of " << ret.first->second);
         }
 
+      /* Determine SNR Offset from 0 */
       snr2berStruct->DetermineSnrOffset ();
 
       m_snr2berList[idx] = snr2berStruct;
     }
 
+  /* Close the file */
   file.close ();
 
   m_errorRateTablesLoaded = true;

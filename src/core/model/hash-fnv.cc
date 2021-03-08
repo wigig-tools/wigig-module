@@ -51,7 +51,7 @@ namespace Hash {
 
 namespace Function {
 
-/** FNV hash implementation details. */  
+/** FNV hash implementation details. */
 namespace Fnv1aImplementation {
 
 /*************************************************
@@ -63,13 +63,13 @@ namespace Fnv1aImplementation {
  * \defgroup hash_fnv FNV Hash Implementation
  */
 /**@{*/
-  
+
 extern "C" {
 
 // Changes from FNV distribution are marked with `//PDB'
 //
 
-// Begin fnv.h ----------------------------------->
+/* Begin fnv.h -------------- *NS_CHECK_STYLE_OFF* ----> */
 
 /*
  * fnv - Fowler/Noll/Vo- hash code
@@ -159,7 +159,7 @@ extern "C" {
 /**
  * 32 bit FNV-0 hash type
  */
-typedef u_int32_t Fnv32_t;
+typedef uint32_t Fnv32_t;  //PDB
 
 
 /**
@@ -195,17 +195,17 @@ typedef u_int32_t Fnv32_t;
  */
 //#include "longlong.h"  //PDB - assume `unsigned long long' is 64 bit
 #define HAVE_64BIT_LONG_LONG  
-  
+
 
 
 /** 
  * 64 bit FNV-0 hash
  */
 #if defined(HAVE_64BIT_LONG_LONG)
-typedef u_int64_t Fnv64_t;
+typedef uint64_t Fnv64_t;  //PDB
 #else /* HAVE_64BIT_LONG_LONG */
 typedef struct {
-    u_int32_t w32[2]; /* w32[0] is low order, w32[1] is high order word */
+    uint32_t w32[2]; /* w32[0] is low order, w32[1] is high order word */  //PDB
 } Fnv64_t;
 #endif /* HAVE_64BIT_LONG_LONG */
 
@@ -292,9 +292,9 @@ enum fnv_type {
 
 #endif /* __FNV_H__ */
 
-// End fnv.h ------------------------------->
+/* End fnv.h ---------------- *NS_CHECK_STYLE_ON* -----> */
 
-// Begin hash_32a.c ------------------------------>
+/* Begin hash_32a.c --------- *NS_CHECK_STYLE_OFF* ----> */
 
 /*
  * hash_32 - 32 bit Fowler/Noll/Vo FNV-1a hash code
@@ -438,10 +438,10 @@ fnv_32a_str(char *str, Fnv32_t hval)
     /* return our new hash value */
     return hval;
 }
-  
-// End hash_32a.c -------------------------->
 
-// Begin hash_64a.c------------------------------->
+/* End hash_32a.c ----------- *NS_CHECK_STYLE_ON* -----> */
+
+/* Begin hash_64a.c --------- *NS_CHECK_STYLE_OFF* ----> */
 
 /*
  * hash_64 - 64 bit Fowler/Noll/Vo-0 FNV-1a hash code
@@ -734,8 +734,8 @@ fnv_64a_str(char *str, Fnv64_t hval)
     /* return our new hash value */
     return hval;
 }
-  
-// End hash_64a.c--------------------------->
+
+/* End hash_64a.c ----------- *NS_CHECK_STYLE_ON* -----> */
 
 }  /* extern "C" */
 
@@ -752,7 +752,7 @@ Fnv1a::Fnv1a ()
 }
 
 uint32_t
-Fnv1a::GetHash32  (const char * buffer, const size_t size)
+Fnv1a::GetHash32  (const char * buffer, const std::size_t size)
 {
   m_hash32 =
     Fnv1aImplementation::fnv_32a_buf ((void *)buffer, size, m_hash32);
@@ -760,7 +760,7 @@ Fnv1a::GetHash32  (const char * buffer, const size_t size)
 }
 
 uint64_t
-Fnv1a::GetHash64  (const char * buffer, const size_t size)
+Fnv1a::GetHash64  (const char * buffer, const std::size_t size)
 {
   m_hash64 =
     Fnv1aImplementation::fnv_64a_buf ((void *)buffer, size, m_hash64);

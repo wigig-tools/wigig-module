@@ -34,6 +34,7 @@
 #include <vector>
 #include <ns3/packet.h>
 #include <ns3/packet-burst.h>
+#include <ns3/traced-callback.h>
 
 
 namespace ns3 {
@@ -59,6 +60,19 @@ public:
   LteUeMac ();
   virtual ~LteUeMac ();
   virtual void DoDispose (void);
+
+  /**
+   * \brief TracedCallback signature for RA response timeout events
+   * exporting IMSI, contention flag, preamble transmission counter
+   * and the max limit of preamble transmission
+   *
+   * \param [in] imsi
+   * \param [in] contention
+   * \param [in] preambleTxCounter
+   * \param [in] maxPreambleTxLimit
+   */
+  typedef void (* RaResponseTimeoutTracedCallback)
+    (uint64_t imsi, bool contention, uint8_t preambleTxCounter, uint8_t maxPreambleTxLimit);
 
   /**
   * \brief Get the LTE MAC SAP provider
@@ -166,8 +180,21 @@ private:
   * \param lcId the LCID
   */
   void DoRemoveLc (uint8_t lcId);
-  /// Reset function
+  /**
+   * \brief Reset function
+   */
   void DoReset ();
+  /**
+   * \brief Notify MAC about the successful RRC connection
+   * establishment.
+   */
+  void DoNotifyConnectionSuccessful ();
+  /**
+   * Set IMSI
+   *
+   * \param imsi the IMSI of the UE
+   */
+  void DoSetImsi (uint64_t imsi);
 
   // forwarded from PHY SAP
  /**
@@ -184,12 +211,12 @@ private:
   void DoReceiveLteControlMessage (Ptr<LteControlMessage> msg);
   
   // internal methods
-  /// Randomly sleect and send RA preamble function
+  /// Randomly select and send RA preamble function
   void RandomlySelectAndSendRaPreamble ();
  /**
   * Send RA preamble function
   *
-  * \param contention if true randomly select and send te RA preamble
+  * \param contention if true randomly select and send the RA preamble
   */
   void SendRaPreamble (bool contention);
   /// Start waiting for RA response function
@@ -203,7 +230,7 @@ private:
  /**
   * RA response timeout function
   *
-  * \param contention if true randomly select and send te RA preamble
+  * \param contention if true randomly select and send the RA preamble
   */
   void RaResponseTimeout (bool contention);
   /// Send report buffer status
@@ -242,10 +269,11 @@ private:
   bool m_freshUlBsr; ///< true when a BSR has been received in the last TTI
 
   uint8_t m_harqProcessId; ///< HARQ process ID
-  std::vector < Ptr<PacketBurst> > m_miUlHarqProcessesPacket; ///< Packets under trasmission of the UL HARQ processes
+  std::vector < Ptr<PacketBurst> > m_miUlHarqProcessesPacket; ///< Packets under transmission of the UL HARQ processes
   std::vector < uint8_t > m_miUlHarqProcessesPacketTimer; ///< timer for packet life in the buffer
 
   uint16_t m_rnti; ///< RNTI
+  uint16_t m_imsi; ///< IMSI
 
   bool m_rachConfigured; ///< is RACH configured?
   LteUeCmacSapProvider::RachConfig m_rachConfig; ///< RACH configuration
@@ -259,6 +287,13 @@ private:
   uint32_t m_subframeNo; ///< subframe number
   uint8_t m_raRnti; ///< RA RNTI
   bool m_waitingForRaResponse; ///< waiting for RA response
+
+  /**
+   * \brief The `RaResponseTimeout` trace source. Fired RA response timeout.
+   * Exporting IMSI, contention flag, preamble transmission counter
+   * and the max limit of preamble transmission.
+   */
+  TracedCallback<uint64_t, bool, uint8_t, uint8_t> m_raResponseTimeoutTrace;
 };
 
 } // namespace ns3

@@ -21,6 +21,9 @@
 #include "ns3/network-module.h"
 #include "ns3/stats-module.h"
 
+#ifndef TIMESTAMP_H
+#define TIMESTAMP_H
+
 using namespace ns3;
 
 class TimestampTag : public Tag {
@@ -41,3 +44,5 @@ private:
   Time m_timestamp;
 
 };
+
+#endif /* TIMESTAMP_H */

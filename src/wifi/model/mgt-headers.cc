@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -122,6 +122,7 @@ MgtProbeRequestHeader::Deserialize (Buffer::Iterator start)
   i = DeserializeInformationElements (i);
   return i.GetDistanceFrom (start);
 }
+
 
 /***********************************************************
  *                    Probe Response
@@ -563,16 +564,16 @@ MgtAssocResponseHeader::~MgtAssocResponseHeader ()
 {
 }
 
-void
-MgtAssocResponseHeader::SetCapabilities (CapabilityInformation capabilities)
-{
-  m_capability = capabilities;
-}
-
 StatusCode
 MgtAssocResponseHeader::GetStatusCode (void)
 {
   return m_code;
+}
+
+SupportedRates
+MgtAssocResponseHeader::GetSupportedRates (void)
+{
+  return m_rates;
 }
 
 void
@@ -582,15 +583,15 @@ MgtAssocResponseHeader::SetStatusCode (StatusCode code)
 }
 
 void
-MgtAssocResponseHeader::SetAssociationId (uint16_t aid)
+MgtAssocResponseHeader::SetSupportedRates (SupportedRates rates)
 {
-  m_aid = aid;
+  m_rates = rates;
 }
 
-uint16_t
-MgtAssocResponseHeader::GetAid (void) const
+void
+MgtAssocResponseHeader::SetCapabilities (CapabilityInformation capabilities)
 {
-  return m_aid;
+  m_capability = capabilities;
 }
 
 CapabilityInformation
@@ -600,15 +601,15 @@ MgtAssocResponseHeader::GetCapabilities (void) const
 }
 
 void
-MgtAssocResponseHeader::SetSupportedRates (SupportedRates rates)
+MgtAssocResponseHeader::SetAssociationId (uint16_t aid)
 {
-  m_rates = rates;
+  m_aid = aid;
 }
 
-SupportedRates
-MgtAssocResponseHeader::GetSupportedRates (void) const
+uint16_t
+MgtAssocResponseHeader::GetAssociationId (void) const
 {
-  return m_rates;
+  return m_aid;
 }
 
 TypeId
@@ -674,6 +675,7 @@ MgtAssocResponseHeader::Deserialize (Buffer::Iterator start)
   return i.GetDistanceFrom (start);
 }
 
+
 /**********************************************************
  *   ActionFrame
  **********************************************************/
@@ -689,57 +691,57 @@ void
 WifiActionHeader::SetAction (WifiActionHeader::CategoryValue type,
                              WifiActionHeader::ActionValue action)
 {
-  m_category = type;
+  m_category = static_cast<uint8_t> (type);
   switch (type)
     {
     case QOS:
       {
-        m_actionValue = action.qos;
+        m_actionValue = static_cast<uint8_t> (action.qos);
         break;
       }
     case BLOCK_ACK:
       {
-        m_actionValue = action.blockAck;
+        m_actionValue = static_cast<uint8_t> (action.blockAck);
         break;
       }
     case PUBLIC:
       {
-        m_actionValue = action.publicAction;
+        m_actionValue = static_cast<uint8_t> (action.publicAction);
         break;
       }
     case RADIO_MEASUREMENT:
       {
-        m_actionValue = action.radioMeasurementAction;
+        m_actionValue = static_cast<uint8_t> (action.radioMeasurementAction);
         break;
       }
     case MESH:
       {
-        m_actionValue = action.meshAction;
+        m_actionValue = static_cast<uint8_t> (action.meshAction);
         break;
       }
     case MULTIHOP:
       {
-        m_actionValue = action.multihopAction;
+        m_actionValue = static_cast<uint8_t> (action.multihopAction);
         break;
       }
     case SELF_PROTECTED:
       {
-        m_actionValue = action.selfProtectedAction;
+        m_actionValue = static_cast<uint8_t> (action.selfProtectedAction);
         break;
       }
     case DMG:
       {
-        m_actionValue = action.dmgAction;
+        m_actionValue = static_cast<uint8_t> (action.dmgAction);
         break;
       }
     case FST:
       {
-        m_actionValue = action.fstAction;
+        m_actionValue = static_cast<uint8_t> (action.fstAction);
         break;
       }
     case UNPROTECTED_DMG:
       {
-        m_actionValue = action.unprotectedAction;
+        m_actionValue = static_cast<uint8_t> (action.unprotectedAction);
         break;
       }
     case VENDOR_SPECIFIC_ACTION:
@@ -1025,6 +1027,18 @@ WifiActionHeader::GetAction ()
           break;
         case UNPROTECTED_DMG_BRP:
           retval.unprotectedAction = UNPROTECTED_DMG_BRP;
+          break;
+        case UNPROTECTED_MIMO_BF_SETUP:
+          retval.unprotectedAction = UNPROTECTED_MIMO_BF_SETUP;
+          break;
+        case UNPROTECTED_MIMO_BF_POLL:
+          retval.unprotectedAction = UNPROTECTED_MIMO_BF_POLL;
+          break;
+        case UNPROTECTED_MIMO_BF_FEEDBACK:
+          retval.unprotectedAction = UNPROTECTED_MIMO_BF_FEEDBACK;
+          break;
+        case UNPROTECTED_MIMO_BF_SELECTION:
+          retval.unprotectedAction = UNPROTECTED_MIMO_BF_SELECTION;
           break;
         default:
           NS_FATAL_ERROR ("Unknown Unprotected DMG action code");
@@ -2120,7 +2134,7 @@ LinkMeasurementRequest::GetSerializedSize (void) const
 {
   uint32_t size = 0;
   size += 3;
-  for (WifiInformationElementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
+  for (WifiInformationSubelementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
     {
       size += iter->second->GetSerializedSize ();
     }
@@ -2134,7 +2148,7 @@ LinkMeasurementRequest::Serialize (Buffer::Iterator start) const
   i.WriteU8 (m_dialogToken);
   i.WriteU8 (m_transmitPowerUsed);
   i.WriteU8 (m_maxTransmitPower);
-  for (WifiInformationElementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
+  for (WifiInformationSubelementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
     {
       iter->second->Serialize (i);
     }
@@ -2219,7 +2233,7 @@ LinkMeasurementRequest::GetSubElement (WifiInformationElementId id)
   return m_map[id];
 }
 
-WifiInformationElementMap
+WifiInformationSubelementMap
 LinkMeasurementRequest::GetListOfSubElements (void) const
 {
   return m_map;
@@ -2264,7 +2278,7 @@ LinkMeasurementReport::GetSerializedSize (void) const
 {
   uint32_t size = 0;
   size += 9;
-  for (WifiInformationElementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
+  for (WifiInformationSubelementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
     {
       size += iter->second->GetSerializedSize ();
     }
@@ -2281,7 +2295,7 @@ LinkMeasurementReport::Serialize (Buffer::Iterator start) const
   i.WriteU8 (m_transmitAntId);
   i.WriteU8 (m_rcpi);
   i.WriteU8 (m_rsni);
-  for (WifiInformationElementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
+  for (WifiInformationSubelementMap::const_iterator iter = m_map.begin (); iter != m_map.end (); iter++)
     {
       iter->second->Serialize (i);
     }
@@ -2405,7 +2419,7 @@ LinkMeasurementReport::GetSubElement (WifiInformationElementId id)
   return m_map[id];
 }
 
-WifiInformationElementMap
+WifiInformationSubelementMap
 LinkMeasurementReport::GetListOfSubElements (void) const
 {
   return m_map;
@@ -2650,7 +2664,7 @@ ExtInformationFrame::GetSerializedSize (void) const
   size += 6; //Subject Address
   size += m_requestElement->GetSerializedSize (); //Request Information
   // DMG Capabilities List
-  size += m_dmgCapabilitiesList.size () * 19; /* The whole DMG Capabilities Element Size */
+  size += m_dmgCapabilitiesList.size () * 26; /* The whole DMG Capabilities Element Size */
   // Wifi Information Element List (Optional)
   size += GetInformationElementsSerializedSize ();
   return size;
@@ -2673,6 +2687,7 @@ ExtInformationFrame::AddDmgCapabilitiesElement (Ptr<DmgCapabilities> elem)
 {
   m_dmgCapabilitiesList.push_back (elem);
 }
+
 
 Mac48Address
 ExtInformationFrame::GetSubjectAddress (void) const
@@ -2761,6 +2776,7 @@ ExtInformationRequest::Deserialize (Buffer::Iterator start)
   return i.GetDistanceFrom (start);
 }
 
+
 /***************************************************
 *         Information Response Frame (8.5.20.5)
 ****************************************************/
@@ -2784,6 +2800,30 @@ ExtInformationResponse::GetInstanceTypeId (void) const
   return GetTypeId ();
 }
 
+uint32_t
+ExtInformationResponse::GetSerializedSize (void) const
+{
+  uint32_t size = 0;
+  size += 6; //Subject Address
+  size += m_requestElement->GetSerializedSize (); //Request Information
+  // DMG Capabilities List
+  size += m_dmgCapabilitiesList.size () * 26; /* The whole DMG Capabilities Element Size */
+  // Wifi Information Element List (Optional)
+  if (m_beamRefinement != 0)
+    {
+      size += m_beamRefinement->GetSerializedSize ();
+    }
+  if (m_channelElement != 0)
+    {
+      size += m_channelElement->GetSerializedSize ();
+    }
+  if (m_edmgChannelElement != 0)
+    {
+      size += m_edmgChannelElement->GetSerializedSize ();
+    }
+  size += GetInformationElementsSerializedSize ();
+  return size;
+}
 void
 ExtInformationResponse::Serialize (Buffer::Iterator start) const
 {
@@ -2794,6 +2834,18 @@ ExtInformationResponse::Serialize (Buffer::Iterator start) const
       i = (*j)->Serialize (i);
     }
   i = m_requestElement->Serialize (i);
+  if (m_beamRefinement != 0)
+    {
+      i = m_beamRefinement->Serialize (i);
+    }
+  if (m_channelElement != 0)
+    {
+      i = m_channelElement->Serialize (i);
+    }
+  if (m_edmgChannelElement != 0)
+    {
+      i = m_edmgChannelElement->Serialize (i);
+    }
   i = SerializeInformationElements (i);
 }
 
@@ -2803,6 +2855,7 @@ ExtInformationResponse::Deserialize (Buffer::Iterator start)
   Buffer::Iterator i = start;
   Buffer::Iterator m;
   Ptr<DmgCapabilities> dmgCapabilities;
+
 
   ReadFrom (i, m_subjectAddress);
   /* Deserialize DMG Capabilities Elements */
@@ -2824,10 +2877,141 @@ ExtInformationResponse::Deserialize (Buffer::Iterator start)
   m_requestElement = Create<RequestElement> ();
   i = m_requestElement->Deserialize (i);
 
+  m_beamRefinement = Create<BeamRefinementElement> ();
+  m_channelElement = Create<ChannelMeasurementFeedbackElement> ();
+  m_edmgChannelElement = Create<EDMGChannelMeasurementFeedbackElement> ();
+
+  m = i;
+  i = m_beamRefinement->DeserializeIfPresent (i);
+  if (i.GetDistanceFrom (m) != 0)
+    {
+      bool channelPresent = false;
+      if (m_beamRefinement->IsSnrPresent ())
+        {
+          channelPresent = true;
+          if (m_beamRefinement->GetEdmgExtensionFlag ())
+            {
+              m_channelElement->SetSnrListSize (m_beamRefinement->GetExtendedNumberOfMeasurements ());
+            }
+          else
+            {
+              m_channelElement->SetSnrListSize (m_beamRefinement->GetNumberOfMeasurements ());
+            }
+        }
+
+      if (m_beamRefinement->IsChannelMeasurementPresent ())
+        {
+          channelPresent = true;
+          if (m_beamRefinement->GetEdmgExtensionFlag ())
+            {
+              m_channelElement->SetChannelMeasurementSize (m_beamRefinement->GetExtendedNumberOfMeasurements ());
+            }
+          else
+            {
+              m_channelElement->SetChannelMeasurementSize (m_beamRefinement->GetNumberOfMeasurements ());
+            }
+          m_channelElement->SetTapComponentsSize (m_beamRefinement->GetNumberOfTapsPresent ());
+        }
+
+      if (m_beamRefinement->IsTapDelayPresent ())
+        {
+          if (m_beamRefinement->GetEdmgExtensionFlag ())
+            {
+              m_edmgChannelElement->SetTapsDelaySize (m_beamRefinement->GetNumberOfTapsPresent ());
+            }
+          else
+            {
+              channelPresent = true;
+              m_channelElement->SetTapsDelaySize (m_beamRefinement->GetNumberOfTapsPresent ());
+            }
+        }
+
+      if (m_beamRefinement->IsSectorIdOrderPresent ())
+        {
+          if (m_beamRefinement->GetNumberOfBeams () != 0)
+            {
+              if (m_beamRefinement->GetEdmgExtensionFlag ())
+                {
+                  m_edmgChannelElement->SetSectorIdOrderSize (m_beamRefinement->GetNumberOfBeams ());
+                }
+              else
+                {
+                  channelPresent = true;
+                  m_channelElement->SetSectorIdSize (m_beamRefinement->GetNumberOfBeams ());
+                }
+            }
+          else
+            {
+              if (m_beamRefinement->GetEdmgExtensionFlag ())
+                {
+                  m_edmgChannelElement->SetSectorIdOrderSize (m_beamRefinement->GetExtendedNumberOfMeasurements ());
+                }
+              else
+                {
+                  channelPresent = true;
+                  m_channelElement->SetSectorIdSize (m_beamRefinement->GetNumberOfMeasurements ());
+                }
+            }
+        }
+
+      if ((m_beamRefinement->GetSectorSweepFrameType () == BRP_FRAME) || (m_beamRefinement->GetSectorSweepFrameType () == BEAM_TRACKING_FBCK))
+        {
+          if (m_beamRefinement->GetEdmgExtensionFlag ())
+            {
+              m_edmgChannelElement->SetBrpCdownSize (m_beamRefinement->GetExtendedNumberOfMeasurements ());
+            }
+        }
+
+      if (channelPresent)
+        {
+          i = m_channelElement->Deserialize (i);
+        }
+
+      if (m_beamRefinement->IsEdmgChannelMeasurementPresent ())
+        {
+          i = m_edmgChannelElement->Deserialize (i);
+        }
+    }
+
   /* Deserialize Infomration Elements */
   i = DeserializeInformationElements (i);
 
   return i.GetDistanceFrom (start);
+}
+
+Ptr<BeamRefinementElement>
+ExtInformationResponse::GetBeamRefinementElement (void) const
+{
+  return m_beamRefinement;
+}
+Ptr<ChannelMeasurementFeedbackElement>
+ExtInformationResponse::GetChannelMeasurementElement (void) const
+{
+  return m_channelElement;
+}
+
+Ptr<EDMGChannelMeasurementFeedbackElement>
+ExtInformationResponse::GetEDMGChannelMeasurementElement (void) const
+{
+  return m_edmgChannelElement;
+}
+
+void
+ExtInformationResponse::SetBeamRefinementElement (Ptr<BeamRefinementElement> element)
+{
+  m_beamRefinement = element;
+}
+
+void
+ExtInformationResponse::SetChannelMeasurementElement (Ptr<ChannelMeasurementFeedbackElement> element)
+{
+  m_channelElement = element;
+}
+
+void
+ExtInformationResponse::SetEdmgChannelMeasurementElement (Ptr<EDMGChannelMeasurementFeedbackElement> element)
+{
+  m_edmgChannelElement = element;
 }
 
 /***************************************************
@@ -4650,6 +4834,15 @@ ExtBrpFrame::GetSerializedSize (void) const
     {
       size += (*iter)->GetSerializedSize ();
     }
+  if (m_partialSlsElement != 0)
+    size += m_partialSlsElement->GetSerializedSize ();
+  if (m_edmgBrpRequestElement != 0)
+    size += m_edmgBrpRequestElement->GetSerializedSize ();
+  for (EDMGChannelMeasurementFeedbackElementList::const_iterator iter = m_edmgList.begin (); iter != m_edmgList.end (); iter++)
+    {
+      size += (*iter)->GetSerializedSize ();
+    }
+
   return size;
 }
 
@@ -4664,32 +4857,205 @@ ExtBrpFrame::Serialize (Buffer::Iterator start) const
     {
       i = (*iter)->Serialize (i);
     }
+  if (m_partialSlsElement != 0)
+    i = m_partialSlsElement->Serialize (i);
+  if (m_edmgBrpRequestElement != 0)
+    i = m_edmgBrpRequestElement->Serialize (i);
+  for (EDMGChannelMeasurementFeedbackElementList::const_iterator iter = m_edmgList.begin (); iter != m_edmgList.end (); iter++)
+    {
+      i = (*iter)->Serialize (i);
+    }
 }
 
 uint32_t
 ExtBrpFrame::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
-//  Buffer::Iterator m;
-//  uint8_t id, length;
+  Buffer::Iterator m;
 
   m_dialogToken = i.ReadU8 ();
   i = m_brpRequestField.Deserialize (i);
   i = m_beamRefinementElement.Deserialize (i);
 
-  /* Deserialize Information Elements */
-  if (!i.IsEnd ())
+  uint16_t numberOfMeasurements;
+  uint16_t currentMeasurements;
+
+  /* Calculate the limit of the number of measurements that can fit within a single Channel Measurement/ EDMG Channel Measurement feedback element,
+   * considering that each information element has a maximum size of 255 bytes. */
+
+  // Calculate the size of a single measurement according to the fields that are present
+  uint8_t channelMeasurementSize = 0;
+  uint8_t edmgChannelMeasurementSize = 0;
+
+  if (m_beamRefinementElement.IsSnrPresent ())
+    channelMeasurementSize += 1;
+  if (m_beamRefinementElement.IsChannelMeasurementPresent ())
     {
-//      WifiInformationElement *element;
-//      do
-//        {
-//          m = i;
-//          i = DeserializeElementID (i, id, length);
-//          m_list.push_back (element);
-//        }
-//      while (i.GetDistanceFrom (m) != 0);
+      uint8_t tapSize;
+      switch (m_beamRefinementElement.GetNumberOfTapsPresent ()) {
+        case TAPS_1:
+          tapSize = 2;
+          break;
+        case TAPS_5:
+          tapSize = 5 * 2;
+          break;
+        case TAPS_15:
+          tapSize = 15 * 2;
+          break;
+        case TAPS_63:
+          tapSize = 63 * 2;
+          break;
+        default:
+          NS_FATAL_ERROR ("Value for Number of Taps present is not allowed");
+          break;
+        }
+      channelMeasurementSize += tapSize;
+    }
+  if (m_beamRefinementElement.IsSectorIdOrderPresent ())
+    {
+      if (m_beamRefinementElement.GetEdmgExtensionFlag ())
+        edmgChannelMeasurementSize += 3;
+      else
+        channelMeasurementSize += 1;
+    }
+  if (m_beamRefinementElement.GetSectorSweepFrameType () == BRP_FRAME && m_beamRefinementElement.GetEdmgExtensionFlag ())
+    edmgChannelMeasurementSize += 1;
+
+  // Calculate the additional space taken within the element by other fields
+  uint8_t channelAdditionalSize = 2;
+  uint8_t edmgChannelAdditionalSize = 0;
+
+  if (m_beamRefinementElement.GetEdmgExtensionFlag ())
+    edmgChannelAdditionalSize += 3;
+
+  if (m_beamRefinementElement.IsTapDelayPresent ())
+    {
+      uint8_t tapSize;
+      switch (m_beamRefinementElement.GetNumberOfTapsPresent ()) {
+        case TAPS_1:
+          tapSize = 1;
+          break;
+        case TAPS_5:
+          tapSize = 5;
+          break;
+        case TAPS_15:
+          tapSize = 15;
+          break;
+        case TAPS_63:
+          tapSize = 63;
+          break;
+        default:
+          NS_FATAL_ERROR ("Value for Number of Taps present is not allowed");
+          break;
+        }
+      if (m_beamRefinementElement.GetEdmgExtensionFlag ())
+        edmgChannelAdditionalSize += (tapSize * 2);
+      else
+        channelAdditionalSize += (tapSize * 1);
     }
 
+  // Calculate the maximum number of measurements within one element (Note: for simplicity we assume that we have the same number of channel and
+  // EDMG channel measurement feedback elements, so we calculate this according to the element that fits less measurements)
+  uint8_t maxMeasurements = 0;
+  if (channelMeasurementSize > 0)
+    {
+      maxMeasurements = (255 - channelAdditionalSize) / channelMeasurementSize;
+    }
+  if (edmgChannelMeasurementSize > 0)
+    {
+      uint8_t edmgMaxMeasurements = (255 - edmgChannelAdditionalSize) / edmgChannelMeasurementSize;
+      if (edmgMaxMeasurements < maxMeasurements)
+        maxMeasurements = edmgMaxMeasurements;
+    }
+
+  // Deserialize the channel/EDMG channel measurement feedback elements
+  if (m_beamRefinementElement.GetEdmgExtensionFlag ())
+    {
+      numberOfMeasurements = m_beamRefinementElement.GetExtendedNumberOfMeasurements ();
+    }
+  else
+    {
+      numberOfMeasurements = m_beamRefinementElement.GetNumberOfMeasurements ();
+    }
+
+  /* Deserialize Channel Measurement Feedback Elements */
+  while (numberOfMeasurements != 0)
+    {
+      Ptr<ChannelMeasurementFeedbackElement> channelMeasurement = Create<ChannelMeasurementFeedbackElement> ();
+      if (numberOfMeasurements > maxMeasurements)
+        currentMeasurements = maxMeasurements;
+      else
+        currentMeasurements = numberOfMeasurements;
+      numberOfMeasurements -= currentMeasurements;
+      if (m_beamRefinementElement.IsSnrPresent ())
+        {
+          channelMeasurement->SetSnrListSize (currentMeasurements);
+        }
+      if (m_beamRefinementElement.IsChannelMeasurementPresent ())
+        {
+          channelMeasurement->SetChannelMeasurementSize (currentMeasurements);
+          channelMeasurement->SetTapComponentsSize (m_beamRefinementElement.GetNumberOfTapsPresent ());
+        }
+      if (m_beamRefinementElement.IsTapDelayPresent () && (!m_beamRefinementElement.GetEdmgExtensionFlag ()))
+        {
+           channelMeasurement->SetTapsDelaySize (m_beamRefinementElement.GetNumberOfTapsPresent ());
+        }
+      if (m_beamRefinementElement.IsSectorIdOrderPresent ()  && (!m_beamRefinementElement.GetEdmgExtensionFlag ()))
+        {
+           channelMeasurement->SetSectorIdSize (currentMeasurements);
+        }
+     m = i;
+     i = channelMeasurement->DeserializeIfPresent (i);
+     if (i.GetDistanceFrom (m) != 0)
+       {
+         m_list.push_back (channelMeasurement);
+       }
+     else
+       {
+         break;
+       }
+   }
+
+  m_partialSlsElement = Create<EdmgPartialSectorLevelSweep> ();
+  i = m_partialSlsElement->DeserializeIfPresent (i);
+  m_edmgBrpRequestElement = Create<EdmgBrpRequestElement> ();
+  i = m_edmgBrpRequestElement->DeserializeIfPresent (i);
+  /* Deserialize EDMG Channel Measurement Feedback Elements */
+  if (m_beamRefinementElement.GetEdmgExtensionFlag ())
+    {
+      numberOfMeasurements = m_beamRefinementElement.GetExtendedNumberOfMeasurements ();
+      while (numberOfMeasurements != 0)
+        {
+          Ptr<EDMGChannelMeasurementFeedbackElement> edmgChannelMeasurement = Create<EDMGChannelMeasurementFeedbackElement> ();
+          if (numberOfMeasurements > maxMeasurements)
+            currentMeasurements = maxMeasurements;
+          else
+            currentMeasurements = numberOfMeasurements;
+          numberOfMeasurements -= currentMeasurements;
+          if (m_beamRefinementElement.IsTapDelayPresent ())
+            {
+               edmgChannelMeasurement->SetTapsDelaySize (m_beamRefinementElement.GetNumberOfTapsPresent ());
+            }
+          if (m_beamRefinementElement.IsSectorIdOrderPresent ())
+            {
+               edmgChannelMeasurement->SetSectorIdOrderSize (currentMeasurements);
+            }
+         if (m_beamRefinementElement.GetSectorSweepFrameType () == BRP_FRAME)
+           {
+             edmgChannelMeasurement->SetBrpCdownSize (currentMeasurements);
+           }
+         m = i;
+         i = edmgChannelMeasurement->DeserializeIfPresent (i);
+         if (i.GetDistanceFrom (m) != 0)
+           {
+             m_edmgList.push_back (edmgChannelMeasurement);
+           }
+         else
+           {
+             break;
+           }
+        }
+    }
   return i.GetDistanceFrom (start);
 }
 
@@ -4717,6 +5083,25 @@ ExtBrpFrame::AddChannelMeasurementFeedback (ChannelMeasurementFeedbackElement *e
   m_list.push_back (element);
 }
 
+
+void
+ExtBrpFrame::SetEdmgPartialSlsElement (EdmgPartialSectorLevelSweep *element)
+{
+  m_partialSlsElement = element;
+}
+
+void
+ExtBrpFrame::SetEdmgBrpRequestElement (EdmgBrpRequestElement *element)
+{
+  m_edmgBrpRequestElement = element;
+}
+
+void
+ExtBrpFrame::AddEdmgChannelMeasurementFeedback (EDMGChannelMeasurementFeedbackElement *element)
+{
+  m_edmgList.push_back (element);
+}
+
 uint8_t
 ExtBrpFrame::GetDialogToken (void) const
 {
@@ -4740,6 +5125,25 @@ ExtBrpFrame::GetChannelMeasurementFeedbackList (void) const
 {
   return m_list;
 }
+
+Ptr<EdmgPartialSectorLevelSweep>
+ExtBrpFrame::GetEdmgPartialSlsElement (void) const
+{
+  return m_partialSlsElement;
+}
+
+Ptr<EdmgBrpRequestElement>
+ExtBrpFrame::GetEdmgBrpRequestElement(void) const
+{
+  return m_edmgBrpRequestElement;
+}
+
+EDMGChannelMeasurementFeedbackElementList
+ExtBrpFrame::GetEdmgChannelMeasurementFeedbackList (void) const
+{
+  return m_edmgList;
+}
+
 
 /***************************************************
 *          MIMO BF Setup frame (9.6.21.4)
@@ -4998,8 +5402,134 @@ uint32_t
 ExtMimoBfFeedbackFrame::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
+  Buffer::Iterator m;
+
   m_dialogToken = i.ReadU8 ();
   i = m_mimoFeedbackControl.Deserialize (i);
+
+  uint8_t channelMeasurementSize = 1;
+  uint8_t edmgChannelMeasurementSize = 4;
+  if (m_mimoFeedbackControl.IsChannelMeasurementPresent ())
+    {
+      uint8_t tapSize;
+      switch (m_mimoFeedbackControl.GetNumberOfTapsPresent ()) {
+        case TAPS_1:
+          tapSize = 2;
+          break;
+        case TAPS_5:
+          tapSize = 5 * 2;
+          break;
+        case TAPS_15:
+          tapSize = 15 * 2;
+          break;
+        case TAPS_63:
+          tapSize = 63 * 2;
+          break;
+        default:
+          NS_FATAL_ERROR ("Value for Number of Taps present is not allowed");
+          break;
+        }
+      channelMeasurementSize += tapSize;
+    }
+
+  // Calculate the additional space taken within the element by other fields
+  uint8_t channelAdditionalSize = 2;
+  uint8_t edmgChannelAdditionalSize = 3;
+
+  if (m_mimoFeedbackControl.IsTapDelayPresent ())
+    {
+      uint8_t tapSize;
+      switch (m_mimoFeedbackControl.GetNumberOfTapsPresent ()) {
+        case TAPS_1:
+          tapSize = 1 * 2;
+          break;
+        case TAPS_5:
+          tapSize = 5 * 2;
+          break;
+        case TAPS_15:
+          tapSize = 15 * 2;
+          break;
+        case TAPS_63:
+          tapSize = 63 * 2;
+          break;
+        default:
+          NS_FATAL_ERROR ("Value for Number of Taps present is not allowed");
+          break;
+        }
+        edmgChannelAdditionalSize += tapSize;
+    }
+
+  // Calculate the maximum number of measurements within one element (Note: for simplicity we assume that we have the same number of channel and
+  // EDMG channel measurement feedback elements, so we calculate this according to the element that fits less measurements)
+  uint8_t maxMeasurements = (255 - channelAdditionalSize) / channelMeasurementSize;
+  uint8_t edmgMaxMeasurements = (255 - edmgChannelAdditionalSize) / edmgChannelMeasurementSize;
+  if (edmgMaxMeasurements < maxMeasurements)
+     maxMeasurements = edmgMaxMeasurements;
+
+  // Deserialize the channel/EDMG channel measurement feedback elements
+  uint8_t rxAntennas = m_mimoFeedbackControl.GetNumberOfRxAntennas ();
+  uint8_t txAntennas = m_mimoFeedbackControl.GetNumberOfTxAntennas ();
+  uint16_t numberOfMeasurements = m_mimoFeedbackControl.GetNumberOfTXSectorCombinationsPresent ()
+          * rxAntennas * txAntennas;
+  uint8_t currentMeasurements = 0;
+  /* Deserialize Channel Measurement Feedback Elements */
+  while (numberOfMeasurements != 0)
+    {
+      Ptr<ChannelMeasurementFeedbackElement> channelMeasurement = Create<ChannelMeasurementFeedbackElement> ();
+      if (numberOfMeasurements > maxMeasurements)
+        currentMeasurements = (maxMeasurements / ( txAntennas * rxAntennas )) * (txAntennas * rxAntennas);
+      else
+        currentMeasurements = numberOfMeasurements;
+      numberOfMeasurements -= currentMeasurements;
+      channelMeasurement->SetSnrListSize (currentMeasurements);
+      if (m_mimoFeedbackControl.IsChannelMeasurementPresent ())
+        {
+          channelMeasurement->SetChannelMeasurementSize (currentMeasurements);
+          channelMeasurement->SetTapComponentsSize (m_mimoFeedbackControl.GetNumberOfTapsPresent ());
+        }
+     m = i;
+     i = channelMeasurement->DeserializeIfPresent (i);
+     if (i.GetDistanceFrom (m) != 0)
+       {
+         m_channelMeasurementFeedbackList.push_back (channelMeasurement);
+       }
+     else
+       {
+         break;
+       }
+   }
+  /* Deserialize EDMG Channel Measurement Feedback Elements */
+  numberOfMeasurements = m_mimoFeedbackControl.GetNumberOfTXSectorCombinationsPresent ()
+          * m_mimoFeedbackControl.GetNumberOfRxAntennas ()
+          * m_mimoFeedbackControl.GetNumberOfTxAntennas ();
+  currentMeasurements = 0;
+  while (numberOfMeasurements != 0)
+    {
+      Ptr<EDMGChannelMeasurementFeedbackElement> edmgChannelMeasurement = Create<EDMGChannelMeasurementFeedbackElement> ();
+
+      if (numberOfMeasurements > maxMeasurements)
+        currentMeasurements = (maxMeasurements / ( txAntennas * rxAntennas )) * (txAntennas * rxAntennas);
+      else
+         currentMeasurements = numberOfMeasurements;
+      numberOfMeasurements -= currentMeasurements;
+      if (m_mimoFeedbackControl.IsTapDelayPresent ())
+         {
+           edmgChannelMeasurement->SetTapsDelaySize (m_mimoFeedbackControl.GetNumberOfTapsPresent ());
+         }
+      edmgChannelMeasurement->SetSectorIdOrderSize (currentMeasurements);
+      edmgChannelMeasurement->SetBrpCdownSize (currentMeasurements);
+      m = i;
+      i = edmgChannelMeasurement->DeserializeIfPresent (i);
+      if (i.GetDistanceFrom (m) != 0)
+        {
+           m_edmgChannelMeasurementFeedbackList.push_back (edmgChannelMeasurement);
+        }
+      else
+        {
+          break;
+        }
+    }
+  // To do: Add deserialization for Digital Feedback
   return i.GetDistanceFrom (start);
 }
 

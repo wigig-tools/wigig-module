@@ -53,6 +53,8 @@ enum WifiPhyStandard
   WIFI_PHY_STANDARD_80211n_5GHZ,
   /** PHY for 802.11ad (Clause 21) */
   WIFI_PHY_STANDARD_80211ad,
+  /** PHY for 802.11ay (Clause 29) */
+  WIFI_PHY_STANDARD_80211ay,
   /** VHT PHY (clause 22) */
   WIFI_PHY_STANDARD_80211ac,
   /** HE PHY for the 2.4 GHz band (clause 26) */
@@ -68,8 +70,9 @@ enum WifiPhyStandard
  * Identifies the TRN Field to appended to the end of the packet.
  */
 enum PacketType {
-  TRN_R = 0,
-  TRN_T = 1,
+  TRN_R  = 0,
+  TRN_T  = 1,
+  TRN_RT = 2,
 };
 
 } //namespace ns3

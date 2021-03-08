@@ -29,6 +29,10 @@ namespace ns3 {
 class NetDevice;
 class PropagationLossModel;
 class PropagationDelayModel;
+class Packet;
+class Time;
+class WifiPpdu;
+class WifiTxVector;
 
 enum ACTIVITY_TYPE {
   TX_ACTIVITY = 0,
@@ -57,8 +61,8 @@ public:
   virtual ~DmgWifiChannel ();
 
   //inherited from Channel.
-  virtual uint32_t GetNDevices (void) const;
-  virtual Ptr<NetDevice> GetDevice (uint32_t i) const;
+  virtual std::size_t GetNDevices (void) const;
+  virtual Ptr<NetDevice> GetDevice (std::size_t i) const;
 
   /**
    * Adds the given DmgWifiPhy to the PHY list
@@ -75,18 +79,18 @@ public:
    * \param delay the new propagation delay model.
    */
   void SetPropagationDelayModel (const Ptr<PropagationDelayModel> delay);
+
   /**
-   * \param sender the phy object from which the packet is originating.
-   * \param packet the packet to send
-   * \param txPowerDbm the tx power associated to the packet, in dBm
-   * \param duration the transmission duration associated with the packet
+   * \param sender the PHY object from which the packet is originating.
+   * \param ppdu the PPDU to send
+   * \param txPowerDbm the TX power associated to the packet, in dBm
    *
    * This method should not be invoked by normal users. It is
    * currently invoked only from DmgWifiPhy::StartTx.  The channel
-   * attempts to deliver the packet to all other DmgWifiPhy objects
+   * attempts to deliver the PPDU to all other DmgWifiPhy objects
    * on the channel (except for the sender).
    */
-  void Send (Ptr<DmgWifiPhy> sender, Ptr<const Packet> packet, double txPowerDbm, Time duration) const;
+  void Send (Ptr<DmgWifiPhy> sender, Ptr<const WifiPpdu> ppdu, double txPowerDbm) const;
   /**
    * Send AGC Subfield
    * \param sender
@@ -119,14 +123,15 @@ public:
    * \return the number of stream indices assigned by this model
    */
   int64_t AssignStreams (int64_t stream);
+
   /**
    * Add bloackage on a certain path between two WifiPhy objects.
    * \param srcWifiPhy
    * \param dstWifiPhy
    */
-  void AddBlockage (double (*blockage)(), Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy);
+  void AddBlockage (double (*blockage)(), Ptr<DmgWifiPhy> srcWifiPhy, Ptr<DmgWifiPhy> dstWifiPhy);
   void RemoveBlockage (void);
-  void AddPacketDropper (bool (*dropper)(), Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy);
+  void AddPacketDropper (bool (*dropper)(), Ptr<DmgWifiPhy> srcWifiPhy, Ptr<DmgWifiPhy> dstWifiPhy);
   void RemovePacketDropper (void);
   /**
    * Record PHY Activity.
@@ -158,15 +163,14 @@ private:
 
   /**
    * This method is scheduled by Send for each associated DmgWifiPhy.
-   * The method then calls the corresponding DmgWifiPhy that the first
+   * The method PPDU calls the corresponding DmgWifiPhy that the first
    * bit of the packet has arrived.
    *
    * \param receiver the device to which the packet is destined
-   * \param packet the packet being sent
-   * \param txPowerDbm the tx power associated to the packet being sent (dBm)
-   * \param duration the transmission duration associated with the packet being sent
+   * \param ppdu the PPDU being sent
+   * \param txPowerDbm the TX power associated to the packet being sent (dBm)
    */
-  static void Receive (Ptr<DmgWifiPhy> receiver, Ptr<Packet> packet, double txPowerDbm, Time duration);
+  static void Receive (Ptr<DmgWifiPhy> receiver, Ptr<WifiPpdu> ppdu, double txPowerDbm);
   /**
    * Generic function for receiving any subfield in TRN-Block.
    * \param i
@@ -209,8 +213,8 @@ private:
   PhyList m_phyList;                   //!< List of DmgWifiPhys connected to this DmgWifiChannel
   Ptr<PropagationLossModel> m_loss;    //!< Propagation loss model
   Ptr<PropagationDelayModel> m_delay;  //!< Propagation delay model
-  double (*m_blockage) ();              //!< Blockage model.
-  bool (*m_packetDropper) ();           //!< Packet Dropper Model.
+  double (*m_blockage) ();             //!< Blockage model.
+  bool (*m_packetDropper) ();          //!< Packet Dropper Model.
   Ptr<WifiPhy> m_srcWifiPhy;
   Ptr<WifiPhy> m_dstWifiPhy;
   std::vector<double> m_receivedSignalStrength;    //!< List of received signal strength.

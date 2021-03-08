@@ -19,8 +19,12 @@
  *          Cecchi Niccolò <insa@igeek.it>
  */
 
-#include "qos-utils.h"
 #include "ns3/socket.h"
+#include "ns3/queue-item.h"
+#include "qos-utils.h"
+#include "wifi-mac-header.h"
+#include "mgt-headers.h"
+#include "ctrl-headers.h"
 
 namespace ns3 {
 
@@ -123,7 +127,7 @@ GetTid (Ptr<const Packet> packet, const WifiMacHeader hdr)
             {
             case WifiActionHeader::BLOCK_ACK_ADDBA_REQUEST:
               {
-                MgtAddBaResponseHeader reqHdr;
+                MgtAddBaRequestHeader reqHdr;
                 pkt->RemoveHeader (reqHdr);
                 return reqHdr.GetTid ();
               }
@@ -154,6 +158,29 @@ GetTid (Ptr<const Packet> packet, const WifiMacHeader hdr)
     {
       NS_FATAL_ERROR ("Packet has no Traffic ID");
     }
+}
+
+uint8_t
+SelectQueueByDSField (Ptr<QueueItem> item)
+{
+  uint8_t dscp, priority = 0;
+  if (item->GetUint8Value (QueueItem::IP_DSFIELD, dscp))
+    {
+      // if the QoS map element is implemented, it should be used here
+      // to set the priority.
+      // User priority is set to the three most significant bits of the DS field
+      priority = dscp >> 5;
+    }
+
+  // replace the priority tag
+  SocketPriorityTag priorityTag;
+  priorityTag.SetPriority (priority);
+  item->GetPacket ()->ReplacePacketTag (priorityTag);
+
+  // if the admission control were implemented, here we should check whether
+  // the access category assigned to the packet should be downgraded
+
+  return static_cast<uint8_t> (QosUtilsMapTidToAc (priority));
 }
 
 

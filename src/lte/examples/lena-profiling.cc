@@ -38,7 +38,7 @@ main (int argc, char *argv[])
   uint32_t nUe = 1;
   uint32_t nFloors = 0;
   double simTime = 1.0;
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
 
   cmd.AddValue ("nEnb", "Number of eNodeBs per floor", nEnbPerFloor);
   cmd.AddValue ("nUe", "Number of UEs", nUe);
@@ -192,8 +192,6 @@ main (int argc, char *argv[])
       lteHelper->ActivateDataRadioBearer (ueDev, bearer);
     }
 
-
-  BuildingsHelper::MakeMobilityModelConsistent ();
 
   Simulator::Stop (Seconds (simTime));
   lteHelper->EnableTraces ();

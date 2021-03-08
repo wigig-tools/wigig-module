@@ -18,8 +18,15 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "wifi-mac.h"
 #include "ns3/log.h"
+#include "ns3/packet.h"
+#include "wifi-mac.h"
+#include "txop.h"
+#include "ssid.h"
+#include "wifi-net-device.h"
+#include "ht-configuration.h"
+#include "vht-configuration.h"
+#include "he-configuration.h"
 
 namespace ns3 {
 
@@ -85,14 +92,14 @@ WifiMac::GetDefaultCtsAckTimeout (void)
 Time
 WifiMac::GetDefaultBasicBlockAckDelay (void)
 {
-  //This value must be rivisited
+  //This value must be revisited
   return MicroSeconds (250);
 }
 
 Time
 WifiMac::GetDefaultCompressedBlockAckDelay (void)
 {
-  //This value must be rivisited
+  //This value must be revisited
   //CompressedBlockAckSize 32 * 8 * time it takes to transfer at the lowest rate (at 6 Mbit/s) + aPhy-StartDelay (33)
   return MicroSeconds (76);
 }
@@ -117,44 +124,13 @@ WifiMac::GetDefaultCompressedBlockAckTimeout (void)
   return blockAckTimeout;
 }
 
-void
-WifiMac::SetBasicBlockAckTimeout (Time blockAckTimeout)
-{
-  //this method must be implemented by QoS WifiMacs
-}
-
-Time
-WifiMac::GetBasicBlockAckTimeout (void) const
-{
-  //this method must be implemented by QoS WifiMacs
-  return MicroSeconds (0);
-}
-
-void
-WifiMac::SetCompressedBlockAckTimeout (Time blockAckTimeout)
-{
-  //this methos must be implemented by QoS WifiMacs
-}
-
-Time
-WifiMac::GetCompressedBlockAckTimeout (void) const
-{
-  //this method must be implemented by QoS WifiMacs
-  return MicroSeconds (0);
-}
-
 TypeId
 WifiMac::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::WifiMac")
     .SetParent<Object> ()
     .SetGroupName ("Wifi")
-    .AddAttribute ("CtsTimeout", "When this timeout expires, the RTS/CTS handshake has failed.",
-                   TimeValue (GetDefaultCtsAckTimeout ()),
-                   MakeTimeAccessor (&WifiMac::SetCtsTimeout,
-                                     &WifiMac::GetCtsTimeout),
-                   MakeTimeChecker ())
-    .AddAttribute ("AckTimeout", "When this timeout expires, the DATA/ACK handshake has failed.",
+    .AddAttribute ("AckTimeout", "When this timeout expires, the Data/Ack handshake has failed.",
                    TimeValue (GetDefaultCtsAckTimeout ()),
                    MakeTimeAccessor (&WifiMac::GetAckTimeout,
                                      &WifiMac::SetAckTimeout),
@@ -196,7 +172,7 @@ WifiMac::GetTypeId (void)
                    MakeTimeChecker ())
     .AddAttribute ("MaxPropagationDelay", "The maximum propagation delay. Unused for now.",
                    TimeValue (GetDefaultMaxPropagationDelay ()),
-                   MakeTimeAccessor (&WifiMac::m_maxPropagationDelay),
+                   MakeTimeAccessor (&WifiMac::SetMaxPropagationDelay),
                    MakeTimeChecker ())
     .AddAttribute ("Ssid", "The ssid we want to belong to.",
                    SsidValue (Ssid ("default")),
@@ -226,14 +202,26 @@ WifiMac::GetTypeId (void)
                      "A packet has been dropped in the MAC layer after it has been passed up from the physical layer.",
                      MakeTraceSourceAccessor (&WifiMac::m_macRxDropTrace),
                      "ns3::Packet::TracedCallback")
-    //Not currently implemented in this device
-    /*
-    .AddTraceSource ("Sniffer",
-                     "Trace source simulating a non-promiscuous packet sniffer attached to the device",
-                     MakeTraceSourceAccessor (&WifiMac::m_snifferTrace))
-    */
   ;
   return tid;
+}
+
+void
+WifiMac::DoDispose ()
+{
+  m_device = 0;
+}
+
+void
+WifiMac::SetDevice (const Ptr<NetDevice> device)
+{
+  m_device = device;
+}
+
+Ptr<NetDevice>
+WifiMac::GetDevice (void) const
+{
+  return m_device;
 }
 
 void
@@ -241,12 +229,6 @@ WifiMac::SetMaxPropagationDelay (Time delay)
 {
   NS_LOG_FUNCTION (this << delay);
   m_maxPropagationDelay = delay;
-}
-
-Time
-WifiMac::GetMsduLifetime (void) const
-{
-  return Seconds (10);
 }
 
 Time
@@ -328,6 +310,9 @@ WifiMac::ConfigureStandard (WifiPhyStandard standard)
     case WIFI_PHY_STANDARD_80211ad:
       Configure80211ad ();
       break;
+    case WIFI_PHY_STANDARD_80211ay:
+      Configure80211ay ();
+      break;
     case WIFI_PHY_STANDARD_80211ax_2_4GHZ:
       Configure80211ax_2_4Ghz ();
       break;
@@ -356,7 +341,6 @@ WifiMac::Configure80211a (void)
   SetSlot (MicroSeconds (9));
   SetEifsNoDifs (MicroSeconds (16 + 44));
   SetPifs (MicroSeconds (16 + 9));
-  SetCtsTimeout (MicroSeconds (16 + 44 + 9 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
   SetAckTimeout (MicroSeconds (16 + 44 + 9 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
 }
 
@@ -368,7 +352,6 @@ WifiMac::Configure80211b (void)
   SetSlot (MicroSeconds (20));
   SetEifsNoDifs (MicroSeconds (10 + 304));
   SetPifs (MicroSeconds (10 + 20));
-  SetCtsTimeout (MicroSeconds (10 + 304 + 20 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
   SetAckTimeout (MicroSeconds (10 + 304 + 20 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
 }
 
@@ -384,7 +367,6 @@ WifiMac::Configure80211g (void)
   SetSlot (MicroSeconds (20));
   SetEifsNoDifs (MicroSeconds (10 + 304));
   SetPifs (MicroSeconds (10 + 20));
-  SetCtsTimeout (MicroSeconds (10 + 304 + 20 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
   SetAckTimeout (MicroSeconds (10 + 304 + 20 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
 }
 
@@ -396,7 +378,6 @@ WifiMac::Configure80211_10Mhz (void)
   SetSlot (MicroSeconds (13));
   SetEifsNoDifs (MicroSeconds (32 + 88));
   SetPifs (MicroSeconds (32 + 13));
-  SetCtsTimeout (MicroSeconds (32 + 88 + 13 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
   SetAckTimeout (MicroSeconds (32 + 88 + 13 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
 }
 
@@ -408,7 +389,6 @@ WifiMac::Configure80211_5Mhz (void)
   SetSlot (MicroSeconds (21));
   SetEifsNoDifs (MicroSeconds (64 + 176));
   SetPifs (MicroSeconds (64 + 21));
-  SetCtsTimeout (MicroSeconds (64 + 176 + 21 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
   SetAckTimeout (MicroSeconds (64 + 176 + 21 + GetDefaultMaxPropagationDelay ().GetMicroSeconds () * 2));
 }
 
@@ -450,8 +430,10 @@ WifiMac::Configure80211ax_5Ghz (void)
 {
   NS_LOG_FUNCTION (this);
   Configure80211ac ();
+  SetCompressedBlockAckTimeout (GetSifs () + GetSlot () + MicroSeconds (85) + GetDefaultMaxPropagationDelay () * 2);
 }
 
+//// WIGIG ////
 /*
  * Physical Layer Characteristics for IEEE 802.11ad.
  */
@@ -461,27 +443,50 @@ WifiMac::Configure80211ad (void)
   SetRifs (MicroSeconds (1));	/* aRIFSTime in Table 21-31 */
   SetSifs (MicroSeconds (3));	/* aSIFSTime in Table 21-31 */
   SetSlot (MicroSeconds (5));	/* aSlotTime in Table 21-31 */
-  SetMaxPropagationDelay (NanoSeconds (100));	/* aAirPropagationTime << 0.1usec in Table 21-31 */
-  SetPifs(GetSifs() + GetSlot());	/* 802.11-2007 9.2.10 */
-  SetEifsNoDifs (GetSifs () + NanoSeconds (3091));
-  /* DMG CTS is sent using Control-MCS0, DMG CTS Size = 20 Bytes, PayloadDuration = 619 ns, TotalTx = 3062 */
-  SetCtsTimeout (GetSifs () + NanoSeconds (14036) + GetSlot () + GetMaxPropagationDelay () * 2);
+  SetMaxPropagationDelay (NanoSeconds (100));	/* aAirPropagationTime << 0.1 usec in Table 21-31 */
+  SetPifs (GetSifs () + GetSlot ());	/* 802.11-2007 9.2.10 */
+  SetEifsNoDifs (GetSifs () + NanoSeconds (13164));
+  /* ACK is sent using SC-MCS1, ACK Size = 14 Bytes, PayloadDuration = 618 ns, TotalTx = 3091 ns */
+//  SetAckTimeout (GetSifs () + NanoSeconds (3091) + GetSlot () + GetMaxPropagationDelay () * 2);
+  /* We need to distinguish between two ACK MCS */
+  /* ACK is sent using MCS-0, ACK Size = 14 Bytes, PayloadDuration = 4218 ns, TotalTx = 13164 ns */
+  SetAckTimeout (GetSifs () + NanoSeconds (13164) + GetSlot () + GetMaxPropagationDelay () * 2);
+  /* BlockAck is sent using either MCS-0 or SC-MCS-1/4, we assume MCS-0 in our calculation */
+  /* BasicBlockAck Size = 152 Bytes */
+  SetBasicBlockAckTimeout (GetSifs () + GetSlot () + MicroSeconds (52) + GetDefaultMaxPropagationDelay () * 2);
+  /* CompressedBlockAck Size = 32 Bytes = 18.836 ns using MCS-0 */
+  SetCompressedBlockAckTimeout (GetSifs () + GetSlot () + MicroSeconds (19) + GetDefaultMaxPropagationDelay () * 2);
+}
+
+/*
+ * Physical Layer Characteristics for IEEE 802.11ay.
+ */
+void
+WifiMac::Configure80211ay (void)
+{
+  SetRifs (MicroSeconds (1));	/* aRIFSTime in Table 21-31 */
+  SetSifs (MicroSeconds (3));	/* aSIFSTime in Table 21-31 */
+  SetSlot (MicroSeconds (5));	/* aSlotTime in Table 21-31 */
+  SetMaxPropagationDelay (NanoSeconds (100));	/* aAirPropagationTime << 0.1 usec in Table 21-31 */
+  SetPifs (GetSifs () + GetSlot ());	/* 802.11-2007 9.2.10 */
+  SetEifsNoDifs (GetSifs () + NanoSeconds (14473));
   /* ACK is sent using SC-MCS1, ACK Size = 14 Bytes, PayloadDuration = 618 ns, TotalTx = 3091 */
 //  SetAckTimeout (GetSifs () + NanoSeconds (3091) + GetSlot () + GetMaxPropagationDelay () * 2);
   /* We need to distinguish between two ACK MCS */
-  SetAckTimeout (GetSifs () + NanoSeconds (26836) + GetSlot () + GetMaxPropagationDelay () * 2);
-  /* BlockAck is sent using SC-MCS1/4, we assume MCS1 in our calculation */
-  /* BasicBlockAck Size = 152Bytes */
-  SetBasicBlockAckTimeout (GetSifs () + GetSlot () + NanoSeconds (4255) + GetDefaultMaxPropagationDelay () * 2);
-  /* CompressedBlockAck Size = 32Bytes */
-  SetCompressedBlockAckTimeout (GetSifs () + GetSlot () + NanoSeconds (3062) + GetDefaultMaxPropagationDelay () * 2);
+  SetAckTimeout (GetSifs () + NanoSeconds (14473) + GetSlot () + GetMaxPropagationDelay () * 2);
+  /* BlockAck is sent using either MCS-0 or SC-MCS-1/4, we assume MCS-0 in our calculation */
+  /* BasicBlockAck Size = 152 Bytes */
+  SetBasicBlockAckTimeout (GetSifs () + GetSlot () + NanoSeconds (55927) + GetDefaultMaxPropagationDelay () * 2);
+  /* BasicBlockAck Size = 153 Bytes considering Window Size of 1024 and sent using EDMG_MCS0 */
+  SetCompressedBlockAckTimeout (GetSifs () + GetSlot () + NanoSeconds (56073) + GetDefaultMaxPropagationDelay () * 2);
 }
+//// WIGIG ////
 
 void
-WifiMac::ConfigureDcf (Ptr<DcaTxop> dcf, uint32_t cwmin, uint32_t cwmax, bool isDsss, AcIndex ac)
+WifiMac::ConfigureDcf (Ptr<Txop> dcf, uint32_t cwmin, uint32_t cwmax, bool isDsss, AcIndex ac)
 {
   NS_LOG_FUNCTION (this << dcf << cwmin << cwmax << isDsss << ac);
-  /* see IEEE802.11 section 7.3.2.29 */
+  /* see IEEE 802.11 section 7.3.2.29 */
   switch (ac)
     {
     case AC_VO:
@@ -532,6 +537,27 @@ WifiMac::ConfigureDcf (Ptr<DcaTxop> dcf, uint32_t cwmin, uint32_t cwmax, bool is
       NS_FATAL_ERROR ("I don't know what to do with this");
       break;
     }
+}
+
+Ptr<HtConfiguration>
+WifiMac::GetHtConfiguration (void) const
+{
+      Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+      return device->GetHtConfiguration ();
+}
+
+Ptr<VhtConfiguration>
+WifiMac::GetVhtConfiguration (void) const
+{
+      Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+      return device->GetVhtConfiguration ();
+}
+
+Ptr<HeConfiguration>
+WifiMac::GetHeConfiguration (void) const
+{
+      Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice> (GetDevice ());
+      return device->GetHeConfiguration ();
 }
 
 } //namespace ns3

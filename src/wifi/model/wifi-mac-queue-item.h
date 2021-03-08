@@ -24,12 +24,15 @@
 #ifndef WIFI_MAC_QUEUE_ITEM_H
 #define WIFI_MAC_QUEUE_ITEM_H
 
-#include "ns3/queue.h"
+#include "ns3/nstime.h"
 #include "wifi-mac-header.h"
+#include "msdu-aggregator.h"
+#include "amsdu-subframe-header.h"
 
 namespace ns3 {
 
 class QosBlockedDestinations;
+class Packet;
 
 /**
  * \ingroup wifi
@@ -43,9 +46,23 @@ public:
   /**
    * \brief Create a Wifi MAC queue item containing a packet and a Wifi MAC header.
    * \param p the const packet included in the created item.
-   * \param header the Wifi Mac header included in the created item.
+   * \param header the Wifi MAC header included in the created item.
    */
   WifiMacQueueItem (Ptr<const Packet> p, const WifiMacHeader & header);
+
+  /**
+   * \brief Create a Wifi MAC queue item containing a packet and a Wifi MAC header.
+   * \param p the const packet included in the created item.
+   * \param header the Wifi MAC header included in the created item.
+   * \param tstamp the timestamp associated with the created item.
+   */
+  WifiMacQueueItem (Ptr<const Packet> p, const WifiMacHeader & header, Time tstamp);
+
+  /**
+   * \brief Create a Wifi MAC queue item containing only a packet and without a Wifi MAC header. Used for Short SSW packets.
+   * \param p the const packet included in the created item.
+   */
+  WifiMacQueueItem (Ptr<const Packet> p);
 
   virtual ~WifiMacQueueItem ();
 
@@ -62,18 +79,16 @@ public:
   const WifiMacHeader & GetHeader (void) const;
 
   /**
-   * \brief Return the requested address present in the header
-   * \param type the type of the address to return
-   * \return the address
+   * \brief Get the header stored in this item
+   * \return the header stored in this item.
    */
-  Mac48Address GetAddress (enum WifiMacHeader::AddressType type) const;
+  WifiMacHeader & GetHeader (void);
 
   /**
-   * Set the requested address present in the header
-   * \param type the type of the address to return
-   * \param the address
+   * \brief Return the destination address present in the header
+   * \return the destination address
    */
-  void SetAddress (WifiMacHeader::AddressType type, Mac48Address address);
+  Mac48Address GetDestinationAddress (void) const;
 
   /**
    * \brief Get the timestamp included in this item
@@ -82,46 +97,72 @@ public:
   Time GetTimeStamp (void) const;
 
   /**
-   * \brief Return the size of the packet included in this item
+   * \brief Return the size of the packet stored by this item, including header
+   *        size and trailer size
    *
-   * \return the size of the packet included in this item.
+   * \return the size of the packet stored by this item in bytes.
    */
   uint32_t GetSize (void) const;
 
+  /**
+   * \brief Aggregate the MSDU contained in the given MPDU to this MPDU (thus
+   *        constituting an A-MSDU). Note that the given MPDU cannot contain
+   *        an A-MSDU.
+   * \param msdu the MPDU containing the MSDU to aggregate
+   */
+  void Aggregate (Ptr<const WifiMacQueueItem> msdu);
+
+  /**
+   * \brief Get a constant iterator pointing to the first MSDU in the list of aggregated MSDUs.
+   *
+   * \return a constant iterator pointing to the first MSDU in the list of aggregated MSDUs
+   */
+  MsduAggregator::DeaggregatedMsdusCI begin (void);
+  /**
+   * \brief Get a constant iterator indicating past-the-last MSDU in the list of aggregated MSDUs.
+   *
+   * \return a constant iterator indicating past-the-last MSDU in the list of aggregated MSDUs
+   */
+  MsduAggregator::DeaggregatedMsdusCI end (void);
+
+  /**
+   * \brief Get the MAC protocol data unit (MPDU) corresponding to this item
+   *        (i.e. a copy of the packet stored in this item wrapped with MAC
+   *        header and trailer)
+   * \return the MAC protocol data unit corresponding to this item.
+   */
+  Ptr<Packet> GetProtocolDataUnit (void) const;
+
+  /**
+   * \brief Print the item contents.
+   * \param os output stream in which the data should be printed.
+   */
+  virtual void Print (std::ostream &os) const;
+
 private:
   /**
-   * \brief Default constructor
-   *
-   * Defined and unimplemented to avoid misuse
+   * \brief Aggregate the MSDU contained in the given MPDU to this MPDU (thus
+   *        constituting an A-MSDU). Note that the given MPDU cannot contain
+   *        an A-MSDU.
+   * \param msdu the MPDU containing the MSDU to aggregate
    */
-  WifiMacQueueItem ();
-  /**
-   * \brief Copy constructor
-   *
-   * Defined and unimplemented to avoid misuse
-   */
-  WifiMacQueueItem (const WifiMacQueueItem &);
-  /**
-   * \brief Assignment operator
-   *
-   * Defined and unimplemented to avoid misuse
-   * \returns
-   */
-  WifiMacQueueItem &operator = (const WifiMacQueueItem &);
+  void DoAggregate (Ptr<const WifiMacQueueItem> msdu);
 
-  Ptr<const Packet> m_packet;  //!< The packet contained in this queue item
-  WifiMacHeader m_header;      //!< Wifi MAC header associated with the packet
-  Time m_tstamp;               //!< timestamp when the packet arrived at the queue
+  Ptr<const Packet> m_packet;                   //!< The packet (MSDU or A-MSDU) contained in this queue item
+  WifiMacHeader m_header;                       //!< Wifi MAC header associated with the packet
+  Time m_tstamp;                                //!< timestamp when the packet arrived at the queue
+  MsduAggregator::DeaggregatedMsdus m_msduList; //!< The list of aggregated MSDUs included in this MPDU
+  bool m_isShortSsw;                            //!< A flag which specifies if the packet is a Short SSW packet and does not have a Wifi Mac Header.
 };
 
-
-// The following explicit template instantiation declaration prevents modules
-// including this header file from implicitly instantiating Queue<WifiMacQueueItem>.
-// This would cause python examples using wifi to crash at runtime with the
-// following error message: "Trying to allocate twice the same uid:
-// ns3::Queue<WifiMacQueueItem>"
-extern template class Queue<WifiMacQueueItem>;
-
+/**
+ * \brief Stream insertion operator.
+ *
+ * \param os the output stream
+ * \param item the WifiMacQueueItem
+ * \returns a reference to the stream
+ */
+std::ostream& operator<< (std::ostream& os, const WifiMacQueueItem &item);
 
 } //namespace ns3
 

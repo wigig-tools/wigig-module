@@ -18,15 +18,19 @@
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
-#include "ns3/boolean.h"
 #include "ns3/simulator.h"
 #include "ns3/log.h"
 #include "ns3/pointer.h"
-#include "dmg-wifi-channel.h"
+#include "ns3/net-device.h"
+#include "ns3/node.h"
 #include "ns3/propagation-loss-model.h"
 #include "ns3/propagation-delay-model.h"
+#include "ns3/mobility-model.h"
+#include "dmg-wifi-channel.h"
 #include "wifi-utils.h"
 #include <fstream>
+#include "wifi-ppdu.h"
+#include "wifi-psdu.h"
 
 namespace ns3 {
 
@@ -63,6 +67,7 @@ DmgWifiChannel::DmgWifiChannel ()
     m_packetDropper (0),
     m_experimentalMode (false)
 {
+  NS_LOG_FUNCTION (this);
 }
 
 DmgWifiChannel::~DmgWifiChannel ()
@@ -74,17 +79,19 @@ DmgWifiChannel::~DmgWifiChannel ()
 void
 DmgWifiChannel::SetPropagationLossModel (const Ptr<PropagationLossModel> loss)
 {
+  NS_LOG_FUNCTION (this << loss);
   m_loss = loss;
 }
 
 void
 DmgWifiChannel::SetPropagationDelayModel (const Ptr<PropagationDelayModel> delay)
 {
+  NS_LOG_FUNCTION (this << delay);
   m_delay = delay;
 }
 
 void
-DmgWifiChannel::AddBlockage (double (*blockage)(), Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy)
+DmgWifiChannel::AddBlockage (double (*blockage)(), Ptr<DmgWifiPhy> srcWifiPhy, Ptr<DmgWifiPhy> dstWifiPhy)
 {
   m_blockage = blockage;
   m_srcWifiPhy = srcWifiPhy;
@@ -100,7 +107,7 @@ DmgWifiChannel::RemoveBlockage (void)
 }
 
 void
-DmgWifiChannel::AddPacketDropper (bool (*dropper)(), Ptr<WifiPhy> srcWifiPhy, Ptr<WifiPhy> dstWifiPhy)
+DmgWifiChannel::AddPacketDropper (bool (*dropper)(), Ptr<DmgWifiPhy> srcWifiPhy, Ptr<DmgWifiPhy> dstWifiPhy)
 {
   m_packetDropper = dropper;
   m_srcWifiPhy = srcWifiPhy;
@@ -158,9 +165,9 @@ DmgWifiChannel::UpdateSignalStrengthValue (void)
 }
 
 void
-DmgWifiChannel::Send (Ptr<DmgWifiPhy> sender, Ptr<const Packet> packet, double txPowerDbm, Time duration) const
+DmgWifiChannel::Send (Ptr<DmgWifiPhy> sender, Ptr<const WifiPpdu> ppdu, double txPowerDbm) const
 {
-  NS_LOG_FUNCTION (this << sender << packet << txPowerDbm << duration.GetSeconds ());
+  NS_LOG_FUNCTION (this << sender << ppdu << txPowerDbm);
   Ptr<MobilityModel> senderMobility = sender->GetMobility ();
   NS_ASSERT (senderMobility != 0);
   for (PhyList::const_iterator i = m_phyList.begin (); i != m_phyList.end (); i++)
@@ -184,7 +191,7 @@ DmgWifiChannel::Send (Ptr<DmgWifiPhy> sender, Ptr<const Packet> packet, double t
 
           Vector sender_pos = senderMobility->GetPosition ();
           Ptr<Codebook> senderCodebook = sender->GetCodebook ();
-          Ptr<MobilityModel> receiverMobility= (*i)->GetMobility ()->GetObject<MobilityModel> ();
+          Ptr<MobilityModel> receiverMobility = (*i)->GetMobility ()->GetObject<MobilityModel> ();
           Time delay = m_delay->GetDelay (senderMobility, receiverMobility);
           double rxPowerDbm;
           double azimuthTx = CalculateAzimuthAngle (sender_pos, receiverMobility->GetPosition ());
@@ -209,17 +216,17 @@ DmgWifiChannel::Send (Ptr<DmgWifiPhy> sender, Ptr<const Packet> packet, double t
             }
 
           /* External Attenuator */
-          if ((m_blockage != 0) &&
-              (((m_srcWifiPhy == sender) && (m_dstWifiPhy == (*i))) ||
-               ((m_srcWifiPhy == (*i)) && (m_dstWifiPhy == sender))))
+          if (m_blockage &&
+              ((m_srcWifiPhy == sender && m_dstWifiPhy == (*i)) ||
+               (m_srcWifiPhy == (*i) && m_dstWifiPhy == sender)))
             {
-              NS_LOG_DEBUG ("Blockage is inserted");
               rxPowerDbm += m_blockage ();
+              NS_LOG_DEBUG ("RxPower [dBm] with blockage=" << rxPowerDbm);
             }
 
           NS_LOG_DEBUG ("propagation: txPower=" << txPowerDbm << "dbm, rxPower=" << rxPowerDbm << "dbm, " <<
                         "distance=" << senderMobility->GetDistanceFrom (receiverMobility) << "m, delay=" << delay);
-          Ptr<Packet> copy = packet->Copy ();
+          Ptr<WifiPpdu> copy = Copy (ppdu);
           Ptr<NetDevice> dstNetDevice = (*i)->GetDevice ();
           uint32_t dstNode;
           if (dstNetDevice == 0)
@@ -233,13 +240,24 @@ DmgWifiChannel::Send (Ptr<DmgWifiPhy> sender, Ptr<const Packet> packet, double t
 
           Simulator::ScheduleWithContext (dstNode,
                                           delay, &DmgWifiChannel::Receive,
-                                          (*i), copy, rxPowerDbm, duration);
+                                          (*i), copy, rxPowerDbm);
 
           /* PHY Activity Monitor */
           uint32_t srcNode = sender->GetDevice ()->GetNode ()->GetId ();
-          RecordPhyActivity (srcNode, dstNode, duration, txPowerDbm + gtx, PLCP_80211AD_PREAMBLE_HDR_DATA, TX_ACTIVITY);
-          Simulator::Schedule (delay, &DmgWifiChannel::RecordPhyActivity, this,
-                               srcNode, dstNode, duration, rxPowerDbm, PLCP_80211AD_PREAMBLE_HDR_DATA, RX_ACTIVITY);
+          if (sender->GetStandard () == WIFI_PHY_STANDARD_80211ad)
+            {
+              RecordPhyActivity (srcNode, dstNode, ppdu->GetTxDuration (), txPowerDbm + gtx, PLCP_80211AD_PREAMBLE_HDR_DATA, TX_ACTIVITY);
+              Simulator::Schedule (delay, &DmgWifiChannel::RecordPhyActivity, this,
+                                   srcNode, dstNode, ppdu->GetTxDuration (), rxPowerDbm, PLCP_80211AD_PREAMBLE_HDR_DATA, RX_ACTIVITY);
+            }
+          else if (sender->GetStandard () == WIFI_PHY_STANDARD_80211ay)
+            {
+              RecordPhyActivity (srcNode, dstNode, ppdu->GetTxDuration (), txPowerDbm + gtx, PLCP_80211AY_PREAMBLE_HDR_DATA, TX_ACTIVITY);
+              Simulator::Schedule (delay, &DmgWifiChannel::RecordPhyActivity, this,
+                                   srcNode, dstNode, ppdu->GetTxDuration (), rxPowerDbm, PLCP_80211AY_PREAMBLE_HDR_DATA, RX_ACTIVITY);
+            }
+
+
         }
     }
 }
@@ -371,8 +389,17 @@ DmgWifiChannel::SendTrnSubfield (Ptr<DmgWifiPhy> sender, double txPowerDbm, Wifi
             }
 
           /* PHY Activity Monitor */
-          RecordPhyActivity (sender->GetDevice ()->GetNode ()->GetId (), dstNode,
-                             TRN_SUBFIELD_DURATION, txPowerDbm + gtx, PLCP_80211AD_TRN_SF, TX_ACTIVITY);
+          if (sender->GetStandard () == WIFI_PHY_STANDARD_80211ad)
+            {
+              RecordPhyActivity (sender->GetDevice ()->GetNode ()->GetId (), dstNode,
+                                 TRN_SUBFIELD_DURATION, txPowerDbm + gtx, PLCP_80211AD_TRN_SF, TX_ACTIVITY);
+            }
+          else
+            {
+              RecordPhyActivity (sender->GetDevice ()->GetNode ()->GetId (), dstNode,
+                                 txVector.edmgTrnSubfieldDuration, txPowerDbm + gtx, PLCP_80211AY_TRN_SF, TX_ACTIVITY);
+            }
+
           Simulator::ScheduleWithContext (dstNode, delay, &DmgWifiChannel::ReceiveTrnSubfield, this, j,
                                           sender, txVector, txPowerDbm, gtx);
         }
@@ -380,10 +407,19 @@ DmgWifiChannel::SendTrnSubfield (Ptr<DmgWifiPhy> sender, double txPowerDbm, Wifi
 }
 
 void
-DmgWifiChannel::Receive (Ptr<DmgWifiPhy> phy, Ptr<Packet> packet, double rxPowerDbm, Time duration)
+DmgWifiChannel::Receive (Ptr<DmgWifiPhy> phy, Ptr<WifiPpdu> ppdu, double rxPowerDbm)
 {
-  NS_LOG_FUNCTION (phy << packet << rxPowerDbm << duration.GetSeconds ());
-  phy->StartReceivePreambleAndHeader (packet, DbmToW (rxPowerDbm + phy->GetRxGain ()), duration);
+  NS_LOG_FUNCTION (phy << ppdu << rxPowerDbm);
+  // Do no further processing if signal is too weak
+  // Current implementation assumes constant RX power over the PPDU duration
+  if ((rxPowerDbm + phy->GetRxGain ()) < phy->GetRxSensitivity ())
+    {
+      NS_LOG_INFO ("Received signal too weak to process: " << rxPowerDbm << " dBm");
+      return;
+    }
+  std::vector<double> rxPowerW;
+  rxPowerW.push_back (DbmToW (rxPowerDbm + phy->GetRxGain ()));
+  phy->StartReceivePreamble (ppdu, rxPowerW);
 }
 
 double
@@ -447,20 +483,36 @@ DmgWifiChannel::ReceiveTrnSubfield (uint32_t i, Ptr<DmgWifiPhy> sender, WifiTxVe
                                     double txPowerDbm, double txAntennaGainDbi) const
 {
   NS_LOG_FUNCTION (this << i << sender << txVector << txPowerDbm << txAntennaGainDbi);
-  double rxPowerDbm = ReceiveSubfield (i, sender, txVector, txPowerDbm, txAntennaGainDbi,
+  double rxPowerDbm;
+  if (sender->GetStandard () == WIFI_PHY_STANDARD_80211ad)
+    {
+      rxPowerDbm = ReceiveSubfield (i, sender, txVector, txPowerDbm, txAntennaGainDbi,
                                        TRN_SUBFIELD_DURATION, PLCP_80211AD_TRN_SF);
+    }
+  else
+    {
+      rxPowerDbm = ReceiveSubfield (i, sender, txVector, txPowerDbm, txAntennaGainDbi,
+                            txVector.edmgTrnSubfieldDuration, PLCP_80211AY_TRN_SF);
+    }
   /* Report the received SNR to the higher layers. */
-  m_phyList[i]->StartReceiveTrnSubfield (txVector, rxPowerDbm);
+  if ( sender->GetStandard () == WIFI_PHY_STANDARD_80211ad)
+    {
+      m_phyList[i]->StartReceiveTrnSubfield (txVector, rxPowerDbm);
+    }
+  else
+    {
+      m_phyList[i]->StartReceiveEdmgTrnSubfield (txVector,rxPowerDbm);
+    }
 }
 
-uint32_t
+std::size_t
 DmgWifiChannel::GetNDevices (void) const
 {
   return m_phyList.size ();
 }
 
 Ptr<NetDevice>
-DmgWifiChannel::GetDevice (uint32_t i) const
+DmgWifiChannel::GetDevice (std::size_t i) const
 {
   return m_phyList[i]->GetDevice ()->GetObject<NetDevice> ();
 }
@@ -468,6 +520,7 @@ DmgWifiChannel::GetDevice (uint32_t i) const
 void
 DmgWifiChannel::Add (Ptr<DmgWifiPhy> phy)
 {
+  NS_LOG_FUNCTION (this << phy);
   m_phyList.push_back (phy);
 }
 

@@ -6,7 +6,7 @@ import wutils
 NETANIM_RELEASE_NAME = "netanim-3.108"
 
 def build (bld) :
-    module = bld.create_ns3_module ('netanim', ['internet', 'mobility', 'wimax', 'wifi', 'csma', 'lte', 'uan', 'lr-wpan', 'energy', 'wave', 'point-to-point-layout'])
+    module = bld.create_ns3_module ('netanim', ['internet', 'mobility', 'wimax', 'wifi', 'csma', 'lte', 'uan', 'lr-wpan', 'energy', 'wave'])
     module.includes = '.'
     module.source = [ 'model/animation-interface.cc', ]
     netanim_test = bld.create_ns3_module_test_library('netanim')
@@ -16,4 +16,4 @@ def build (bld) :
     headers.source = ['model/animation-interface.h', ]
     if (bld.env['ENABLE_EXAMPLES']) :
        bld.recurse('examples')
-
+    bld.ns3_python_bindings()

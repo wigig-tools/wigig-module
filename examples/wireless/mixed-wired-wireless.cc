@@ -58,14 +58,20 @@
 // Note that certain mobility patterns may cause packet forwarding
 // to fail (if nodes become disconnected)
 
-#include "ns3/core-module.h"
-#include "ns3/applications-module.h"
-#include "ns3/mobility-module.h"
-#include "ns3/wifi-module.h"
-#include "ns3/csma-module.h"
+#include "ns3/command-line.h"
+#include "ns3/string.h"
+#include "ns3/yans-wifi-helper.h"
+#include "ns3/ssid.h"
+#include "ns3/mobility-helper.h"
+#include "ns3/internet-stack-helper.h"
+#include "ns3/ipv4-address-helper.h"
+#include "ns3/on-off-helper.h"
+#include "ns3/yans-wifi-channel.h"
+#include "ns3/qos-txop.h"
+#include "ns3/packet-sink-helper.h"
 #include "ns3/olsr-helper.h"
-#include "ns3/internet-module.h"
-#include "ns3/netanim-module.h"
+#include "ns3/csma-helper.h"
+#include "ns3/animation-interface.h"
 
 using namespace ns3;
 
@@ -110,7 +116,7 @@ main (int argc, char *argv[])
   // system so that they can be overridden with flags such as
   // "--backboneNodes=20"
   //
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("backboneNodes", "number of backbone nodes", backboneNodes);
   cmd.AddValue ("infraNodes", "number of leaf nodes", infraNodes);
   cmd.AddValue ("lanNodes", "number of LAN nodes", lanNodes);
@@ -295,8 +301,7 @@ main (int argc, char *argv[])
       NetDeviceContainer staDevices = wifiInfra.Install (wifiPhy, macInfra, stas);
       // setup ap.
       macInfra.SetType ("ns3::ApWifiMac",
-                        "Ssid", SsidValue (ssid),
-                        "BeaconInterval", TimeValue (Seconds (2.5)));
+                        "Ssid", SsidValue (ssid));
       NetDeviceContainer apDevices = wifiInfra.Install (wifiPhy, macInfra, backbone.Get (i));
       // Collect all of these new devices
       NetDeviceContainer infraDevices (apDevices, staDevices);

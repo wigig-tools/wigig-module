@@ -117,6 +117,7 @@ DistributedSimulatorImpl::DistributedSimulatorImpl ()
   m_currentTs = 0;
   m_currentContext = Simulator::NO_CONTEXT;
   m_unscheduledEvents = 0;
+  m_eventCount = 0;
   m_events = 0;
 }
 
@@ -284,7 +285,7 @@ DistributedSimulatorImpl::CalculateLookAhead (void)
 void
 DistributedSimulatorImpl::SetMaximumLookAhead (const Time lookAhead)
 {
-  if (lookAhead > 0)
+  if (lookAhead > Time (0))
     {
       NS_LOG_FUNCTION (this << lookAhead);
       m_lookAhead = lookAhead;
@@ -322,6 +323,7 @@ DistributedSimulatorImpl::ProcessOneEvent (void)
 
   NS_ASSERT (next.key.m_ts >= m_currentTs);
   m_unscheduledEvents--;
+  m_eventCount++;
 
   NS_LOG_LOGIC ("handle " << next.key.m_ts);
   m_currentTs = next.key.m_ts;
@@ -373,6 +375,7 @@ DistributedSimulatorImpl::Run (void)
 #ifdef NS3_MPI
   CalculateLookAhead ();
   m_stop = false;
+  m_globalFinished = false;
   while (!m_globalFinished)
     {
       Time nextTime = Next ();
@@ -641,6 +644,12 @@ uint32_t
 DistributedSimulatorImpl::GetContext (void) const
 {
   return m_currentContext;
+}
+
+uint64_t
+DistributedSimulatorImpl::GetEventCount (void) const
+{
+  return m_eventCount;
 }
 
 } // namespace ns3

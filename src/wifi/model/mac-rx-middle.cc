@@ -18,10 +18,11 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#include "mac-rx-middle.h"
-#include "wifi-mac-header.h"
 #include "ns3/log.h"
 #include "ns3/sequence-number.h"
+#include "ns3/packet.h"
+#include "mac-rx-middle.h"
+#include "wifi-mac-queue-item.h"
 
 namespace ns3 {
 
@@ -197,7 +198,7 @@ MacRxMiddle::Lookup (const WifiMacHeader *hdr)
   if (hdr->IsQosData ()
       && !hdr->GetAddr2 ().IsGroup ())
     {
-      /* only for qos data non-broadcast frames */
+      /* only for QoS data non-broadcast frames */
       originator = m_qosOriginatorStatus[std::make_pair (source, hdr->GetQosTid ())];
       if (originator == 0)
         {
@@ -208,8 +209,8 @@ MacRxMiddle::Lookup (const WifiMacHeader *hdr)
   else
     {
       /* - management frames
-       * - qos data broadcast frames
-       * - nqos data frames
+       * - QoS data broadcast frames
+       * - non-QoS data frames
        * see section 7.1.3.4.1
        */
       originator = m_originatorStatus[source];
@@ -247,7 +248,7 @@ MacRxMiddle::HandleFragments (Ptr<Packet> packet, const WifiMacHeader *hdr,
           if (originator->IsNextFragment (hdr->GetSequenceControl ()))
             {
               NS_LOG_DEBUG ("accumulate fragment seq=" << hdr->GetSequenceNumber () <<
-                            ", frag=" << hdr->GetFragmentNumber () <<
+                            ", frag=" << +hdr->GetFragmentNumber () <<
                             ", size=" << packet->GetSize ());
               originator->AccumulateFragment (packet);
               originator->SetSequenceControl (hdr->GetSequenceControl ());
@@ -263,7 +264,7 @@ MacRxMiddle::HandleFragments (Ptr<Packet> packet, const WifiMacHeader *hdr,
           if (originator->IsNextFragment (hdr->GetSequenceControl ()))
             {
               NS_LOG_DEBUG ("accumulate last fragment seq=" << hdr->GetSequenceNumber () <<
-                            ", frag=" << hdr->GetFragmentNumber () <<
+                            ", frag=" << +hdr->GetFragmentNumber () <<
                             ", size=" << hdr->GetSize ());
               Ptr<Packet> p = originator->AccumulateLastFragment (packet);
               originator->SetSequenceControl (hdr->GetSequenceControl ());
@@ -281,7 +282,7 @@ MacRxMiddle::HandleFragments (Ptr<Packet> packet, const WifiMacHeader *hdr,
       if (hdr->IsMoreFragments ())
         {
           NS_LOG_DEBUG ("accumulate first fragment seq=" << hdr->GetSequenceNumber () <<
-                        ", frag=" << hdr->GetFragmentNumber () <<
+                        ", frag=" << +hdr->GetFragmentNumber () <<
                         ", size=" << packet->GetSize ());
           originator->AccumulateFirstFragment (packet);
           originator->SetSequenceControl (hdr->GetSequenceControl ());
@@ -295,13 +296,26 @@ MacRxMiddle::HandleFragments (Ptr<Packet> packet, const WifiMacHeader *hdr,
 }
 
 void
-MacRxMiddle::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
+MacRxMiddle::Receive (Ptr<WifiMacQueueItem> mpdu)
 {
-  NS_LOG_FUNCTION (packet << hdr);
-//  NS_ASSERT (hdr->IsData () || hdr->IsMgt () || hdr->IsExtension ());
+  NS_LOG_FUNCTION (*mpdu);
+  const WifiMacHeader* hdr = &mpdu->GetHeader ();
+  Ptr<Packet> packet = mpdu->GetPacket ()->Copy ();
+  //// WIGIG ////
+  if (hdr->IsSSW () || hdr->IsSSW_FBCK () || hdr->IsSSW_ACK ()  || hdr->IsDMGBeacon ())
+    {
+      m_callback (Create<WifiMacQueueItem> (packet, *hdr));
+      return;
+    }
+  //// WIGIG ////
+  NS_ASSERT (hdr->IsData () || hdr->IsMgt ());
+  if (!m_pcfCallback.IsNull ())
+    {
+      m_pcfCallback ();
+    }
   OriginatorRxStatus *originator = Lookup (hdr);
   /**
-   * The check below is really uneeded because it can fail in a lot of
+   * The check below is really unneeded because it can fail in a lot of
    * normal cases. Specifically, it is possible for sequence numbers to
    * loop back to zero once they reach 0xfff0 and to go up to 0xf7f0 in
    * which case the check below will report the two sequence numbers to
@@ -319,22 +333,39 @@ MacRxMiddle::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
     {
       NS_LOG_DEBUG ("duplicate from=" << hdr->GetAddr2 () <<
                     ", seq=" << hdr->GetSequenceNumber () <<
-                    ", frag=" << hdr->GetFragmentNumber ());
+                    ", frag=" << +hdr->GetFragmentNumber ());
       return;
     }
-  Ptr<Packet> agregate = HandleFragments (packet, hdr, originator);
-  if (agregate == 0)
+  Ptr<Packet> aggregate = HandleFragments (packet, hdr, originator);
+  if (aggregate == 0)
     {
       return;
     }
   NS_LOG_DEBUG ("forwarding data from=" << hdr->GetAddr2 () <<
                 ", seq=" << hdr->GetSequenceNumber () <<
-                ", frag=" << hdr->GetFragmentNumber ());
+                ", frag=" << +hdr->GetFragmentNumber ());
   if (!hdr->GetAddr1 ().IsGroup ())
     {
       originator->SetSequenceControl (hdr->GetSequenceControl ());
     }
-  m_callback (agregate, hdr);
+  if (aggregate == packet)
+    {
+      m_callback (mpdu);
+    }
+  else
+    {
+      // We could do this in all cases, but passing the received mpdu in case of
+      // A-MSDUs saves us the time to deaggregate the A-MSDU in MSDUs (which are
+      // kept separate in the received mpdu) and allows us to pass the originally
+      // transmitted packets (i.e., with the same UID) to the receiver.
+      m_callback (Create<WifiMacQueueItem> (aggregate, *hdr));
+    }
+}
+
+void
+MacRxMiddle::SetPcfCallback (Callback<void> callback)
+{
+  m_pcfCallback = callback;
 }
 
 } //namespace ns3

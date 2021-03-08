@@ -2315,7 +2315,7 @@ OLSR::mac_failed (Ptr<Packet> p)
          OLSR::node_id (ra_addr ()),
          OLSR::node_id (ch->next_hop ()));
 
-  if ((u_int32_t)ih->daddr () == IP_BROADCAST)
+  if ((uint32_t)ih->daddr () == IP_BROADCAST)
     {
       drop (p, DROP_RTR_MAC_CALLBACK);
       return;
@@ -2902,7 +2902,7 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDe
         }
       else
         {
-          /// \todo Implment IP aliasing and OLSR
+          /// \todo Implement IP aliasing and OLSR
           NS_FATAL_ERROR ("XXX Not implemented yet:  IP aliasing and OLSR");
         }
       rtentry->SetSource (ifAddr.GetLocal ());
@@ -3001,7 +3001,7 @@ bool RoutingProtocol::RouteInput  (Ptr<const Packet> p,
         }
       else
         {
-          /// \todo Implment IP aliasing and OLSR
+          /// \todo Implement IP aliasing and OLSR
           NS_FATAL_ERROR ("XXX Not implemented yet:  IP aliasing and OLSR");
         }
       rtentry->SetSource (ifAddr.GetLocal ());

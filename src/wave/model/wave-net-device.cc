@@ -18,8 +18,10 @@
  *         Junling Bu <linlinjavaer@gmail.com>
  */
 #include <algorithm>
+#include "ns3/node.h"
 #include "ns3/wifi-phy.h"
 #include "ns3/llc-snap-header.h"
+#include "ns3/channel.h"
 #include "ns3/log.h"
 #include "ns3/socket.h"
 #include "ns3/object-map.h"
@@ -674,11 +676,12 @@ WaveNetDevice::IsAvailableChannel (uint32_t channelNumber) const
 }
 
 void
-WaveNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to)
+WaveNetDevice::ForwardUp (Ptr<const Packet> packet, Mac48Address from, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << from << to);
+  Ptr<Packet> copy = packet->Copy ();
   LlcSnapHeader llc;
-  packet->RemoveHeader (llc);
+  copy->RemoveHeader (llc);
   enum NetDevice::PacketType type;
   if (to.IsBroadcast ())
     {
@@ -702,8 +705,8 @@ WaveNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to
       // currently we cannot know from which MAC entity the packet is received,
       // so we use the MAC entity for CCH as it receives this packet.
       Ptr<OcbWifiMac> mac = GetMac (CCH);
-      mac->NotifyRx (packet);
-      m_forwardUp (this, packet, llc.GetType (), from);
+      mac->NotifyRx (copy);
+      m_forwardUp (this, copy, llc.GetType (), from);
     }
 
   if (!m_promiscRx.IsNull ())
@@ -711,8 +714,8 @@ WaveNetDevice::ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to
       // currently we cannot know from which MAC entity the packet is received,
       // so we use the MAC entity for CCH as it receives this packet.
       Ptr<OcbWifiMac> mac = GetMac (CCH);
-      mac->NotifyPromiscRx (packet);
-      m_promiscRx (this, packet, llc.GetType (), from, to, type);
+      mac->NotifyPromiscRx (copy);
+      m_promiscRx (this, copy, llc.GetType (), from, to, type);
     }
 }
 

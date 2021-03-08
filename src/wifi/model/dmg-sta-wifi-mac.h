@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #ifndef DMG_STA_WIFI_MAC_H
@@ -27,35 +27,31 @@ class UniformRandomVariable;
  *
  * Struct to hold information regarding DMG beacons observed.
  */
-struct DmgBeaconInfo
+struct DmgApInfo
 {
-  void Clear ()
-    {
-      m_channelNumber = 0;
-      m_bssid = Mac48Address ();
-      m_capabilities = 0;
-      m_snr = 0;
-      m_probeResp = MgtProbeResponseHeader ();
-    }
-  uint32_t m_channelNumber;
-  Mac48Address m_bssid;
-  Ptr<DmgCapabilities> m_capabilities;
-  double m_snr;
-  MgtProbeResponseHeader m_probeResp;
+  Mac48Address m_bssid;               //!< BSSID.
+  Mac48Address m_apAddr;              //!< DMG PCP/AP MAC address.
+  double m_snr;                       //!< SNR in linear scale.
+  bool m_activeProbing;               //!< Flag whether active probing is used or not.
+  ExtDMGBeacon m_beacon;              //!< DMG Beacon header.
+  MgtProbeResponseHeader m_probeResp; //!< Probe Response header.
 };
 
-typedef enum {
+typedef std::vector<DmgApInfo> DmgApInfoList;       //!< List of DMG PCP/APs.
+typedef DmgApInfoList::iterator DmgApInfoList_I;    //!< Type definition for iterator over DMG PCP/APs.
+
+enum TransmissionLink {
   DIRECT_LINK = 0,
   RELAY_LINK = 1
-} TransmissionLink;
+};
 
-typedef enum {
+enum STA_ROLE {
   SOURCE_STA = 0,
   DESTINATION_STA = 1,
   RELAY_STA = 2
-} STA_ROLE;
+};
 
-typedef struct {
+struct RELAY_LINK_INFO {
   bool relayForwardingActivated;              //!< Flag to indicate if a relay link has been aactivated.
   bool relayLinkEstablished;                  //!< Flag to indicate if a relay link has been established.
   bool rdsDuplexMode;                         //!< The duplex mode of the RDS.
@@ -80,7 +76,7 @@ typedef struct {
   RelayCapabilitiesInfo rdsCapabilitiesInfo;            //!< The relay capabilities Information for the RDS.
   RelayCapabilitiesInfo dstRedsCapabilitiesInfo;        //!< The relay capabilities Information for the destination REDS.
   ChannelMeasurementInfoList channelMeasurementList;    //!< The channel measurement list between the source REDS and the RDS.
-} RELAY_LINK_INFO;
+};
 
 /**
  * Callback signature for reporting channel measurements for relay selection.
@@ -101,7 +97,7 @@ typedef Callback<DynamicAllocationInfoField, Mac48Address, BF_Control_Field &> S
 /**
  * \ingroup wifi
  *
- * The Wifi MAC high model for a non-AP STA in a BSS.
+ * The Wifi MAC high model for a non-DMG PCP/AP STA in a DMG BSS.
  */
 class DmgStaWifiMac : public DmgWifiMac
 {
@@ -122,7 +118,7 @@ public:
    * dequeued as soon as the channel access function determines that
    * access is granted to this MAC.
    */
-  virtual void Enqueue (Ptr<const Packet> packet, Mac48Address to);
+  virtual void Enqueue (Ptr<Packet> packet, Mac48Address to);
   /**
    * \param lost The number of beacons which must be lost
    * before a new association sequence is started.
@@ -230,6 +226,11 @@ public:
    * \return true if we are associated with a DMG AP, false otherwise
    */
   bool IsAssociated (void) const;
+  /**
+   * Initiate TXSS in CBAP allocation using TxOP.
+   * \param peerAddress The address of the DMG STA to perform beamforming training with.
+   */
+  virtual void Perform_TXSS_TXOP (Mac48Address peerAddress);
 
 protected:
   friend class MultiBandNetDevice;
@@ -247,11 +248,22 @@ protected:
   virtual void NotifyBrpPhaseCompleted (void);
 
   /**
+   * Resume any Pending TXSS requests in the current CBAP allocation.
+   */
+  virtual void ResumePendingTXSS (void);
+  /**
    * End Association Beamform Training (A-BFT) period.
    */
   void EndAssociationBeamformTraining (void);
-
+  /**
+   * StartChannelQualityMeasurement
+   * \param element
+   */
   void StartChannelQualityMeasurement (Ptr<DirectionalChannelQualityRequestElement> element);
+  /**
+   * ReportChannelQualityMeasurement
+   * \param list
+   */
   void ReportChannelQualityMeasurement (TimeBlockMeasurementList list);
   /**
    * Send Directional Channel Quality Report.
@@ -316,7 +328,7 @@ protected:
    *
    * \param value the new state
    */
-  void SetState (enum MacState value);
+  void SetState (MacState value);
   /**
    * Get STA Availability Element.
    * \return Pointer to the STA availabiltiy element.
@@ -466,20 +478,34 @@ private:
    * \return true if active probing is enabled, false otherwise
    */
   bool GetActiveProbing (void) const;
-  virtual void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
+  /**
+   * Handle a received packet.
+   *
+   * \param mpdu the received MPDU
+   */
+  void Receive (Ptr<WifiMacQueueItem> mpdu);
 
   /**
-   * Forward a probe request packet to the DCF. The standard is not clear on the correct
-   * queue for management frames if QoS is supported. We always use the DCF.
+   * Update list of candidate DMG PCP/APs to associate. The list should contain DmgApInfo sorted from
+   * best to worst SNR, with no duplicate.
+   *
+   * \param newApInfo the new DmgApInfo to be inserted
+   */
+  void UpdateCandidateApList (DmgApInfo &newApInfo);
+  /**
+   * Forward a probe request packet to the non-QoS Txop. The standard is not clear on the correct
+   * queue for management frames if QoS is supported. We always use the non-QoS Txop.
    */
   void SendProbeRequest (void);
   /**
-   * Forward an association request packet to the DCF. The standard is not clear on the correct
-   * queue for management frames if QoS is supported. We always use the DCF.
+   * Forward an association or reassociation request packet to the non-QoS Txop.
+   * The standard is not clear on the correct queue for management frames if QoS is supported.
+   * We always use the non-QoS Txop.
+   * \param isReassoc flag whether it is a reassociation request
    */
-  void SendAssociationRequest (void);
+  void SendAssociationRequest (bool isReassoc);
   /**
-   * Try to ensure that we are associated with an AP by taking an appropriate action
+   * Try to ensure that we are associated with an DMG PCP/AP by taking an appropriate action
    * depending on the current association status.
    */
   void TryToEnsureAssociated (void);
@@ -488,11 +514,6 @@ private:
    * WAIT_ASSOC_RESP and re-send an association request.
    */
   void AssocRequestTimeout (void);
-  /**
-   * This method is called after the probe request timeout occurred. We switch the state to
-   * WAIT_PROBE_RESP and re-send a probe request.
-   */
-  void ProbeRequestTimeout (void);
   /**
    * Return whether we have completed beamforming training with an AP.
    *
@@ -541,57 +562,85 @@ private:
    */
   void StartAbftResponderSectorSweep (Mac48Address address);
   /**
-   * This method is called after waiting in passive mode for beacons to
-   * arrive.  If no good beacons, restart scanning; otherwise, send an
-   * Association request to the highest quality beacon received and move
-   * to WAIT_ASSOC_RESP.
-   */
-  void WaitBeaconTimeout (void);
-  /**
-   * Start the scanning process to find the strongest beacon
+   * Start the scanning process which trigger active or passive scanning based on the
+   * active probing flag.
    */
   void StartScanning (void);
   /**
-   * Continue scanning process or terminate if no further channels to scan
+   * This method is called after wait beacon timeout or wait probe request timeout has
+   * occurred. This will trigger association process from beacons or probe responses
+   * gathered while scanning.
    */
   void ScanningTimeout (void);
+  /**
+   * Map the Tx and RX config during the reception of a TRN field to the SNR measured at the reception of the
+   * field and store them to determine the optimal antenna configuration.
+   * A callback to be hooked with the DmgWifiPhy class.
+   * \param antennaId the ID of the antenna used for receiving the TRN field
+   * \param sectorId the ID of the sector used for receiving the TRN field
+   * \param awvId the ID of the AWV used for receiving the TRN field
+   * \param trnUnitsRemaining The number of remaining TRN Units.
+   * \param subfieldsRemaining The number of remaining TRN Subfields within the TRN Unit.
+   * \param snr The measured SNR over specific TRN.
+   */
+  void RegisterBeaconSnr (AntennaID antennaId, SectorID sectorId, AWV_ID awvId, uint8_t trnUnitsRemaining, uint8_t subfieldsRemaining, double snr, Mac48Address apAddress);
+  /**
+   * Start the Group Beamforming Procedure. To be called at the start of a DTI if an STA supports the 802.11ay protocol
+   * and there were TRN fields appended to the beacons transmitted in the current BI. Determines the optimal
+   * antenna configurations according to the measured SNR. Updates the best RX or TX and RX configs for the station
+   * and if there is a change in the best transmit config for the AP sends an unsolicited Information Response.
+   */
+  void StartGroupBeamformingTraining (void);
+  /**
+   * Updates the SNR table for the AP (m_stationSnrMap) according to the newest SNR values measured when receiving the
+   * TRN fields appended to the beacons. For each TX config of the AP, the SNR from the best Rx config is taken.
+   */
+  void UpdateSnrTable (Mac48Address apAddress);
+  /**
+   * Checks if there has been a change in the best Tx config determined for the AP from the previous training.
+   * \param newTxConfig The optimal Tx config determined during the last training
+   * \return true if there has been a change in configuration, false otherwise
+   */
+  bool DetectChangeInConfiguration (ANTENNA_CONFIGURATION_COMBINATION newTxConfig);
 
 private:
   /** Association Variables and Trace Sources **/
-  Time m_probeRequestTimeout;
-  Time m_assocRequestTimeout;
-  EventId m_probeRequestEvent;                  //! Event for Probe request.
-  EventId m_assocRequestEvent;                  //! Event for assoication request.
-  EventId m_beaconWatchdog;                     //! Event for  watch dog timer.
-  Time m_beaconWatchdogEnd;                     //! Watch dog timer end time.
-  uint32_t m_maxLostBeacons;                    //! Maximum number of beacons we are allowed to miss.
-  bool m_activeProbing;                         //! Flag to indicate whether to perform active probing.
-  uint16_t m_aid;                               //! AID of the STA.
+  uint16_t m_aid;                               //!< AID of the STA.
+  Time m_waitBeaconTimeout;                     //!< wait beacon timeout
+  Time m_probeRequestTimeout;                   //!< probe request timeout.
+  Time m_assocRequestTimeout;                   //!< Association request timeout
+  EventId m_waitBeaconEvent;                    //!< Wait Event for DMG Beacon Reception.
+  EventId m_probeRequestEvent;                  //!< Event for Probe request.
+  EventId m_assocRequestEvent;                  //!< Event for assoication request.
+  EventId m_beaconWatchdog;                     //!< Event for  watch dog timer.
+  Time m_beaconWatchdogEnd;                     //!< Watch dog timer end time.
+  uint32_t m_maxMissedBeacons;                  //!< Maximum number of beacons we are allowed to miss.
+  bool m_activeProbing;                         //!< Flag to indicate whether to perform active probing.
+  bool m_activeScanning;                        //!< Flag to indicate whether to perform active network scanning.
+  TracedValue<Time> m_beaconArrival;            //!< Time in queue.
+  std::vector<DmgApInfo> m_candidateAps;        //!< list of candidate APs to associate to.
+  // Note: std::multiset<ApInfo> might be a candidate container to implement
+  // this sorted list, but we are using a std::vector because we want to sort
+  // based on SNR but find duplicates based on BSSID, and in practice this
+  // candidate vector should not be too large.
 
-  /** Scanning Capability Variables **/
-  Time m_scanningTimeout;                       //! Scanning Operation timeout.
-  EventId m_waitBeaconEvent;                    //! Wait Event for DMG Beacon Reception.
-  std::vector<uint16_t> m_candidateChannels;    //! Candidates channel to scan.
-  DmgBeaconInfo m_bestBeaconObserved;           //! Best received DMG beacon information.
-  TracedValue<Time> m_beaconArrival;            //! Time in queue.
-  uint32_t m_maxMissedBeacons;                  //! Maximum number of missed beacons.
-  std::map<Mac48Address, DmgBeaconInfo> m_availableAPs;
-
+  /* Data transmission variables  */
   bool m_moreData;                              //! More data field in the last received Data Frame to indicate that the STA
                                                 //! has MSDUs or A-MSDUs buffered for transmission to the frame’s recipient
                                                 //! during the current SP or TXOP.
 
   /** BI Parameters **/
-  EventId m_abftEvent;                          //!< Association Beamforming training Event.
+  EventId m_abftEvent;                          //!< Event for schedulling Association Beamforming Training channel access period.
   uint8_t m_nBI;                                //!< Flag to indicate the number of intervals to allocate A-BFT.
-  uint8_t m_txssSpan;                           //!< The number of BIs to cover all the sectors.
-  uint8_t m_remainingBIs;                       //!< The number of remaining BIs to cover the TxSS of the AP.
+  uint8_t m_TXSSSpan;                           //!< The number of BIs to cover all the sectors.
+  uint8_t m_remainingBIs;                       //!< The number of remaining BIs to cover the TXSS of the AP.
   bool m_completedFragmenteBI;                  //!< Flag to indicate if we have completed BI.
+  Time m_nextDti;                               //!< The relative starting time of the next DTI.
+  EventId m_dtiStartEvent;                      //!< Event for schedulling DTI channel access period.
 
   /** BTI Beamforming **/
   bool m_receivedDmgBeacon;
-  EventId m_sswFbckTimeout;                     //!< Timeout Event for receiving SSW FBCK Frame.
-  Ptr<UniformRandomVariable> a_bftSlot;         //!< Random variable for A-BFT slot.
+  Ptr<UniformRandomVariable> m_abftSlot;        //!< Random variable for selecting A-BFT slot.
   uint8_t m_remainingSlotsPerABFT;              //!< Remaining Slots in the current A-BFT.
   uint8_t m_currentSlotIndex;                   //!< Current SSW Slot in A-BFT.
   uint8_t m_selectedSlotIndex;                  //!< Selected SSW slot in A-BFT..
@@ -658,6 +707,7 @@ private:
 
   /** DMG BSS peer and service discovery **/
   TracedCallback<Mac48Address> m_informationReceived;
+  bool m_groupTraining;                         //!< Flag to indicate whether we are currently performing beamforming training using TRN fields in Beacons.
 
 };
 

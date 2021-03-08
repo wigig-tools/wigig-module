@@ -20,7 +20,6 @@
 #include "ns3/csma-module.h"
 #include "ns3/csma-star-helper.h"
 #include "ns3/applications-module.h"
-#include "ns3/csma-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/ipv6-address-generator.h"
 
@@ -66,7 +65,7 @@ main (int argc, char *argv[])
   Ipv6Address ipv6AddressBase = Ipv6Address("2001::");
   Ipv6Prefix ipv6AddressPrefix = Ipv6Prefix(64);
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("nSpokes", "Number of spoke nodes to place in the star", nSpokes);
   cmd.AddValue ("useIpv6", "Use Ipv6", useIpv6);
   cmd.Parse (argc, argv);

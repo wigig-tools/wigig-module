@@ -187,25 +187,25 @@ LteEnbNetDevice::DoDispose ()
 Ptr<LteEnbMac>
 LteEnbNetDevice::GetMac () const
 {
-  return m_ccMap.at (0)->GetMac ();
+  return GetMac (0);
 }
 
 Ptr<LteEnbPhy>
 LteEnbNetDevice::GetPhy () const
 {
-  return m_ccMap.at (0)->GetPhy ();
+  return GetPhy (0);
 }
 
 Ptr<LteEnbMac>
-LteEnbNetDevice::GetMac (uint8_t index) 
+LteEnbNetDevice::GetMac (uint8_t index) const
 {
-  return m_ccMap.at (index)->GetMac ();
+  return DynamicCast<ComponentCarrierEnb> (m_ccMap.at (index))->GetMac ();
 }
 
 Ptr<LteEnbPhy>
-LteEnbNetDevice::GetPhy(uint8_t index)  
+LteEnbNetDevice::GetPhy(uint8_t index) const
 {
-  return m_ccMap.at (index)->GetPhy ();
+  return DynamicCast<ComponentCarrierEnb> (m_ccMap.at (index))->GetPhy ();
 }
 
 Ptr<LteEnbRrc>
@@ -239,16 +239,16 @@ LteEnbNetDevice::HasCellId (uint16_t cellId) const
   return false;
 }
 
-uint8_t 
+uint16_t
 LteEnbNetDevice::GetUlBandwidth () const
 {
   return m_ulBandwidth;
 }
 
 void 
-LteEnbNetDevice::SetUlBandwidth (uint8_t bw)
+LteEnbNetDevice::SetUlBandwidth (uint16_t bw)
 { 
-  NS_LOG_FUNCTION (this << uint16_t (bw));
+  NS_LOG_FUNCTION (this << bw);
   switch (bw)
     { 
     case 6:
@@ -261,19 +261,19 @@ LteEnbNetDevice::SetUlBandwidth (uint8_t bw)
       break;
 
     default:
-      NS_FATAL_ERROR ("invalid bandwidth value " << (uint16_t) bw);
+      NS_FATAL_ERROR ("invalid bandwidth value " << bw);
       break;
     }
 }
 
-uint8_t 
+uint16_t
 LteEnbNetDevice::GetDlBandwidth () const
 {
   return m_dlBandwidth;
 }
 
 void 
-LteEnbNetDevice::SetDlBandwidth (uint8_t bw)
+LteEnbNetDevice::SetDlBandwidth (uint16_t bw)
 {
   NS_LOG_FUNCTION (this << uint16_t (bw));
   switch (bw)
@@ -288,7 +288,7 @@ LteEnbNetDevice::SetDlBandwidth (uint8_t bw)
       break;
 
     default:
-      NS_FATAL_ERROR ("invalid bandwidth value " << (uint16_t) bw);
+      NS_FATAL_ERROR ("invalid bandwidth value " << bw);
       break;
     }
 }
@@ -347,14 +347,14 @@ LteEnbNetDevice::SetCsgIndication (bool csgIndication)
   UpdateConfig (); // propagate the change to RRC level
 }
 
-std::map < uint8_t, Ptr<ComponentCarrierEnb> >
-LteEnbNetDevice::GetCcMap ()
+std::map < uint8_t, Ptr<ComponentCarrierBaseStation> >
+LteEnbNetDevice::GetCcMap () const
 {
   return m_ccMap;
 }
 
 void
-LteEnbNetDevice::SetCcMap (std::map< uint8_t, Ptr<ComponentCarrierEnb> > ccm)
+LteEnbNetDevice::SetCcMap (std::map< uint8_t, Ptr<ComponentCarrierBaseStation> > ccm)
 {
   NS_ASSERT_MSG (!m_isConfigured, "attempt to set CC map after configuration");
   m_ccMap = ccm;
@@ -366,8 +366,7 @@ LteEnbNetDevice::DoInitialize (void)
   NS_LOG_FUNCTION (this);
   m_isConstructed = true;
   UpdateConfig ();
-  std::map< uint8_t, Ptr<ComponentCarrierEnb> >::iterator it;
-  for (it = m_ccMap.begin (); it != m_ccMap.end (); ++it)
+  for (auto it = m_ccMap.begin (); it != m_ccMap.end (); ++it)
     {
        it->second->Initialize ();
     }
@@ -387,8 +386,10 @@ LteEnbNetDevice::DoInitialize (void)
 bool
 LteEnbNetDevice::Send (Ptr<Packet> packet, const Address& dest, uint16_t protocolNumber)
 {
-  NS_LOG_FUNCTION (this << packet   << dest << protocolNumber);
-  NS_ASSERT_MSG (protocolNumber == Ipv4L3Protocol::PROT_NUMBER || protocolNumber == Ipv6L3Protocol::PROT_NUMBER, "unsupported protocol " << protocolNumber << ", only IPv4/IPv6 is supported");
+  NS_LOG_FUNCTION (this << packet << dest << protocolNumber);
+  NS_ABORT_MSG_IF (protocolNumber != Ipv4L3Protocol::PROT_NUMBER
+                   && protocolNumber != Ipv6L3Protocol::PROT_NUMBER,
+                   "unsupported protocol " << protocolNumber << ", only IPv4 and IPv6 are supported");
   return m_rrc->SendData (packet);
 }
 

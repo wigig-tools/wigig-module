@@ -27,6 +27,7 @@ namespace ns3 {
 
 /**
  * \ingroup wifi
+ * \brief Headers for A-MPDU subframes
  */
 class AmpduSubframeHeader : public Header
 {
@@ -47,43 +48,21 @@ public:
   uint32_t Deserialize (Buffer::Iterator start);
 
   /**
-   * Set the CRC field.
-   *
-   * \param crc
-   */
-  void SetCrc (uint8_t crc);
-  /**
-   * Set the SIG field.
-   */
-  void SetSig ();
-  /**
    * Set the length field.
    *
-   * \param length
+   * \param length in bytes
    */
   void SetLength (uint16_t length);
   /**
   * Set the EOF field.
   *
-  * \param eof
+  * \param eof set EOF field if true
   */
   void SetEof (bool eof);
   /**
-   * Return the CRC field.
-   *
-   * \return the CRC field
-   */
-  uint8_t GetCrc (void) const;
-  /**
-   * Return the SIG field.
-   *
-   * \return the SIG field
-   */
-  uint8_t GetSig (void) const;
-  /**
    * Return the length field.
    *
-   * \return the length field
+   * \return the length field in bytes
    */
   uint16_t GetLength (void) const;
   /**
@@ -92,12 +71,19 @@ public:
    * \return the EOF field
    */
   bool GetEof (void) const;
+  /**
+   * Return whether the pattern stored in the delimiter
+   * signature field is correct, i.e. corresponds to the
+   * unique pattern 0x4E.
+   *
+   * \return true if the signature is valid, false otherwise
+   */
+  bool IsSignatureValid (void) const;
 
 private:
-  uint8_t m_crc;     //!< CRC field
-  uint8_t m_sig;     //!< SIG field
-  uint16_t m_length; //!< length field
-  bool m_eof;        //!< EOF field
+  uint16_t m_length;   //!< length field in bytes
+  bool m_eof;          //!< EOF field
+  uint8_t m_signature; //!< delimiter signature (should correspond to pattern 0x4E in order to be assumed valid)
 };
 
 } //namespace ns3

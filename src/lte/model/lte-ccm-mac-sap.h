@@ -53,6 +53,14 @@ public:
    */
   virtual void ReportMacCeToScheduler (MacCeListElement_s bsr) = 0;
 
+  /**
+   * \brief Report SR to the right scheduler
+   * \param rnti RNTI of the user that requested the SR
+   *
+   * \see LteCcmMacSapUser::UlReceiveSr
+   */
+  virtual void ReportSrToScheduler (uint16_t rnti) = 0;
+
 }; // end of class LteCcmMacSapProvider
 
 
@@ -80,6 +88,20 @@ public:
   virtual void UlReceiveMacCe (MacCeListElement_s bsr, uint8_t componentCarrierId) = 0;
 
   /**
+   * \brief The MAC received a SR
+   * \param rnti RNTI of the UE that requested a SR
+   * \param componentCarrierId CC that received the SR
+   *
+   * NOTE: Not implemented in the LTE module. The FemtoForum API requires
+   * that this function gets as parameter a struct  SchedUlSrInfoReqParameters.
+   * However, that struct has the SfnSf as a member: since it differs from
+   * LTE to mmwave/NR, and we don't have an effective strategy to deal with
+   * that, we limit the function to the only thing that the module have in
+   * common: the RNTI.
+   */
+  virtual void UlReceiveSr (uint16_t rnti, uint8_t componentCarrierId) = 0;
+
+  /**
    * \brief Notifies component carrier manager about physical resource block occupancy
    * \param prbOccupancy The physical resource block occupancy
    * \param componentCarrierId The component carrier id
@@ -100,7 +122,8 @@ public:
    */
   MemberLteCcmMacSapProvider (C* owner);
   // inherited from LteCcmRrcSapProvider
-  virtual void ReportMacCeToScheduler (MacCeListElement_s bsr);
+  virtual void ReportMacCeToScheduler (MacCeListElement_s bsr) override;
+  virtual void ReportSrToScheduler (uint16_t rnti) override;
 
 private:
   C* m_owner; ///< the owner class
@@ -118,6 +141,11 @@ void MemberLteCcmMacSapProvider<C>::ReportMacCeToScheduler (MacCeListElement_s b
   m_owner->DoReportMacCeToScheduler (bsr);
 }
 
+template <class C>
+void MemberLteCcmMacSapProvider<C>::ReportSrToScheduler (uint16_t rnti)
+{
+  m_owner->DoReportSrToScheduler (rnti);
+}
 
 /// MemberLteCcmMacSapUser class
 template <class C>
@@ -132,10 +160,11 @@ public:
   MemberLteCcmMacSapUser (C* owner);
   // inherited from LteCcmRrcSapUser
   virtual void UlReceiveMacCe (MacCeListElement_s bsr, uint8_t componentCarrierId);
+  virtual void UlReceiveSr (uint16_t rnti, uint8_t componentCarrierId);
   virtual void NotifyPrbOccupancy (double prbOccupancy, uint8_t componentCarrierId);
   // inherited from LteMacSapUser
-  virtual void NotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId, uint8_t componentCarrierId, uint16_t rnti, uint8_t lcid);
-  virtual void ReceivePdu (Ptr<Packet> p, uint16_t rnti, uint8_t lcid);
+  virtual void NotifyTxOpportunity (LteMacSapUser::TxOpportunityParameters txOpParams);
+  virtual void ReceivePdu (LteMacSapUser::ReceivePduParameters rxPduParams);
   virtual void NotifyHarqDeliveryFailure ();
 
 
@@ -155,6 +184,12 @@ void MemberLteCcmMacSapUser<C>::UlReceiveMacCe (MacCeListElement_s bsr, uint8_t 
   m_owner->DoUlReceiveMacCe (bsr, componentCarrierId);
 }
 
+template<class C>
+void MemberLteCcmMacSapUser<C>::UlReceiveSr (uint16_t rnti, uint8_t componentCarrierId)
+{
+  m_owner->DoUlReceiveSr (rnti, componentCarrierId);
+}
+
 template <class C>
 void MemberLteCcmMacSapUser<C>::NotifyPrbOccupancy (double prbOccupancy, uint8_t componentCarrierId)
 {
@@ -162,15 +197,15 @@ void MemberLteCcmMacSapUser<C>::NotifyPrbOccupancy (double prbOccupancy, uint8_t
 }
 
 template <class C>
-void MemberLteCcmMacSapUser<C>::NotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId, uint8_t componentCarrierId, uint16_t rnti, uint8_t lcid)
+void MemberLteCcmMacSapUser<C>::NotifyTxOpportunity (LteMacSapUser::TxOpportunityParameters txOpParams)
 {
-  m_owner->DoNotifyTxOpportunity (bytes, layer, harqId, componentCarrierId, rnti, lcid);
+  m_owner->DoNotifyTxOpportunity (txOpParams);
 }
 
 template <class C>
-void MemberLteCcmMacSapUser<C>::ReceivePdu (Ptr<Packet> p, uint16_t rnti, uint8_t lcid)
+void MemberLteCcmMacSapUser<C>::ReceivePdu (LteMacSapUser::ReceivePduParameters rxPduParams)
 {
-  m_owner->DoReceivePdu (p, rnti, lcid);
+  m_owner->DoReceivePdu (rxPduParams);
 }
 
 template <class C>

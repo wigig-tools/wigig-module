@@ -565,7 +565,7 @@ RequestElement::SerializeInformationField (Buffer::Iterator start) const
 {
   for (WifiInformationElementIdList::const_iterator i = m_list.begin (); i != m_list.end (); i++)
     {
-      start.WriteU8 (*i);
+      start.WriteU8 (i->first);
     }
 }
 
@@ -575,14 +575,15 @@ RequestElement::DeserializeInformationField (Buffer::Iterator start, uint8_t len
   WifiInformationElementId id;
   while (!start.IsEnd ())
     {
-      id = start.ReadU8 ();
-      m_list.push_back (id);
+      id = start.ReadU8 (); 
+      m_list.push_back (std::make_pair(id,0));
+
     }
   return length;
 }
 
 void
-RequestElement::AddRequestElementID (WifiInformationElementId id)
+RequestElement::AddRequestElementID (WifiInfoElementId id)
 {
   m_list.push_back (id);
 }
@@ -613,9 +614,9 @@ operator << (std::ostream &os, const RequestElement &element)
   WifiInformationElementIdList list = element.GetWifiInformationElementIdList ();
   for (WifiInformationElementIdList::const_iterator i = list.begin (); i != list.end () - 1; i++)
     {
-      os << *i << "|";
+      os << i->first << "|";
     }
-  os << list[list.size () - 1];
+  os << list[list.size () - 1].first;
   return os;
 }
 
@@ -625,7 +626,7 @@ operator >> (std::istream &is, RequestElement &element)
   WifiInformationElementId c1;
   is >> c1;
 
-  element.AddRequestElementID (c1);
+  element.AddRequestElementID (std::make_pair(c1,0));
 
   return is;
 }
@@ -1559,7 +1560,18 @@ BeamRefinementElement::BeamRefinementElement ()
     m_antennaType (false),
     m_numberOfBeams (0),
     m_midExtension (false),
-    m_capabilityRequest (false)
+    m_capabilityRequest (false),
+    m_bsFbckMsb (0),
+    m_bsFbckAntennaIdMsb (0),
+    m_numberOfMeasurementsMsb (0),
+    m_edmgExtensionFlag (false),
+    m_edmgChannelMeasurementPresent (false),
+    m_sswFrameType(DMG_BEACON_FRAME),
+    m_dbfFbckReq (false),
+    m_channelAggregationRequested (false),
+    m_channelAggregationPresent (false),
+    m_bfTrainingType (SISO_BF),
+    m_edmgDualPolarizationTrnChanneMeasurementPresent (false)
 {
 }
 
@@ -1572,7 +1584,7 @@ BeamRefinementElement::ElementId () const
 uint8_t
 BeamRefinementElement::GetInformationFieldSize () const
 {
-  return 5;
+  return 8;
 }
 
 void
@@ -1580,6 +1592,8 @@ BeamRefinementElement::SerializeInformationField (Buffer::Iterator start) const
 {
   uint32_t value1 = 0;
   uint8_t value2 = 0;
+  uint16_t value3 = 0;
+  uint8_t value4 = 0;
 
   value1 |= (m_initiator & 0x1);
   value1 |= (m_txTrainResponse & 0x1) << 1;
@@ -1607,8 +1621,24 @@ BeamRefinementElement::SerializeInformationField (Buffer::Iterator start) const
   value2 |= (m_midExtension & 0x1) << 4;
   value2 |= (m_capabilityRequest & 0x1) << 5;
 
+  /*802.11ay extension */
+  value3 |= (m_bsFbckMsb & 0x1F);
+  value3 |= (m_bsFbckAntennaIdMsb & 0x1) << 5;
+  value3 |= (m_numberOfMeasurementsMsb & 0xF) << 6;
+  value3 |= (m_edmgExtensionFlag & 0x1) << 10;
+  value3 |= (m_edmgChannelMeasurementPresent & 0x1) << 11;
+  value3 |= (static_cast<uint8_t> (m_sswFrameType) & 0x3) << 12;
+  value3 |= (m_dbfFbckReq & 0x1) << 14;
+  value3 |= (m_channelAggregationRequested & 0x1) << 15;
+
+  value4 |= (m_channelAggregationPresent & 0x1);
+  value4 |= (static_cast<uint8_t> (m_bfTrainingType) & 0x3) << 1;
+  value4 |= (m_edmgDualPolarizationTrnChanneMeasurementPresent & 0x1) << 3;
+
   start.WriteHtolsbU32 (value1);
   start.WriteU8 (value2);
+  start.WriteHtolsbU16 (value3);
+  start.WriteU8 (value4);
 }
 
 uint8_t
@@ -1617,6 +1647,8 @@ BeamRefinementElement::DeserializeInformationField (Buffer::Iterator start, uint
   Buffer::Iterator i = start;
   uint32_t value1 = i.ReadLsbtohU32 ();
   uint8_t value2 = i.ReadU8 ();
+  uint16_t value3 = i.ReadLsbtohU16 ();
+  uint8_t value4 = i.ReadU8 ();
 
   m_initiator = value1 & 0x1;
   m_txTrainResponse = (value1 >> 1) & 0x1;
@@ -1643,6 +1675,20 @@ BeamRefinementElement::DeserializeInformationField (Buffer::Iterator start, uint
 
   m_midExtension = (value2 >> 4) & 0x1;
   m_capabilityRequest = (value2 >> 5) & 0x1;
+
+  /* 802.11ay Extension Fields */
+  m_bsFbckMsb = value3 & 0x1F;
+  m_bsFbckAntennaIdMsb = (value3 >> 5) & 0x1;
+  m_numberOfMeasurementsMsb = (value3 >> 6) & 0xF;
+  m_edmgExtensionFlag = (value3 >> 10) & 0x1;
+  m_edmgChannelMeasurementPresent = (value3 >> 11) & 0x1;
+  m_sswFrameType = static_cast<SSW_FRAME_TYPE> ((value3 >> 12) & 0x3);
+  m_dbfFbckReq = (value3 >> 14) & 0x1;
+  m_channelAggregationRequested = (value3 >> 15) & 0x1;
+
+  m_channelAggregationPresent = value4 & 0x1;
+  m_bfTrainingType = static_cast<BF_TRAINING_TYPE> ((value4 >> 1) & 0x3);
+  m_edmgDualPolarizationTrnChanneMeasurementPresent = (value4 >> 3) & 0x1;
 
   return length;
 }
@@ -1793,6 +1839,75 @@ BeamRefinementElement::SetNumberOfBeams (uint8_t number)
   m_numberOfBeams = number;
 }
 
+void
+BeamRefinementElement::SetExtendedBsFbck (uint16_t index)
+{
+  m_bsFbck = index & 0x3F;
+  m_bsFbckMsb = (index >> 6) & 0x1F;
+}
+void
+BeamRefinementElement::SetExtendedBsFbckAntennaID (uint8_t id)
+{
+  m_bsFbckAntennaId = id & 0x3;
+  m_bsFbckAntennaIdMsb = (id >> 2) & 0x1;
+}
+
+void
+BeamRefinementElement::SetExtendedNumberOfMeasurements (uint16_t number)
+{
+  m_numberOfMeasurements = number & 0x7F;
+  m_numberOfMeasurementsMsb = (number >> 7) & 0xF;
+}
+
+void
+BeamRefinementElement::SetEdmgExtensionFlag (bool edmgFlag)
+{
+  m_edmgExtensionFlag = edmgFlag;
+}
+
+
+void
+BeamRefinementElement::SetEdmgChannelMeasurementPresent ( bool present)
+{
+  m_edmgChannelMeasurementPresent = present;
+}
+
+void
+BeamRefinementElement::SetSswFrameType (SSW_FRAME_TYPE type)
+{
+  m_sswFrameType = type;
+}
+
+void
+BeamRefinementElement::SetDbfFbckReq (bool req)
+{
+  m_dbfFbckReq = req;
+}
+
+void
+BeamRefinementElement::SetChannelAggregationRequested (bool req)
+{
+  m_channelAggregationRequested = req;
+}
+
+void
+BeamRefinementElement::SetChannelAggregationPresent (bool present)
+{
+  m_channelAggregationPresent = present;
+}
+
+void
+BeamRefinementElement::SetBfTrainingType (BF_TRAINING_TYPE type)
+{
+  m_bfTrainingType = type;
+}
+
+void
+BeamRefinementElement::SetEdmgDualPolTrnChMeasurementPresent (bool present)
+{
+  m_edmgDualPolarizationTrnChanneMeasurementPresent = present;
+}
+
 bool
 BeamRefinementElement::IsSnrPresent (void) const
 {
@@ -1911,6 +2026,81 @@ bool
 BeamRefinementElement::IsCapabilityRequest (void) const
 {
   return m_capabilityRequest;
+}
+
+uint16_t
+BeamRefinementElement::GetExtendedBsFbck (void) const
+{
+  uint16_t bsFbck = 0;
+  bsFbck |= (m_bsFbck & 0x3F);
+  bsFbck |= (m_bsFbckMsb & 0x1F) << 6;
+  return bsFbck;
+}
+
+uint8_t
+BeamRefinementElement::GetExtendedBsFbckAntennaID (void) const
+{
+  uint8_t bsFbckAntennaId = 0;
+  bsFbckAntennaId |= (m_bsFbckAntennaId & 0x3);
+  bsFbckAntennaId |= (m_bsFbckAntennaIdMsb & 0x1) << 2;
+  return bsFbckAntennaId;
+}
+
+uint16_t
+BeamRefinementElement::GetExtendedNumberOfMeasurements (void) const
+{
+  uint16_t numberOfMeasurments = 0;
+  numberOfMeasurments |= (m_numberOfMeasurements & 0x7F);
+  numberOfMeasurments |= (m_numberOfMeasurementsMsb & 0xF) << 7;
+  return numberOfMeasurments;
+}
+
+bool
+BeamRefinementElement::GetEdmgExtensionFlag (void) const
+{
+  return m_edmgExtensionFlag;
+}
+
+bool
+BeamRefinementElement::IsEdmgChannelMeasurementPresent (void) const
+{
+  return m_edmgChannelMeasurementPresent;
+}
+
+SSW_FRAME_TYPE
+BeamRefinementElement::GetSectorSweepFrameType (void) const
+{
+  return m_sswFrameType;
+}
+
+bool
+BeamRefinementElement::IsDbFbckReq (void) const
+{
+  return m_dbfFbckReq;
+}
+
+bool
+BeamRefinementElement::IsChannelAggregationRequested (void) const
+{
+  return m_channelAggregationRequested;
+}
+
+bool
+BeamRefinementElement::IsChannelAggregationPresent (void) const
+{
+  return m_channelAggregationPresent;
+}
+
+BF_TRAINING_TYPE
+BeamRefinementElement::GetBfTrainingType (void) const
+{
+  return m_bfTrainingType;
+}
+
+bool
+BeamRefinementElement::IsEdmgDualPolTrnChMeasurementPresent (void) const
+{
+  return m_edmgDualPolarizationTrnChanneMeasurementPresent;
 }
 
 ATTRIBUTE_HELPER_CPP (BeamRefinementElement);
@@ -3136,6 +3326,11 @@ operator >> (std::istream &is, NextDmgAti &element)
 
 ChannelMeasurementFeedbackElement::ChannelMeasurementFeedbackElement ()
 {
+  m_snrListSize = 0;
+  m_channelMeasurementSize = 0;
+  m_tapComponentsSize = 0;
+  m_tapsDelaySize = 0;
+  m_sectorIdOrderSize = 0;
 }
 
 WifiInformationElementId
@@ -3147,14 +3342,24 @@ ChannelMeasurementFeedbackElement::ElementId () const
 uint8_t
 ChannelMeasurementFeedbackElement::GetInformationFieldSize () const
 {
-  return 6;
+  uint8_t size;
+  uint16_t numBits = 0;
+  numBits += m_snrList.size () * 8;
+  if (m_channelMeasurementList.size () != 0)
+    {
+      numBits += m_channelMeasurementList.size () * m_channelMeasurementList.front ().size() * 16;
+    }
+  numBits += m_tapDelayList.size () * 8;
+  numBits += m_sectorIdOrderList.size() * 8;
+  size = std::ceil (numBits/8);
+  return size;
 }
 
 void
 ChannelMeasurementFeedbackElement::SerializeInformationField (Buffer::Iterator start) const
 {
   /* Serialize SNR List */
-  for (SNR_LIST_ITERATOR iter = m_snrList.begin (); iter != m_snrList.end (); iter++)
+  for (SNR_INT_LIST_ITERATOR iter = m_snrList.begin (); iter != m_snrList.end (); iter++)
     {
       start.WriteU8 (*iter);
     }
@@ -3192,7 +3397,7 @@ ChannelMeasurementFeedbackElement::SerializeInformationField (Buffer::Iterator s
 
 
 void
-ChannelMeasurementFeedbackElement::AddSnrItem (SNR snr)
+ChannelMeasurementFeedbackElement::AddSnrItem (SNR_INT snr)
 {
   m_snrList.push_back (snr);
 }
@@ -3215,8 +3420,57 @@ ChannelMeasurementFeedbackElement::AddSectorIdOrder (SECTOR_ID_ORDER order)
   m_sectorIdOrderList.push_back (order);
 }
 
-SNR_LIST
-ChannelMeasurementFeedbackElement::GetSnrList (void) const
+void
+ChannelMeasurementFeedbackElement::SetSnrListSize (uint16_t size)
+{
+  m_snrListSize = size;
+}
+
+void
+ChannelMeasurementFeedbackElement::SetChannelMeasurementSize (uint16_t size)
+{
+  m_channelMeasurementSize = size;
+}
+
+void
+ChannelMeasurementFeedbackElement::SetTapComponentsSize (NUMBER_OF_TAPS size)
+{
+  switch (size)
+    {
+      case TAPS_1:
+        m_tapComponentsSize = 1;
+      case TAPS_5:
+        m_tapComponentsSize = 5;
+      case TAPS_15:
+        m_tapComponentsSize = 15;
+      case TAPS_63:
+        m_tapComponentsSize = 63;
+    }
+}
+
+void
+ChannelMeasurementFeedbackElement::SetTapsDelaySize (NUMBER_OF_TAPS size)
+{
+  switch (size)
+    {
+      case TAPS_1:
+        m_tapsDelaySize = 1;
+      case TAPS_5:
+        m_tapsDelaySize = 5;
+      case TAPS_15:
+        m_tapsDelaySize = 15;
+      case TAPS_63:
+        m_tapsDelaySize = 63;
+    }
+}
+
+void
+ChannelMeasurementFeedbackElement::SetSectorIdSize (uint16_t size)
+{
+  m_sectorIdOrderSize = size;
+}
+
+SNR_INT_LIST ChannelMeasurementFeedbackElement::GetSnrList(void) const
 {
   return m_snrList;
 }
@@ -3242,6 +3496,39 @@ ChannelMeasurementFeedbackElement::GetSectorIdOrderList (void) const
 uint8_t
 ChannelMeasurementFeedbackElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
 {
+  for (int i = 0; i < m_snrListSize; i++)
+    {
+      SNR_INT snr = start.ReadU8 ();
+      m_snrList.push_back (snr);
+    }
+
+  for (int i = 0; i < m_channelMeasurementSize; i++)
+    {
+      TAP_COMPONENTS_LIST tapList;
+      for (int j = 0; j < m_tapComponentsSize; j++)
+        {
+          I_COMPONENT iComp = start.ReadU8 ();
+          Q_COMPONENT qComp = start.ReadU8 ();
+          tapList.push_back (std::make_pair(iComp,qComp));
+        }
+      m_channelMeasurementList.push_back (tapList);
+    }
+
+  for (int i = 0; i < m_tapsDelaySize; i++)
+    {
+      TAP_DELAY delay = start.ReadU8 ();
+      m_tapDelayList.push_back (delay);
+    }
+
+  for (int i = 0; i < m_sectorIdOrderSize; i++)
+    {
+      uint8_t  value  = start.ReadU8 ();
+      SECTOR_ID s = value & 0x3F;
+      ANTENNA_ID a = (value >> 6) & 0x3;
+      m_sectorIdOrderList.push_back (std::make_pair(s,a));
+    }
+
+  
   return length;
 }
 
@@ -5379,11 +5666,163 @@ std::istream
 }
 
 /***************************************************
+*           EDMG Operation Element 9.4.2.251
+****************************************************/
+
+EdmgOperationElement::EdmgOperationElement ()
+  : m_primaryChannel (0),
+    m_bssAid (0),
+    m_rssRetryLimit (0),
+    m_rssBackoff (0),
+    m_bssOperatingChannels (EDMG_CHANNEL_BTIMAP_CH2),
+    m_channelBWConfig (EDMG_BW_216)
+{
+}
+
+WifiInformationElementId
+EdmgOperationElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+EdmgOperationElement::ElementIdExt () const
+{
+  return IE_EXTENSION_EDMG_OPERATION;
+}
+
+uint8_t
+EdmgOperationElement::GetInformationFieldSize () const
+{
+  return 6;
+}
+
+void
+EdmgOperationElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint8_t abftParameters = 0;
+  abftParameters |= (m_rssRetryLimit & 0x2);
+  abftParameters |= (m_rssBackoff & 0x2) << 2;
+  start.WriteU8 (m_primaryChannel);
+  start.WriteU8 (m_bssAid);
+  start.WriteU8 (abftParameters);
+  start.WriteU8 (m_bssOperatingChannels);
+  start.WriteU8 (m_channelBWConfig);
+}
+
+uint8_t
+EdmgOperationElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint8_t abftParameters ;
+  m_primaryChannel = start.ReadU8 ();
+  m_bssAid = start.ReadU8 ();
+  abftParameters = start.ReadU8 ();
+  m_rssRetryLimit = (abftParameters & 0x2);
+  m_rssBackoff = (abftParameters >> 2) & 0x2;
+  m_bssOperatingChannels = static_cast<EdmgOperatingChannels> (start.ReadU8 ());
+  m_channelBWConfig = static_cast<EdmgChannelBwConfiguration> (start.ReadU8 ());
+  return length;
+}
+
+void
+EdmgOperationElement::SetPrimaryChannel (uint8_t ch)
+{
+  m_primaryChannel = ch;
+}
+
+void
+EdmgOperationElement::SetBssAid (uint8_t aid)
+{
+  m_bssAid = aid;
+}
+
+void
+EdmgOperationElement::SetRssRetryLimit (uint8_t limit)
+{
+  m_rssRetryLimit = limit;
+}
+
+void
+EdmgOperationElement::SetRssBackoff (uint8_t backoff)
+{
+  m_rssBackoff = backoff;
+}
+
+void
+EdmgOperationElement::SetBssOperatingChannels (EdmgOperatingChannels channels)
+{
+  m_bssOperatingChannels = channels;
+}
+
+void
+EdmgOperationElement::SetChannelBWConfiguration (EdmgChannelBwConfiguration bwConfig)
+{
+  m_channelBWConfig = bwConfig;
+}
+
+uint8_t
+EdmgOperationElement::GetPrimaryChannel (void) const
+{
+  return m_primaryChannel;
+}
+
+uint8_t
+EdmgOperationElement::GetBssAid (void) const
+{
+  return m_bssAid;
+}
+
+uint8_t
+EdmgOperationElement::GetRssRetryLimit (void) const
+{
+  return m_rssRetryLimit;
+}
+
+uint8_t
+EdmgOperationElement::GetRssBackoff (void) const
+{
+  return m_rssBackoff;
+}
+
+EdmgOperatingChannels
+EdmgOperationElement::GetBssOperatingChannels (void) const
+{
+  return m_bssOperatingChannels;
+}
+
+EdmgChannelBwConfiguration
+EdmgOperationElement::GetChannelBWConfiguration (void) const
+{
+  return m_channelBWConfig;
+}
+
+bool
+EdmgOperationElement::IsChannelBWSupported (EdmgChannelBwConfiguration config) const
+{
+  return true;
+}
+
+ATTRIBUTE_HELPER_CPP (EdmgOperationElement);
+
+std::ostream &operator << (std::ostream &os, const EdmgOperationElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, EdmgOperationElement &element)
+{
+  return is;
+}
+
+/***************************************************
 *EDMG Channel Measurement Feedback Element 9.4.2.253
 ****************************************************/
 
 EDMGChannelMeasurementFeedbackElement::EDMGChannelMeasurementFeedbackElement ()
 {
+  m_sectorIdOrderSize = 0;
+  m_brpCdownSize = 0;
+  m_tapsDelaySize = 0;
 }
 
 WifiInformationElementId
@@ -5393,7 +5832,7 @@ EDMGChannelMeasurementFeedbackElement::ElementId () const
 }
 
 WifiInformationElementId
-EDMGChannelMeasurementFeedbackElement::ElementIdExtension () const
+EDMGChannelMeasurementFeedbackElement::ElementIdExt () const
 {
   return IE_EXTENSION_EDMG_CHANNEL_MEASUREMENT_FEEDBACK;
 }
@@ -5401,12 +5840,15 @@ EDMGChannelMeasurementFeedbackElement::ElementIdExtension () const
 uint8_t
 EDMGChannelMeasurementFeedbackElement::GetInformationFieldSize () const
 {
-  uint8_t size;
+  /* Not accurate Information Field Size. The size of the EDMG Sector ID Order is 17 bits,
+   * the size of the BRP CDOWN  is 6 bits and the size of the Tap Delay is 12 bits. However since we can
+   * only write on the buffers using bytes, it´s necessary to round up */
+  uint8_t size = 1;     // Extension Element ID
   uint16_t numBits = 0;
-  numBits += m_edmgSectorIDOrder_List.size () * 17;
-  numBits += m_brp_CDOWN_List.size () * 6;
-  numBits += m_tap_Delay_List.size () * 12;
-  size = std::ceil (numBits/8);
+  numBits += m_edmgSectorIDOrder_List.size () * 24;
+  numBits += m_brp_CDOWN_List.size () * 8;
+  numBits += m_tap_Delay_List.size () * 16;
+  size += std::ceil (numBits/8);
   return size;
 }
 
@@ -5415,11 +5857,13 @@ EDMGChannelMeasurementFeedbackElement::SerializeInformationField (Buffer::Iterat
 {
   for (EDMGSectorIDOrder_ListCI it = m_edmgSectorIDOrder_List.begin (); it != m_edmgSectorIDOrder_List.end (); it++)
     {
-      uint32_t value = 0;
-      value |= (it->SectorID & 0x7FF);
-      value |= (it->TXAntennaID & 0x7) << 11;
-      value |= (it->RXAntennaID & 0x7) << 14;
-      start.WriteHtolsbU32 (value);
+      uint16_t value1 = 0;
+      uint8_t value2 = 0;
+      value1 |= (it->SectorID & 0x7FF);
+      value2 |= (it->TXAntennaID & 0x7);
+      value2 |= (it->RXAntennaID & 0x7) << 3;
+      start.WriteHtolsbU16 (value1);
+      start.WriteU8 (value2);
     }
   for (BRP_CDOWN_LIST_CI it = m_brp_CDOWN_List.begin (); it != m_brp_CDOWN_List.end (); it++)
     {
@@ -5434,6 +5878,27 @@ EDMGChannelMeasurementFeedbackElement::SerializeInformationField (Buffer::Iterat
 uint8_t
 EDMGChannelMeasurementFeedbackElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
 {
+  for (int i = 0; i < m_sectorIdOrderSize; i++ )
+    {
+      uint16_t value1 = start.ReadLsbtohU16 ();
+      uint8_t value2 = start.ReadU8 ();
+      EDMGSectorIDOrder sectorID;
+      sectorID.SectorID = value1 & 0x7FF;
+      sectorID.TXAntennaID = value2 & 0x7;
+      sectorID.RXAntennaID = (value2 >> 3) & 0x7;
+      m_edmgSectorIDOrder_List.push_back (sectorID);
+    }
+  for (int i = 0; i < m_brpCdownSize; i ++ )
+    {
+      BRP_CDOWN cdown = start.ReadU8 ();
+      m_brp_CDOWN_List.push_back (cdown);
+    }
+  for (int i = 0; i < m_tapsDelaySize; i++)
+    {
+      Tap_Delay tapDelay = start.ReadLsbtohU16 ();
+      m_tap_Delay_List.push_back (tapDelay);
+    }
+
   return length;
 }
 
@@ -5453,6 +5918,34 @@ void
 EDMGChannelMeasurementFeedbackElement::Add_Tap_Delay (Tap_Delay tapDelay)
 {
   m_tap_Delay_List.push_back (tapDelay);
+}
+
+void
+EDMGChannelMeasurementFeedbackElement::SetSectorIdOrderSize (uint16_t number)
+{
+  m_sectorIdOrderSize = number;
+}
+
+void
+EDMGChannelMeasurementFeedbackElement::SetBrpCdownSize (uint16_t number)
+{
+  m_brpCdownSize = number;
+}
+
+void
+EDMGChannelMeasurementFeedbackElement::SetTapsDelaySize (NUMBER_OF_TAPS number)
+{
+  switch (number)
+    {
+      case TAPS_1:
+        m_tapsDelaySize = 1;
+      case TAPS_5:
+        m_tapsDelaySize = 5;
+      case TAPS_15:
+        m_tapsDelaySize = 15;
+      case TAPS_63:
+        m_tapsDelaySize = 63;
+    }
 }
 
 EDMGSectorIDOrder_List
@@ -5501,7 +5994,7 @@ EDMGGroupIDSetElement::ElementId () const
 }
 
 WifiInformationElementId
-EDMGGroupIDSetElement::ElementIdExtension () const
+EDMGGroupIDSetElement::ElementIdExt () const
 {
   return IE_EXTENSION_EDMG_GROUP_ID_SET;
 }
@@ -5510,7 +6003,7 @@ uint8_t
 EDMGGroupIDSetElement::GetInformationFieldSize () const
 {
   uint8_t size = 0;
-  size += 1;  /* Number of Groups */
+  size += 2;  /* 2 Bytes: Extension Element ID + Number of Groups */
   for (EDMGGroupTuplesCI it = m_edmgGroupTuples.begin (); it != m_edmgGroupTuples.end (); it++)
     {
       size += 2 + it->aidList.size ();
@@ -5544,8 +6037,8 @@ EDMGGroupIDSetElement::DeserializeInformationField (Buffer::Iterator start, uint
     {
       EDMGGroupTuple tuple;
       tuple.groupID = start.ReadU8 ();
-      size = start.ReadU8 ();
-      for (uint8_t j = 0; j < size; size++)
+      size = start.ReadU8 () & 0x1F;
+      for (uint8_t j = 0; j < size; j++)
         {
           tuple.aidList.push_back (start.ReadU8 ());
         }
@@ -5591,6 +6084,162 @@ std::istream &operator >> (std::istream &is, EDMGGroupIDSetElement &element)
 }
 
 /***************************************************
+* EDMG Partial Sector Level Sweep Element 9.4.2.257
+****************************************************/
+
+EdmgPartialSectorLevelSweep::EdmgPartialSectorLevelSweep ()
+  :  m_partialNumberOfSectors (0),
+    m_totalNumberOfSectors (0),
+    m_partialNumberOfRxAntennas (0),
+    m_totalNumberOfRxAntennas (0),
+    m_timeToSwitchToFullSectorSweep (0),
+    m_agreeToChangeRoles (false),
+    m_agreeToPartialSectorSweep (false)
+{
+}
+
+WifiInformationElementId
+EdmgPartialSectorLevelSweep::ElementId () const
+{
+ return IE_EXTENSION;
+}
+
+WifiInformationElementId
+EdmgPartialSectorLevelSweep::ElementIdExt () const
+{
+  return IE_EXTENSION_EDMG_PARTIAL_SECTOR_SWEEP;
+}
+
+uint8_t
+EdmgPartialSectorLevelSweep::GetInformationFieldSize () const
+{
+  return 5;
+}
+
+void
+EdmgPartialSectorLevelSweep::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint32_t value = 0;
+  value |= (m_partialNumberOfSectors & 0x3F);
+  value |= (m_totalNumberOfSectors & 0x7FF) << 6;
+  value |= (m_partialNumberOfRxAntennas & 0x7) << 17;
+  value |= (m_totalNumberOfRxAntennas & 0x7) << 20;
+  value |= (m_timeToSwitchToFullSectorSweep & 0xF) << 23;
+  value |= (m_agreeToChangeRoles & 0x1) << 27;
+  value |= (m_agreeToPartialSectorSweep & 0x1) << 28;
+  start.WriteHtolsbU32 (value);
+}
+
+uint8_t
+EdmgPartialSectorLevelSweep::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint32_t value = start.ReadLsbtohU32 ();
+  m_partialNumberOfSectors = (value & 0x3F);
+  m_totalNumberOfSectors = (value >> 6) & 0x7FF;
+  m_partialNumberOfRxAntennas = (value >> 17) & 0x7;
+  m_totalNumberOfRxAntennas = (value >> 20) & 0x7;
+  m_timeToSwitchToFullSectorSweep = (value >> 23) & 0xF;
+  m_agreeToChangeRoles = (value >> 27) & 0x1;
+  m_agreeToPartialSectorSweep = (value >> 28) & 0x1;
+  return length;
+}
+
+void
+EdmgPartialSectorLevelSweep::SetPartialNumberOfSectors (uint8_t sectors)
+{
+  m_partialNumberOfSectors = sectors;
+}
+
+void
+EdmgPartialSectorLevelSweep::SetTotalNumberOfSectors (uint16_t sectors)
+{
+  m_totalNumberOfSectors = sectors;
+}
+
+void
+EdmgPartialSectorLevelSweep::SetPartialNumberOfRxAntennas (uint8_t antennas)
+{
+  m_partialNumberOfRxAntennas = antennas;
+}
+
+void
+EdmgPartialSectorLevelSweep::SetTotalNumberOfRxAntennas (uint8_t antennas)
+{
+  m_totalNumberOfRxAntennas = antennas;
+}
+
+void
+EdmgPartialSectorLevelSweep::SetTimeToSwitchToFullSectorSweep (uint8_t time)
+{
+  m_timeToSwitchToFullSectorSweep = time;
+}
+
+void
+EdmgPartialSectorLevelSweep::SetAgreeToChangeRoles (bool agree)
+{
+  m_agreeToChangeRoles = agree;
+}
+
+void EdmgPartialSectorLevelSweep::SetAgreeToPartialSectorSweep (bool agree)
+{
+  m_agreeToPartialSectorSweep = agree;
+}
+
+uint8_t
+EdmgPartialSectorLevelSweep::GetPartialNumberOfSectors (void) const
+{
+  return m_partialNumberOfSectors;
+}
+
+uint16_t
+EdmgPartialSectorLevelSweep::GetTotalNumberOfSectors (void) const
+{
+  return m_totalNumberOfSectors;
+}
+
+uint8_t
+EdmgPartialSectorLevelSweep::GetPartialNumberOfRxAntennas (void) const
+{
+  return m_partialNumberOfRxAntennas;
+}
+
+uint8_t
+EdmgPartialSectorLevelSweep::GetTotalNumberOfRxAntennas (void) const
+{
+  return m_totalNumberOfRxAntennas;
+}
+
+uint8_t
+EdmgPartialSectorLevelSweep::GetTimeToSwitchToFullSectorSweep (void) const
+{
+  return m_timeToSwitchToFullSectorSweep;
+}
+
+bool
+EdmgPartialSectorLevelSweep::GetAgreeToChangeRoles (void) const
+{
+  return m_agreeToChangeRoles;
+}
+
+bool
+EdmgPartialSectorLevelSweep::GetAgreeToPartialSectorSweep (void) const
+{
+  return m_agreeToPartialSectorSweep;
+}
+
+ATTRIBUTE_HELPER_CPP (EdmgPartialSectorLevelSweep);
+
+std::ostream &operator << (std::ostream &os, const EdmgPartialSectorLevelSweep &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, EdmgPartialSectorLevelSweep &element)
+{
+  return is;
+}
+
+/***************************************************
 *         MIMO Setup Control Element 9.4.2.258
 ****************************************************/
 
@@ -5603,7 +6252,7 @@ MimoSetupControlElement::MimoSetupControlElement ()
     m_requestedEDMGTRNUnitM (0),
     m_isInitiator (false),
     m_channelMeasurementRequested (false),
-    m_numberOfTapsRequested (0),
+    m_numberOfTapsRequested (TAPS_1),
     m_numberOfTXSectorCombinationsRequested (0),
     m_channelAggregationRequested (false)
 {
@@ -5616,7 +6265,7 @@ MimoSetupControlElement::ElementId () const
 }
 
 WifiInformationElementId
-MimoSetupControlElement::ElementIdExtension () const
+MimoSetupControlElement::ElementIdExt () const
 {
   return IE_EXTENSION_MIMO_SETUP_CONTROL;
 }
@@ -5624,7 +6273,7 @@ MimoSetupControlElement::ElementIdExtension () const
 uint8_t
 MimoSetupControlElement::GetInformationFieldSize () const
 {
-  return 9;
+  return 10;
 }
 
 void
@@ -5661,7 +6310,7 @@ MimoSetupControlElement::DeserializeInformationField (Buffer::Iterator start, ui
   m_requestedEDMGTRNUnitM = (val1 >> 50) & 0xF;
   m_isInitiator = (val1 >> 54) & 0x1;
   m_channelMeasurementRequested = (val1 >> 55) & 0x1;
-  m_numberOfTapsRequested = (val1 >> 56) & 0x3;
+  m_numberOfTapsRequested = static_cast<NUMBER_OF_TAPS> ((val1 >> 56) & 0x3);
   m_numberOfTXSectorCombinationsRequested |= (val1 >> 59) & 0x1F;
   m_numberOfTXSectorCombinationsRequested |= (val2 & 0x1) << 5;
   m_channelAggregationRequested = (val2 >> 1) & 0x1;
@@ -5701,7 +6350,7 @@ MimoSetupControlElement::SetLTxRx (uint8_t number)
 void
 MimoSetupControlElement::SetRequestedEDMGTRNUnitM (uint8_t unit)
 {
-  m_requestedEDMGTRNUnitM = unit;
+  m_requestedEDMGTRNUnitM = unit - 1;
 }
 
 void
@@ -5717,7 +6366,7 @@ MimoSetupControlElement::SetChannelMeasurementRequested (bool value)
 }
 
 void
-MimoSetupControlElement::SetNumberOfTapsRequested (uint8_t taps)
+MimoSetupControlElement::SetNumberOfTapsRequested (NUMBER_OF_TAPS taps)
 {
   m_numberOfTapsRequested = taps;
 }
@@ -5767,7 +6416,7 @@ MimoSetupControlElement::GetLTxRx (void) const
 uint8_t
 MimoSetupControlElement::GetRequestedEDMGTRNUnitM (void) const
 {
-  return m_requestedEDMGTRNUnitM;
+  return m_requestedEDMGTRNUnitM + 1;
 }
 
 bool
@@ -5782,7 +6431,7 @@ MimoSetupControlElement::IsChannelMeasurementRequested (void) const
   return m_channelMeasurementRequested;
 }
 
-uint8_t
+NUMBER_OF_TAPS
 MimoSetupControlElement::GetNumberOfTapsRequested (void) const
 {
   return m_numberOfTapsRequested;
@@ -5833,7 +6482,7 @@ MimoPollControlElement::ElementId () const
 }
 
 WifiInformationElementId
-MimoPollControlElement::ElementIdExtension () const
+MimoPollControlElement::ElementIdExt () const
 {
   return IE_EXTENSION_MIMO_POLL_CONTROL;
 }
@@ -5841,7 +6490,7 @@ MimoPollControlElement::ElementIdExtension () const
 uint8_t
 MimoPollControlElement::GetInformationFieldSize () const
 {
-  return 32;
+  return 5;
 }
 
 void
@@ -5963,8 +6612,8 @@ MIMOFeedbackControl::MIMOFeedbackControl ()
     m_linkType (false),
     m_comebackDelay (0),
     m_isChannelMeasurementPresent (false),
-    m_isTapDelayPresent(false),
-    m_numberOfTapsPresent (0),
+    m_isTapDelayPresent (false),
+    m_numberOfTapsPresent (TAPS_1),
     m_nummberOfTXSectorCombinationsPresent (0),
     m_isPrecodingInformationPresent (false),
     m_ssChannelAggregationPresent (false),
@@ -5986,7 +6635,7 @@ MIMOFeedbackControl::ElementId () const
 }
 
 WifiInformationElementId
-MIMOFeedbackControl::ElementIdExtension () const
+MIMOFeedbackControl::ElementIdExt () const
 {
   return IE_EXTENSION_MIMO_FEEDBACK_CONTROL;
 }
@@ -5994,63 +6643,78 @@ MIMOFeedbackControl::ElementIdExtension () const
 uint8_t
 MIMOFeedbackControl::GetInformationFieldSize () const
 {
-  return 6;
+  //// NINA ////
+  return 8;
+  //// NINA ////
 }
 
+//// NINA ////
 void
 MIMOFeedbackControl::SerializeInformationField (Buffer::Iterator start) const
 {
   uint16_t val1 = 0;
-  uint32_t val2 = 0;
+  uint8_t val2 = 0;
+  uint32_t val3 = 0;
   val1 |= (m_mimoBeamformingType & 0x1);
   val1 |= (m_linkType & 0x1) << 1;
-  val1 |= (m_comebackDelay) << 2;
+  val1 |= (m_comebackDelay & 0x7) << 2;
   val1 |= (m_isChannelMeasurementPresent & 0x1) << 5;
   val1 |= (m_isTapDelayPresent & 0x1) << 6;
   val1 |= (m_numberOfTapsPresent & 0x3) << 7;
-  val1 |= (m_nummberOfTXSectorCombinationsPresent & 0x2F) << 9;
+  val1 |= (m_nummberOfTXSectorCombinationsPresent & 0x3F) << 9;
   val1 |= (m_isPrecodingInformationPresent & 0x1) << 15;
 
   val2 |= (m_ssChannelAggregationPresent & 0x1);
-  val2 |= (m_numberOfColumns & 0x7) << 1;
-  val2 |= (m_numberOfRows & 0x7) << 4;
-  val2 |= (m_txAntennaMask & 0xFF) << 7;
-  val2 |= (m_numberOfContiguousChannels & 0x3) << 15;
-  val2 |= (m_grouping & 0x3) << 17;
-  val2 |= (m_codebookInformationType & 0x1) << 19;
-  val2 |= (m_feedbackType & 0x1) << 20;
-  val2 |= (m_numberOfFeedbackMatricesOrTaps & 0x2FF) << 21;
+  val2 |= (m_numberOfTxAntennas & 0x7) << 1;
+  val2 |= (m_numberOfRxAntennas & 0x7) << 4;
+
+  val3 |= (m_numberOfColumns & 0x7);
+  val3 |= (m_numberOfRows & 0x7) << 3;
+  val3 |= (m_txAntennaMask & 0xFF) << 6;
+  val3 |= (m_numberOfContiguousChannels & 0x3) << 14;
+  val3 |= (m_grouping & 0x3) << 16;
+  val3 |= (m_codebookInformationType & 0x1) << 18;
+  val3 |= (m_feedbackType & 0x1) << 19;
+  val3 |= (m_numberOfFeedbackMatricesOrTaps & 0x3FF) << 20;
 
   start.WriteHtolsbU16 (val1);
-  start.WriteHtolsbU32 (val2);
+  start.WriteU8 (val2);
+  start.WriteHtolsbU32 (val3);
 }
 
 uint8_t
 MIMOFeedbackControl::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
 {
-  uint32_t val1 = start.ReadLsbtohU16 ();
-  uint32_t val2 = start.ReadLsbtohU32 ();
+  uint16_t val1 = start.ReadLsbtohU16 ();
+  uint8_t val2 = start.ReadU8 ();
+  uint32_t val3 = start.ReadLsbtohU32 ();
+
   m_mimoBeamformingType = static_cast<MimoBeamformingType> (val1 & 0x1);
   m_linkType = (val1 >> 1) & 0x1;
-  m_comebackDelay = (val1 >> 2) & 0xFF;
+  m_comebackDelay = (val1 >> 2) & 0x7;
   m_isChannelMeasurementPresent = (val1 >> 5) & 0x1;
   m_isTapDelayPresent = (val1 >> 6) & 0x1;
-  m_numberOfTapsPresent = (val1 >> 7) & 0x3;
-  m_nummberOfTXSectorCombinationsPresent = (val1 >> 9) & 0x2F;
+  m_numberOfTapsPresent = static_cast<NUMBER_OF_TAPS> ((val1 >> 7) & 0x3);
+  m_nummberOfTXSectorCombinationsPresent = (val1 >> 9) & 0x3F;
   m_isPrecodingInformationPresent = (val1 >> 15) & 0x1;
 
   m_ssChannelAggregationPresent = (val2 & 0x1);
-  m_numberOfColumns = (val2 >> 1) & 0x7;
-  m_numberOfRows = (val2 >> 4) & 0x7;
-  m_txAntennaMask = (val2 >> 7) & 0xFF;
-  m_numberOfContiguousChannels = (val2 >> 15) & 0x3;
-  m_grouping = (val2 >> 17) & 0x3;
-  m_codebookInformationType = (val2 >> 19) & 0x1;
-  m_feedbackType = (val2 >> 20) & 0x1;
-  m_numberOfFeedbackMatricesOrTaps = (val2 >> 21) & 0x1;
+  m_numberOfTxAntennas = (val2 >> 1) & 0x7;
+  m_numberOfRxAntennas = (val2 >> 4) & 0x7;
+
+  m_numberOfColumns = (val3 & 0x7);
+  m_numberOfRows = (val3 >> 3) & 0x7;
+  m_txAntennaMask = (val3 >> 6) & 0xFF;
+  m_numberOfContiguousChannels = (val3 >> 14) & 0x3;
+  m_grouping = (val3 >> 16) & 0x3;
+  m_codebookInformationType = (val3 >> 18) & 0x1;
+  m_feedbackType = (val3 >> 19) & 0x1;
+  m_numberOfFeedbackMatricesOrTaps = (val3 >> 20) & 0x3FF;
 
   return length;
 }
+//// NINA ////
+
 
 void
 MIMOFeedbackControl::SetMimoBeamformingType (MimoBeamformingType type)
@@ -6083,7 +6747,7 @@ MIMOFeedbackControl::SetTapDelayPresent (bool present)
 }
 
 void
-MIMOFeedbackControl::SetNumberOfTapsPresent (uint8_t taps)
+MIMOFeedbackControl::SetNumberOfTapsPresent (NUMBER_OF_TAPS taps)
 {
   m_numberOfTapsPresent = taps;
 }
@@ -6091,7 +6755,7 @@ MIMOFeedbackControl::SetNumberOfTapsPresent (uint8_t taps)
 void
 MIMOFeedbackControl::SetNumberOfTXSectorCombinationsPresent (uint8_t present)
 {
-  m_nummberOfTXSectorCombinationsPresent = present;
+  m_nummberOfTXSectorCombinationsPresent = present - 1;
 }
 
 void
@@ -6105,6 +6769,21 @@ MIMOFeedbackControl::SetChannelAggregationPresent (bool present)
 {
   m_isChannelMeasurementPresent = present;
 }
+
+//// NINA ////
+void
+MIMOFeedbackControl::SetNumberOfTxAntennas (uint8_t number)
+{
+  m_numberOfTxAntennas = number;
+}
+
+void
+MIMOFeedbackControl::SetNumberOfRxAntennas (uint8_t number)
+{
+  m_numberOfRxAntennas = number;
+}
+//// NINA ////
+
 
 void
 MIMOFeedbackControl::SetNumberOfColumns (uint8_t nc)
@@ -6184,7 +6863,7 @@ MIMOFeedbackControl::IsTapDelayPresent (void) const
   return m_isTapDelayPresent;
 }
 
-uint8_t
+NUMBER_OF_TAPS
 MIMOFeedbackControl::GetNumberOfTapsPresent (void) const
 {
   return m_numberOfTapsPresent;
@@ -6193,11 +6872,11 @@ MIMOFeedbackControl::GetNumberOfTapsPresent (void) const
 uint8_t
 MIMOFeedbackControl::GetNumberOfTXSectorCombinationsPresent (void) const
 {
-  return m_nummberOfTXSectorCombinationsPresent;
+  return m_nummberOfTXSectorCombinationsPresent + 1;
 }
 
 bool
-MIMOFeedbackControl::IsPrecodingInformationPresent(void) const
+MIMOFeedbackControl::IsPrecodingInformationPresent (void) const
 {
   return m_isPrecodingInformationPresent;
 }
@@ -6207,6 +6886,20 @@ MIMOFeedbackControl::IsChannelAggregationPresent (void) const
 {
   return m_isChannelMeasurementPresent;
 }
+
+//// NINA ////
+uint8_t
+MIMOFeedbackControl::GetNumberOfTxAntennas (void) const
+{
+  return m_numberOfTxAntennas;
+}
+
+uint8_t
+MIMOFeedbackControl::GetNumberOfRxAntennas (void) const
+{
+  return m_numberOfRxAntennas;
+}
+//// NINA ////
 
 uint8_t
 MIMOFeedbackControl::GetNumberOfColumns (void) const
@@ -6275,7 +6968,7 @@ std::istream &operator >> (std::istream &is, MIMOFeedbackControl &element)
 MIMOSelectionControlElement::MIMOSelectionControlElement ()
   : m_edmgGroupID (0),
     m_numMUConfigurations (0),
-    m_muType (MU_Reciprocal)
+    m_muType (MU_NonReciprocal)
 {
 }
 
@@ -6286,7 +6979,7 @@ MIMOSelectionControlElement::ElementId () const
 }
 
 WifiInformationElementId
-MIMOSelectionControlElement::ElementIdExtension () const
+MIMOSelectionControlElement::ElementIdExt () const
 {
   return IE_EXTENSION_MIMO_SELECTION_CONTROL;
 }
@@ -6294,23 +6987,107 @@ MIMOSelectionControlElement::ElementIdExtension () const
 uint8_t
 MIMOSelectionControlElement::GetInformationFieldSize () const
 {
-  return 6;
+  uint8_t length;
+  length = 3;
+  if (m_muType == MU_NonReciprocal)
+    {
+      for (auto & config : m_nonReciprocalConfigList)
+        {
+          length+= 4;
+          length+= config.configList.size () * 2;
+        }
+    }
+  else
+    {
+      for (auto & config : m_reciprocalConfigList)
+        {
+          length+= 4;
+          length+= config.configList.size () * 4;
+        }
+    }
+  return length;
 }
 
 void
 MIMOSelectionControlElement::SerializeInformationField (Buffer::Iterator start) const
 {
-//  uint8_t val = 0;
+  uint8_t val = 0;
   start.WriteU8 (m_edmgGroupID);
-//  val |= (m_mimoBeamformingType & 0x1);
-//  val |= (m_linkType & 0x1) << 1;
-//  start.WriteHtolsbU16 (val1);
+  val |= (m_numMUConfigurations & 0x7);
+  val |= (m_muType & 0x1) << 3;
+  start.WriteU8 (val);
+  if (m_muType == MU_NonReciprocal)
+    {
+      for (auto & config : m_nonReciprocalConfigList)
+        {
+          start.WriteHtolsbU32 (config.nonReciprocalConfigGroupUserMask);
+          for (auto & user : config.configList)
+            {
+              start.WriteHtolsbU16 (user);
+            }
+        }
+    }
+  else
+    {
+      for (auto & config : m_reciprocalConfigList)
+        {
+          start.WriteHtolsbU32 (config.reciprocalConfigGroupUserMask);
+          for (auto & user : config.configList)
+            {
+              uint32_t val1 = 0;
+              val1 |= (user.ConfigurationAWVFeedbackID & 0x7FF);
+              val1 |= (user.ConfigurationBRPCDOWN & 0x3F) << 11;
+              val1 |= (user.ConfigurationRXAntennaID & 0x7) << 17;
+              start.WriteHtolsbU32 (val1);
+            }
+        }
+    }
 }
 
 uint8_t
 MIMOSelectionControlElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
 {
   m_edmgGroupID = start.ReadU8 ();
+  uint8_t val = start.ReadU8 ();
+  m_numMUConfigurations = (val & 0x7);
+  m_muType = static_cast<MultiUserTransmissionConfigType> ((val >> 3) & 0x1);
+  uint8_t endLength = length - 2;
+  while (endLength != 0)
+    {
+      uint32_t groupUserMask = start.ReadLsbtohU32 ();
+      uint8_t numUsers = 0;
+      for (uint8_t i = 0; i < 32; i++)
+        {
+          numUsers += (groupUserMask >> i) & 0x1;
+        }
+      if (m_muType == MU_NonReciprocal)
+        {
+          NonReciprocalTransmissionConfig config;
+          config.nonReciprocalConfigGroupUserMask = groupUserMask;
+          for (uint8_t i = 0; i < numUsers; i++)
+            {
+              config.configList.push_back (start.ReadLsbtohU16 ());
+            }
+          m_nonReciprocalConfigList.push_back (config);
+          endLength-= (4 + numUsers * 2);
+        }
+      else
+        {
+          ReciprocalTransmissionConfig config;
+          config.reciprocalConfigGroupUserMask = groupUserMask;
+          for (uint8_t i = 0; i < numUsers; i++)
+            {
+              uint32_t val1 = start.ReadLsbtohU32 ();
+              ReciprocalConfigData user;
+              user.ConfigurationAWVFeedbackID = (val1 & 0x7FF);
+              user.ConfigurationBRPCDOWN = (val1 >> 11) & 0x3F;
+              user.ConfigurationRXAntennaID = (val1 >> 17) & 0x7;
+              config.configList.push_back (user);
+            }
+          m_reciprocalConfigList.push_back (config);
+          endLength-= (4 + numUsers * 4);
+        }
+    }
   return length;
 }
 
@@ -6321,9 +7098,21 @@ MIMOSelectionControlElement::SetEDMGGroupID (uint8_t id)
 }
 
 void
+MIMOSelectionControlElement::SetNumberOfMultiUserConfigurations (uint8_t number)
+{
+  m_numMUConfigurations = number;
+}
+
+void
 MIMOSelectionControlElement::SetMultiUserTransmissionConfigurationType (MultiUserTransmissionConfigType type)
 {
   m_muType = type;
+}
+
+void
+MIMOSelectionControlElement::AddNonReciprocalMUBFTrainingBasedTransmissionConfig (NonReciprocalTransmissionConfig &config)
+{
+  m_nonReciprocalConfigList.push_back (config);
 }
 
 void
@@ -6348,6 +7137,12 @@ MultiUserTransmissionConfigType
 MIMOSelectionControlElement::GetMultiUserTransmissionConfigurationType (void) const
 {
   return m_muType;
+}
+
+NonReciprocalTransmissionConfigList
+MIMOSelectionControlElement::GetNonReciprocalTransmissionConfigList (void) const
+{
+  return m_nonReciprocalConfigList;
 }
 
 ReciprocalTransmissionConfigList
@@ -6383,7 +7178,7 @@ DigitalBFFeedbackElement::ElementId () const
 }
 
 WifiInformationElementId
-DigitalBFFeedbackElement::ElementIdExtension () const
+DigitalBFFeedbackElement::ElementIdExt () const
 {
   return IE_EXTENSION_DIGITAL_BF_FEEDBACK;
 }
@@ -6434,7 +7229,7 @@ DigitalBFFeedbackElement::AddRelativeTapDelay (Tap_Delay tapDelay)
 }
 
 void
-DigitalBFFeedbackElement::AddDifferentialSNRforSpaceTimeStream (SNR differentialSNR)
+DigitalBFFeedbackElement::AddDifferentialSNRforSpaceTimeStream (SNR_INT differentialSNR)
 {
   m_muExclusiveBeamformingReport.push_back (differentialSNR);
 }
@@ -6457,8 +7252,7 @@ DigitalBFFeedbackElement::GetTapDelay (void) const
   return m_tapDelay;
 }
 
-SNR_LIST
-DigitalBFFeedbackElement::GetMUExclusiveBeamformingReport (void) const
+SNR_INT_LIST DigitalBFFeedbackElement::GetMUExclusiveBeamformingReport(void) const
 {
   return m_muExclusiveBeamformingReport;
 }
@@ -6471,6 +7265,1594 @@ std::ostream &operator << (std::ostream &os, const DigitalBFFeedbackElement &ele
 }
 
 std::istream &operator >> (std::istream &is, DigitalBFFeedbackElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*      TDD Slot Structure element (9.4.2.266)
+****************************************************/
+
+TDDSlotStructureElement::TDDSlotStructureElement ()
+  : m_allocationID (0),
+    m_maximumSynchonizationError (0),
+    m_peerStaAddress (),
+    m_slotStructureStartTime (0),
+    m_numberOfTDDIntervals (0),
+    m_tddIntervalDuration (0)
+{
+}
+
+WifiInformationElementId
+TDDSlotStructureElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+TDDSlotStructureElement::ElementIdExt () const
+{
+  return IE_EXTENSION_TDD_SLOT_STRUCTURE;
+}
+
+uint8_t
+TDDSlotStructureElement::GetInformationFieldSize () const
+{
+  uint8_t size = 0;
+  size += 18;
+  size += 4 * m_slotStructureFieldList.size ();
+  return size;
+}
+
+void
+TDDSlotStructureElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint16_t structureControl = 0;
+  structureControl |= m_allocationID & 0xF;
+  structureControl |= (m_maximumSynchonizationError & 0xFF) << 4;
+  start.WriteHtolsbU16 (structureControl);
+  WriteTo (start, m_peerStaAddress);
+  start.WriteHtolsbU32 (m_slotStructureStartTime);
+  start.WriteHtolsbU16 (m_numberOfTDDIntervals);
+  start.WriteHtolsbU16 (m_tddIntervalDuration);
+  start.WriteU8 (m_slotStructureFieldList.size () && 0xFF);
+  for (SlotStructureFieldListCI it = m_slotStructureFieldList.begin (); it != m_slotStructureFieldList.end (); it++)
+    {
+      start.WriteHtolsbU16 (it->SlotStart);
+      start.WriteHtolsbU16 (it->SlotDuration);
+    }
+}
+
+uint8_t
+TDDSlotStructureElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint16_t structureControl = start.ReadLsbtohU16 ();
+  m_allocationID = structureControl & 0xF;
+  m_maximumSynchonizationError = (structureControl >> 4) & 0xFF;
+  ReadFrom (start, m_peerStaAddress);
+  m_slotStructureStartTime = start.ReadLsbtohU32 ();
+  m_numberOfTDDIntervals = start.ReadLsbtohU16 ();
+  m_tddIntervalDuration = start.ReadLsbtohU16 ();
+  uint8_t numTDDSlots = start.ReadU8 ();
+  for (uint8_t i = 0; i < numTDDSlots; i++)
+    {
+      SlotStructureField field;
+      field.SlotStart = start.ReadLsbtohU16 ();
+      field.SlotDuration = start.ReadLsbtohU16 ();
+      m_slotStructureFieldList.push_back (field);
+    }
+  return length;
+}
+
+void
+TDDSlotStructureElement::SetAllocationID (uint8_t id)
+{
+  m_allocationID = id;
+}
+
+void
+TDDSlotStructureElement::SetMaximumTimeSynchonizationError (uint8_t error)
+{
+  m_maximumSynchonizationError = error;
+}
+
+void
+TDDSlotStructureElement::SetPeerStaAddress (Mac48Address address)
+{
+  m_peerStaAddress = address;
+}
+
+void
+TDDSlotStructureElement::SetSlotStructureStartTime (uint32_t startTime)
+{
+  m_slotStructureStartTime = startTime;
+}
+
+void
+TDDSlotStructureElement::SetNumberOfTDDIntervals (uint16_t number)
+{
+  m_numberOfTDDIntervals = number;
+}
+
+void
+TDDSlotStructureElement::SetTDDIntervalDuration (uint16_t duration)
+{
+  m_tddIntervalDuration = duration;
+}
+
+void
+TDDSlotStructureElement::AddTDDSlotStructure (SlotStructureField &field)
+{
+  m_slotStructureFieldList.push_back (field);
+}
+
+uint8_t
+TDDSlotStructureElement::GetAllocationID (void) const
+{
+  return m_allocationID;
+}
+
+uint8_t
+TDDSlotStructureElement::GetMaximumTimeSynchonizationError (void) const
+{
+  return m_maximumSynchonizationError;
+}
+
+Mac48Address
+TDDSlotStructureElement::GetPeerStaAddress (void) const
+{
+  return m_peerStaAddress;
+}
+
+uint32_t
+TDDSlotStructureElement::GetSlotStructureStartTime (void) const
+{
+  return m_slotStructureStartTime;
+}
+
+uint16_t
+TDDSlotStructureElement::GetNumberOfTDDIntervals (void) const
+{
+  return m_numberOfTDDIntervals;
+}
+
+uint16_t
+TDDSlotStructureElement::GetTDDIntervalDuration (void) const
+{
+  return m_tddIntervalDuration;
+}
+
+SlotStructureFieldList
+TDDSlotStructureElement::GetSlotStructure (void) const
+{
+  return m_slotStructureFieldList;
+}
+
+ATTRIBUTE_HELPER_CPP (TDDSlotStructureElement);
+
+std::ostream &operator << (std::ostream &os, const TDDSlotStructureElement &element)
+{
+   return os;
+}
+
+std::istream &operator >> (std::istream &is, TDDSlotStructureElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*      TDD Slot Schedule element (9.4.2.267)
+****************************************************/
+
+TDDSlotScheduleElement::TDDSlotScheduleElement ()
+  : m_allocationID (0),
+    m_channelAggregation (false),
+    m_bandwidth (0),
+    m_maximumSynchonizationError (0),
+    m_peerStaAddress (),
+    m_slotStructureStartTime (0),
+    m_numberOfTDDIntervals (0),
+    m_tddSlotScheduleDuration (0)
+{
+}
+
+WifiInformationElementId
+TDDSlotScheduleElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+TDDSlotScheduleElement::ElementIdExt () const
+{
+  return IE_EXTENSION_TDD_SLOT_SCHEDULE;
+}
+
+uint8_t
+TDDSlotScheduleElement::GetInformationFieldSize () const
+{
+  return 0;
+}
+
+void
+TDDSlotScheduleElement::SerializeInformationField (Buffer::Iterator start) const
+{
+
+}
+
+uint8_t
+TDDSlotScheduleElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  return length;
+}
+
+void
+TDDSlotScheduleElement::SetAllocationID (uint8_t id)
+{
+  m_allocationID = id;
+}
+
+void
+TDDSlotScheduleElement::SetChannelAggregation (bool aggregation)
+{
+  m_channelAggregation = aggregation;
+}
+
+void
+TDDSlotScheduleElement::SetBandwidth (uint8_t bandwidth)
+{
+  m_bandwidth = bandwidth;
+}
+
+void
+TDDSlotScheduleElement::SetPeerStaAddress (Mac48Address address)
+{
+  m_peerStaAddress = address;
+}
+
+void
+TDDSlotScheduleElement::SetSlotStructureStartTime (uint32_t startTime)
+{
+  m_slotStructureStartTime = startTime;
+}
+
+void
+TDDSlotScheduleElement::SetNumberOfTDDIntervals (uint16_t number)
+{
+  m_numberOfTDDIntervals = number;
+}
+
+void
+TDDSlotScheduleElement::SetTDDSlotScheduleDuration (uint16_t duration)
+{
+  m_tddSlotScheduleDuration = duration;
+}
+
+void
+TDDSlotScheduleElement::SetBitmapAndAccessTypeSchedule (SlotStructureField &field)
+{
+
+}
+
+void
+TDDSlotScheduleElement::SetSlotCategorySchedule (SlotStructureField &field)
+{
+
+}
+
+uint8_t
+TDDSlotScheduleElement::GetAllocationID (void) const
+{
+  return m_allocationID;
+}
+
+bool
+TDDSlotScheduleElement::GetChannelAggregation (void) const
+{
+  return m_channelAggregation;
+}
+
+uint8_t
+TDDSlotScheduleElement::GetBandwidth (void) const
+{
+  return m_bandwidth;
+}
+
+Mac48Address
+TDDSlotScheduleElement::GetPeerStaAddress (void) const
+{
+  return m_peerStaAddress;
+}
+
+uint32_t
+TDDSlotScheduleElement::GetSlotStructureStartTime (void) const
+{
+  return m_slotStructureStartTime;
+}
+
+uint16_t
+TDDSlotScheduleElement::GetNumberOfTDDIntervals (void) const
+{
+  return m_numberOfTDDIntervals;
+}
+
+uint16_t
+TDDSlotScheduleElement::GetTDDSlotScheduleDuration (void) const
+{
+  return m_tddSlotScheduleDuration;
+}
+
+void
+TDDSlotScheduleElement::GetBitmapAndAccessTypeSchedule (void) const
+{
+
+}
+
+void
+TDDSlotScheduleElement::GetSlotCategorySchedule (void) const
+{
+
+}
+
+ATTRIBUTE_HELPER_CPP (TDDSlotScheduleElement);
+
+std::ostream &operator << (std::ostream &os, const TDDSlotScheduleElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, TDDSlotScheduleElement &element)
+{
+  return is;
+}
+
+
+/***************************************************
+*             TDD Sector Feedback subelement
+****************************************************/
+
+TDDSectorFeedbackSubelement::TDDSectorFeedbackSubelement ()
+{
+}
+
+WifiInformationElementId
+TDDSectorFeedbackSubelement::ElementId () const
+{
+  return TDD_SECTOR_FEEDBACK;
+}
+
+uint8_t
+TDDSectorFeedbackSubelement::GetInformationFieldSize () const
+{
+  uint8_t size = 0;
+  size += 2;
+  for (TxBeamFeedbackCI it = m_txBeamFeedbackList.begin (); it != m_txBeamFeedbackList.end (); it++)
+    {
+      for (DecodedRxSectorsInformationListCI info = it->DecodedRxSectorsInfoList.begin ();
+           info != it->DecodedRxSectorsInfoList.end (); info++)
+        {
+          size += 3 + it->DecodedRxSectorsInfoList.size () * 4;
+        }
+    }
+  return size;
+}
+
+void
+TDDSectorFeedbackSubelement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint16_t numTxBeams = m_txBeamFeedbackList.size ();
+  uint8_t numDecodedTxSectors;
+  uint8_t value[3];
+  start.WriteHtolsbU16 (numTxBeams);
+  for (TxBeamFeedbackCI it = m_txBeamFeedbackList.begin (); it != m_txBeamFeedbackList.end (); it++)
+    {
+      numDecodedTxSectors = it->DecodedRxSectorsInfoList.size ();
+      value[0] = (it->TxSectorID & 0xFF);
+      value[1] = (it->TxSectorID >> 8) & 0x1;
+      value[1] = (it->TxAntennaID & 0x7) << 1;
+      value[1] = (numDecodedTxSectors & 0xF) << 4;
+      value[2] = (numDecodedTxSectors >> 4) & 0xF;
+      start.Write (value, 3);
+      for (DecodedRxSectorsInformationListCI info = it->DecodedRxSectorsInfoList.begin ();
+           info != it->DecodedRxSectorsInfoList.end (); info++)
+        {
+          uint32_t subfield = 0;
+          subfield |= (info->DecodedRxSectorID & 0x1FF);
+          subfield |= (info->DecodedRxAntennaID & 0x7) << 9;
+          subfield |= (info->SnrReport & 0xFF) << 16;
+          subfield |= (info->RSSI_Report & 0xFF) << 24;
+          start.WriteHtolsbU32 (subfield);
+        }
+    }
+}
+
+uint8_t
+TDDSectorFeedbackSubelement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint16_t numTxBeams = start.ReadLsbtohU16 ();
+  uint8_t value[3];
+  for (uint16_t i = 0; i < numTxBeams; i++)
+    {
+      TxBeamFeedback beamFB;
+      uint8_t numDecodedTxSectors = 0;
+      start.Read (value, 3);
+      beamFB.TxSectorID |= value[0] && 0xFF;
+      beamFB.TxSectorID |= (value[1] && 0x1) << 8;
+      beamFB.TxAntennaID = (value[1] >> 1) && 0x7;
+      numDecodedTxSectors |= (value[1] >> 4) && 0xF;
+      numDecodedTxSectors |= (value[2] && 0xF) << 4;
+      for (uint16_t j = 0; j < numDecodedTxSectors; j++)
+        {
+          DecodedRxSectorsInformation decodedInfo;
+          uint32_t subfield = start.ReadU8 ();
+          decodedInfo.DecodedRxSectorID = (subfield & 0x1FF);
+          decodedInfo.DecodedRxAntennaID = (subfield >> 9) & 0x7;
+          decodedInfo.SnrReport = (subfield >> 16) & 0xFF;
+          decodedInfo.RSSI_Report =  (subfield >> 24) & 0xFF;
+          beamFB.DecodedRxSectorsInfoList.push_back (decodedInfo);
+        }
+      m_txBeamFeedbackList.push_back (beamFB);
+    }
+  return length;
+}
+
+void
+TDDSectorFeedbackSubelement::AddTxBeamFeedback (const TxBeamFeedback &feedback)
+{
+  m_txBeamFeedbackList.push_back (feedback);
+}
+
+TxBeamFeedbackList
+TDDSectorFeedbackSubelement::GetTxBeamFeedbackList (void) const
+{
+  return m_txBeamFeedbackList;
+}
+
+/***************************************************
+*             TDD Sector Setting Subelement
+****************************************************/
+
+TDDSectorSettingSubelement::TDDSectorSettingSubelement ()
+  : m_sectorRequest (false),
+    m_sectorResponse (false),
+    m_SectorAcknowledge (false),
+    m_switchTimestamp (0),
+    m_revertTimestamp (0),
+    m_responderRxSectorID (0),
+    m_responderRxAntennaID (0),
+    m_responderTxSectorID (0),
+    m_responderTxAntennaID (0),
+    m_initiatorRxSectorID (0),
+    m_initiatorRxAntennaID (0),
+    m_initiatorTxSectorID (0),
+    m_initiatorTxAntennaID (0)
+{
+}
+
+WifiInformationElementId
+TDDSectorSettingSubelement::ElementId () const
+{
+  return TDD_SECTOR_SETTING;
+}
+
+uint8_t
+TDDSectorSettingSubelement::GetInformationFieldSize () const
+{
+  return 23;
+}
+
+void
+TDDSectorSettingSubelement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint8_t sectorSetting = 0;
+  uint32_t switchSectors1 = 0;
+  uint16_t switchSectors2 = 0;
+  sectorSetting |= (m_sectorRequest & 0x1);
+  sectorSetting |= (m_sectorResponse & 0x1) << 1;
+  sectorSetting |= (m_SectorAcknowledge & 0x1) << 2;
+  start.WriteU8 (sectorSetting);
+  start.WriteHtolsbU64 (m_switchTimestamp);
+  start.WriteHtolsbU64 (m_revertTimestamp);
+  switchSectors1 |= (m_responderRxSectorID & 0x1FF);
+  switchSectors1 |= (m_responderRxAntennaID & 0x7) << 9;
+  switchSectors1 |= (m_responderTxSectorID & 0x1FF) << 12;
+  switchSectors1 |= (m_responderTxAntennaID & 0x7) << 21;
+  switchSectors1 |= (m_initiatorRxSectorID & 0xFF) << 24;
+  switchSectors2 |= ((m_initiatorRxSectorID >> 8) & 0x1);
+  switchSectors2 |= (m_initiatorRxAntennaID & 0x7) << 1;
+  switchSectors2 |= (m_initiatorTxSectorID & 0x1FF) << 4;
+  switchSectors2 |= (m_initiatorTxAntennaID & 0x7) << 13;
+  start.WriteHtolsbU32 (switchSectors1);
+  start.WriteHtolsbU16 (switchSectors2);
+}
+
+uint8_t
+TDDSectorSettingSubelement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint8_t sectorSetting = 0;
+  uint32_t switchSectors1;
+  uint16_t switchSectors2;
+  sectorSetting = start.ReadU8 ();
+  m_switchTimestamp = start.ReadLsbtohU64 ();
+  m_revertTimestamp = start.ReadLsbtohU64 ();
+  switchSectors1 = start.ReadLsbtohU32 ();
+  switchSectors2 = start.ReadLsbtohU16 ();
+
+  m_sectorRequest = (sectorSetting & 0x1);
+  m_sectorResponse = (sectorSetting >> 1) & 0x1;
+  m_SectorAcknowledge = (sectorSetting >> 2) & 2;
+
+  m_responderRxSectorID = (switchSectors1 & 0x1FF);
+  m_responderRxAntennaID = (switchSectors1 >> 9) & 0x7;
+  m_responderTxSectorID = (switchSectors1 >> 12) & 0x1FF;
+  m_responderTxAntennaID = (switchSectors1 >> 21) & 0x7;
+  m_initiatorRxSectorID |= (switchSectors1 >> 24) & 0xFF;
+  m_initiatorRxSectorID |= (switchSectors2 & 0x1) << 8;
+  m_initiatorRxAntennaID = (switchSectors2 >> 1) & 0x7;
+  m_initiatorTxSectorID = (switchSectors2 >> 4) & 0x1FF;
+  m_initiatorTxAntennaID = (switchSectors2 >> 13) & 0x7;
+
+  return length;
+}
+
+void
+TDDSectorSettingSubelement::SetSectorRequest (bool value)
+{
+  m_sectorRequest = value;
+}
+
+void
+TDDSectorSettingSubelement::SetSectorResponse (bool value)
+{
+  m_sectorResponse = value;
+}
+
+void
+TDDSectorSettingSubelement::SetSectorAcknowledge (bool value)
+{
+  m_SectorAcknowledge = value;
+}
+
+void
+TDDSectorSettingSubelement::SetSwitchTimestamp (uint64_t value)
+{
+  m_switchTimestamp = value;
+}
+
+void
+TDDSectorSettingSubelement::SetRevertTimestamp (uint64_t value)
+{
+  m_revertTimestamp = value;
+}
+
+/* TDD Switch Sectors Field */
+void
+TDDSectorSettingSubelement::SetResponderRxSectorID (uint16_t sectorID)
+{
+  m_responderRxSectorID = sectorID;
+}
+
+void
+TDDSectorSettingSubelement::SetResponderRxAntennaID (uint8_t antennaID)
+{
+  m_responderRxAntennaID = antennaID;
+}
+
+void
+TDDSectorSettingSubelement::SetResponderTxSectorID (uint16_t sectorID)
+{
+  m_responderTxSectorID = sectorID;
+}
+
+void
+TDDSectorSettingSubelement::SetResponderTxAntennaID (uint8_t antennaID)
+{
+  m_responderTxAntennaID = antennaID;
+}
+
+void
+TDDSectorSettingSubelement::SetInitiatorRxSectorID (uint16_t sectorID)
+{
+  m_initiatorRxSectorID = sectorID;
+}
+
+void
+TDDSectorSettingSubelement::SetInitiatorRxAntennaID (uint8_t antennaID)
+{
+  m_initiatorRxAntennaID = antennaID;
+}
+
+void
+TDDSectorSettingSubelement::SetInitiatorTxSectorID (uint16_t sectorID)
+{
+  m_initiatorTxSectorID = sectorID;
+}
+
+void
+TDDSectorSettingSubelement::SetInitiatorTxAntennaID (uint8_t antennaID)
+{
+  m_initiatorTxAntennaID = antennaID;
+}
+
+bool
+TDDSectorSettingSubelement::GetSectorRequest (void) const
+{
+  return m_sectorRequest;
+}
+
+bool
+TDDSectorSettingSubelement::GetSectorResponse (void) const
+{
+  return m_sectorResponse;
+}
+
+bool
+TDDSectorSettingSubelement::GetSectorAcknowledge (void) const
+{
+  return m_SectorAcknowledge;
+}
+
+uint64_t
+TDDSectorSettingSubelement::GetSwitchTimestamp (void) const
+{
+  return m_switchTimestamp;
+}
+
+uint64_t
+TDDSectorSettingSubelement::GetRevertTimestamp (void) const
+{
+  return m_revertTimestamp;
+}
+
+uint16_t
+TDDSectorSettingSubelement::GetResponderRxSectorID (void) const
+{
+  return m_responderRxSectorID;
+}
+
+uint8_t
+TDDSectorSettingSubelement::GetResponderRxAntennaID (void) const
+{
+  return m_responderRxAntennaID;
+}
+
+uint16_t
+TDDSectorSettingSubelement::GetResponderTxSectorID (void) const
+{
+  return m_responderTxSectorID;
+}
+
+uint8_t
+TDDSectorSettingSubelement::GetResponderTxAntennaID (void) const
+{
+  return m_responderTxAntennaID;
+}
+
+uint16_t
+TDDSectorSettingSubelement::GetInitiatorRxSectorID (void) const
+{
+  return m_initiatorRxSectorID;
+}
+
+uint8_t
+TDDSectorSettingSubelement::GetInitiatorRxAntennaID (void) const
+{
+  return m_initiatorRxAntennaID;
+}
+
+uint16_t
+TDDSectorSettingSubelement::GetInitiatorTxSectorID (void) const
+{
+  return m_initiatorTxSectorID;
+}
+
+uint8_t
+TDDSectorSettingSubelement::GetInitiatorTxAntennaID (void) const
+{
+  return m_initiatorTxAntennaID;
+}
+
+/***************************************************
+*             TDD Sector Config Subelement
+****************************************************/
+
+TDDSectorConfigSubelement::TDDSectorConfigSubelement ()
+{
+}
+
+WifiInformationElementId
+TDDSectorConfigSubelement::ElementId () const
+{
+  return TDD_SECTOR_CONFIG;
+}
+
+uint8_t
+TDDSectorConfigSubelement::GetInformationFieldSize () const
+{
+  return 2 + m_list.size () * 2;
+}
+
+void
+TDDSectorConfigSubelement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint16_t numConfigSectors = m_list.size ();
+  start.WriteHtolsbU16 (numConfigSectors);
+  for (ConfiguredSectorListCI it = m_list.begin (); it != m_list.end (); it++)
+    {
+      uint16_t value = 0;
+      value |= it->ConfiguredRxSectorID & 0x1FF;
+      value |= (it->ConfiguredRxAntennaID & 0x7) << 9;
+      start.WriteHtolsbU16 (value);
+    }
+}
+
+uint8_t
+TDDSectorConfigSubelement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint16_t numConfigSectors = start.ReadLsbtohU16 ();
+  uint16_t value;
+  for (uint16_t i = 0; i < numConfigSectors; i++)
+    {
+      ConfiguredSector config;
+      value = start.ReadLsbtohU16 ();
+      config.ConfiguredRxSectorID = value & 0x1FF;
+      config.ConfiguredRxAntennaID = (value >> 9) & 0x7;
+      m_list.push_back (config);
+    }
+  return length;
+}
+
+void
+TDDSectorConfigSubelement::AddConfiguredSector (const ConfiguredSector &sector)
+{
+  m_list.push_back (sector);
+}
+
+ConfiguredSectorList
+TDDSectorConfigSubelement::GetConfiguredSectorList (void) const
+{
+  return m_list;
+}
+
+/***************************************************
+*           TDD Route Element (9.4.2.281)
+****************************************************/
+
+TDDRouteElement::TDDRouteElement ()
+{
+}
+
+WifiInformationElementId
+TDDRouteElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+TDDRouteElement::ElementIdExt () const
+{
+  return IE_EXTENSION_TDD_ROUTE;
+}
+
+uint8_t
+TDDRouteElement::GetInformationFieldSize () const
+{
+  Ptr<WifiInformationElement> element;
+  uint32_t size = 1; // Element ID Extension
+  for (WifiInformationSubelementMap::const_iterator elem = m_map.begin (); elem != m_map.end (); elem++)
+    {
+      element = elem->second;
+      size += element->GetSerializedSize ();
+    }
+  return size;
+}
+
+void
+TDDRouteElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+  Ptr<WifiInformationElement> element;
+  for (WifiInformationSubelementMap::const_iterator elem = m_map.begin (); elem != m_map.end (); elem++)
+    {
+      element = elem->second;
+      i = element->Serialize (i);
+    }
+}
+
+uint8_t
+TDDRouteElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  Ptr<WifiInformationElement> element;
+  uint8_t id, subelemLen;
+  while (!i.IsEnd ())
+    {
+      i = DeserializeElementID (i, id, subelemLen);
+      switch (id)
+        {
+          case TDD_SECTOR_FEEDBACK:
+            {
+              element = Create<TDDSectorFeedbackSubelement> ();
+              break;
+            }
+          case TDD_SECTOR_SETTING:
+            {
+              element = Create<TDDSectorSettingSubelement> ();
+              break;
+            }
+          case TDD_SECTOR_CONFIG:
+            {
+              element = Create<TDDSectorConfigSubelement> ();
+              break;
+            }
+        default:
+          break;
+        }
+      i = element->DeserializeElementBody (i, subelemLen);
+      m_map[id] = element;
+    }
+  return length;
+}
+
+void
+TDDRouteElement::AddSubElement (Ptr<WifiInformationElement> elem)
+{
+  m_map[elem->ElementId ()] = elem;
+}
+
+Ptr<WifiInformationElement>
+TDDRouteElement::GetSubElement (WifiInformationElementId id)
+{
+  WifiInformationSubelementMap::const_iterator it = m_map.find (id);
+  if (it != m_map.end ())
+    {
+      return it->second;
+    }
+  else
+    {
+      return 0;
+    }
+}
+
+WifiInformationSubelementMap
+TDDRouteElement::GetListOfSubElements (void) const
+{
+  return m_map;
+}
+
+/***************************************************
+*      TDD Bandwidth Request Element (9.4.2.270)
+****************************************************/
+
+TDDBandwidthRequestElement::TDDBandwidthRequestElement ()
+  : m_transmitMCS (0),
+    m_txPercentage (0)
+{
+}
+
+WifiInformationElementId
+TDDBandwidthRequestElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+TDDBandwidthRequestElement::ElementIdExt () const
+{
+  return IE_EXTENSION_TDD_BANDWIDTH_REQUEST;
+}
+
+uint8_t
+TDDBandwidthRequestElement::GetInformationFieldSize () const
+{
+  return 16;
+}
+
+void
+TDDBandwidthRequestElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  uint8_t value[3];
+  uint8_t numQueueParameters = m_list.size ();
+  start.WriteU8 (m_transmitMCS);
+  value[0] = (m_txPercentage & 0xFF);
+  value[1] = (m_txPercentage >> 8) & 0x3F;
+  value[1] = (numQueueParameters & 0x3) << 6;
+  value[2] = (numQueueParameters >> 3) & 0x7;
+  start.Write (value, 3);
+  for (QueueParameterFieldListCI it = m_list.begin (); it != m_list.end (); it++)
+    {
+      start.WriteU8 (it->TID & 0x1F);
+      start.WriteHtolsbU32 (it->QueueSize);
+      start.WriteHtolsbU32 (it->TrafficArrivalRate);
+    }
+}
+
+uint8_t
+TDDBandwidthRequestElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  uint8_t value[3];
+  uint8_t numQueueParameters = 0;
+  m_transmitMCS = start.ReadU8 ();
+  start.Read (value, 3);
+  m_txPercentage |= (value[0] & 0xFF);
+  m_txPercentage |= (value[1] & 0x3F) << 8;
+  numQueueParameters |= (value[1] & 0x3);
+  numQueueParameters |= (value[2] & 0x7) << 3;
+  for (uint8_t i = 0; i < numQueueParameters; i++)
+    {
+      QueueParameterField field;
+      field.TID = start.ReadU8 ();
+      field.QueueSize = start.ReadLsbtohU32 ();
+      field.TrafficArrivalRate = start.ReadLsbtohU32 ();
+      m_list.push_back (field);
+    }
+  return length;
+}
+
+void
+TDDBandwidthRequestElement::SetTransmitMCS (uint8_t mcs)
+{
+  m_transmitMCS = mcs;
+}
+
+void
+TDDBandwidthRequestElement::SetTxPercentage (uint16_t percentage)
+{
+  m_txPercentage = percentage;
+}
+
+void
+TDDBandwidthRequestElement::AddQueueParameter (QueueParameterField &field)
+{
+  m_list.push_back (field);
+}
+
+uint8_t
+TDDBandwidthRequestElement::GetTransmitMCS (void) const
+{
+  return m_transmitMCS;
+}
+
+uint16_t
+TDDBandwidthRequestElement::GetTxPercentage (void) const
+{
+  return m_txPercentage;
+}
+
+QueueParameterFieldList
+TDDBandwidthRequestElement::GetQueueParameterFieldList (void) const
+{
+  return m_list;
+}
+
+/***************************************************
+*      TDD Synchronization Element (9.4.2.271)
+****************************************************/
+
+TDDSynchronizationElement::TDDSynchronizationElement ()
+  : m_priority1 (0),
+    m_clockClass (0),
+    m_clockAccuracy (0),
+    m_offsetScaledLogVariance (0),
+    m_priority2 (0),
+    m_clockIdentity (0),
+    m_timeSource (0),
+    m_sycnMode (0)
+{
+}
+
+WifiInformationElementId
+TDDSynchronizationElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+TDDSynchronizationElement::ElementIdExt () const
+{
+  return IE_EXTENSION_TDD_SYNCHRONIZATION;
+}
+
+uint8_t
+TDDSynchronizationElement::GetInformationFieldSize () const
+{
+  return 16;
+}
+
+void
+TDDSynchronizationElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  start.WriteU8 (m_priority1);
+  start.WriteU8 (m_clockClass);
+  start.WriteU8 (m_clockAccuracy);
+  start.WriteHtolsbU16 (m_offsetScaledLogVariance);
+  start.WriteU8 (m_priority2);
+  start.WriteHtolsbU64 (m_clockIdentity);
+  start.WriteU8 (m_timeSource);
+  start.WriteU8 (m_sycnMode);
+}
+
+uint8_t
+TDDSynchronizationElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  m_priority1 = start.ReadU8 ();
+  m_clockClass = start.ReadU8 ();
+  m_clockAccuracy = start.ReadU8 ();
+  m_offsetScaledLogVariance = start.ReadLsbtohU16 ();
+  m_priority2 = start.ReadU8 ();
+  m_clockIdentity = start.ReadLsbtohU64 ();
+  m_timeSource = start.ReadU8 ();
+  m_sycnMode = start.ReadU8 ();
+  return length;
+}
+
+void
+TDDSynchronizationElement::SetPriority1 (uint8_t priority)
+{
+  m_priority1 = priority;
+}
+
+void
+TDDSynchronizationElement::SetClockClass (uint8_t value)
+{
+  m_clockClass = value;
+}
+
+void
+TDDSynchronizationElement::SetClockAccuracy (uint8_t accuracy)
+{
+  m_clockAccuracy = accuracy;
+}
+
+void
+TDDSynchronizationElement::SetOffsetScaledLogVariance (uint16_t priority)
+{
+  m_offsetScaledLogVariance = priority;
+}
+
+void
+TDDSynchronizationElement::SetPriority2 (uint8_t priority)
+{
+  m_priority2 = priority;
+}
+
+void
+TDDSynchronizationElement::SetClockIdentity (uint64_t identity)
+{
+  m_clockIdentity = identity;
+}
+
+void
+TDDSynchronizationElement::SetTimeSource (uint8_t source)
+{
+  m_timeSource = source;
+}
+
+void
+TDDSynchronizationElement::SetSyncMode (uint8_t mode)
+{
+  m_sycnMode = mode;
+}
+
+uint8_t
+TDDSynchronizationElement::GetPriority1 (void) const
+{
+  return m_priority1;
+}
+
+uint8_t
+TDDSynchronizationElement::GetClockClass (void) const
+{
+  return m_clockClass;
+}
+
+uint8_t
+TDDSynchronizationElement::GetClockAccuracy (void) const
+{
+  return m_clockAccuracy;
+}
+
+uint16_t
+TDDSynchronizationElement::GetOffGetScaledLogVariance (void) const
+{
+  return m_offsetScaledLogVariance;
+}
+
+uint8_t
+TDDSynchronizationElement::GetPriority2 (void) const
+{
+  return m_priority2;
+}
+
+uint64_t
+TDDSynchronizationElement::GetClockIdentity (void) const
+{
+  return m_clockIdentity;
+}
+
+uint8_t
+TDDSynchronizationElement::GetTimeSource (void) const
+{
+  return m_timeSource;
+}
+
+uint8_t
+TDDSynchronizationElement::GetSyncMode (void) const
+{
+  return m_sycnMode;
+}
+
+/***************************************************
+*      EDMG Training Field Schedule Element 9.4.2.256
+****************************************************/
+
+EdmgTrainingFieldScheduleElement::EdmgTrainingFieldScheduleElement ()
+  : m_nextBtiWithTrn(0),
+    m_trnScheduleInterval(0)
+{
+}
+
+WifiInformationElementId
+EdmgTrainingFieldScheduleElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+EdmgTrainingFieldScheduleElement::ElementIdExt () const
+{
+  return IE_EXTENSION_EDMG_TRAINING_FIELD_SCHEDULE;
+}
+
+uint8_t
+EdmgTrainingFieldScheduleElement::GetInformationFieldSize () const
+{
+  return 3;
+}
+
+void
+EdmgTrainingFieldScheduleElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  start.WriteU8(m_nextBtiWithTrn);
+  start.WriteU8 (m_trnScheduleInterval);
+}
+
+uint8_t
+EdmgTrainingFieldScheduleElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  m_nextBtiWithTrn = i.ReadU8 ();
+  m_trnScheduleInterval = i.ReadU8 ();
+  return length;
+}
+
+void
+EdmgTrainingFieldScheduleElement::SetNextBtiWithTrn (uint8_t nextBti)
+{
+  m_nextBtiWithTrn = nextBti;
+}
+
+void
+EdmgTrainingFieldScheduleElement::SetTrnScheduleInterval (uint8_t trnSchedule)
+{
+  m_trnScheduleInterval = trnSchedule;
+}
+
+
+
+uint8_t
+EdmgTrainingFieldScheduleElement::GetNextBtiWithTrn (void) const
+{
+  return m_nextBtiWithTrn;
+}
+
+uint8_t
+EdmgTrainingFieldScheduleElement::GetTrnScheduleInterval (void) const
+{
+  return m_trnScheduleInterval;
+}
+
+ATTRIBUTE_HELPER_CPP (EdmgTrainingFieldScheduleElement);
+
+std::ostream &operator << (std::ostream &os, const EdmgTrainingFieldScheduleElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, EdmgTrainingFieldScheduleElement &element)
+{
+  return is;
+}
+
+/***************************************************
+*      EDMG BRP Request Element 9.4.2.255
+****************************************************/
+
+EdmgBrpRequestElement::EdmgBrpRequestElement ()
+  : m_L_RX (0),
+    m_L_TX_RX (0),
+    m_TXSectorID (0),
+    m_reqEDMG_TRN_UnitP (0),
+    m_reqEDMG_TRN_UnitM (0),
+    m_reqEDMG_TRN_UnitN (0),
+    m_BRP_TXSS (false),
+    m_TXSS_Initiator (false),
+    m_TXSS_Packets (0),
+    m_TXSS_Repeat (0),
+    m_TXSS_MIMO (false),
+    m_BRP_CDOWN (0),
+    m_TX_Antenna_Mask (0),
+    m_comebackDelay (0),
+    m_firstPathTraining (false),
+    m_dualPolarizationTrn (false),
+    m_digitalBFRequest (false),
+    m_feedbackType (SU_MIMO),
+    m_ncIndex (0)
+    {
+    }
+
+WifiInformationElementId
+EdmgBrpRequestElement::ElementId () const
+{
+  return IE_EXTENSION;
+}
+
+WifiInformationElementId
+EdmgBrpRequestElement::ElementIdExt () const
+{
+  return IE_EXTENSION_EDMG_BRP_REQUEST;
+}
+
+uint8_t
+EdmgBrpRequestElement::GetInformationFieldSize () const
+{
+  return 10;
+}
+
+void
+EdmgBrpRequestElement::SerializeInformationField (Buffer::Iterator start) const
+{
+  start.WriteU8(m_L_RX);
+  uint32_t val1 = 0;
+  uint32_t val2 = 0;
+
+  val1 |= (m_L_TX_RX);
+  val1 |= (m_TXSectorID & 0x7FF) << 8;
+  val1 |= (m_reqEDMG_TRN_UnitP & 0x3) << 19;
+  val1 |= (m_reqEDMG_TRN_UnitM & 0xF) << 21;
+  val1 |= (m_reqEDMG_TRN_UnitN & 0x3) << 25;
+  val1 |= (m_BRP_TXSS & 0x1) << 27;
+  val1 |= (m_TXSS_Initiator & 0x1) << 28;
+
+  val2 |= (m_TXSS_Packets & 0x7);
+  val2 |= (m_TXSS_Repeat & 0x7) << 3;
+  val2 |= (m_TXSS_MIMO & 0x1) << 6;
+  val2 |= (m_BRP_CDOWN & 0x3F) << 7;
+  val2 |= (m_TX_Antenna_Mask) << 13;
+  val2 |= (m_comebackDelay & 0x7) << 21;
+  val2 |= (m_firstPathTraining & 0x1) << 24;
+  val2 |= (m_dualPolarizationTrn & 0x1) << 25;
+  val2 |= (m_digitalBFRequest & 0x1) << 26;
+  val2 |= (m_feedbackType & 0x1) << 27;
+  val2 |= (m_ncIndex & 0x3) << 28;
+
+  start.WriteHtolsbU32 (val1);
+  start.WriteHtolsbU32 (val2);
+
+}
+
+uint8_t
+EdmgBrpRequestElement::DeserializeInformationField (Buffer::Iterator start, uint8_t length)
+{
+  Buffer::Iterator i = start;
+  m_L_RX = i.ReadU8 ();
+  uint32_t val1 = i.ReadLsbtohU32 ();
+  uint32_t val2 = i.ReadLsbtohU32 ();
+  m_L_TX_RX = val1 & 0xFF;
+  m_TXSectorID = (val1 >> 8) & 0x7FF;
+  m_reqEDMG_TRN_UnitP = (val1 >> 19) & 0x3;
+  m_reqEDMG_TRN_UnitM = (val1 >> 21) & 0xF;
+  m_reqEDMG_TRN_UnitN = (val1 >> 25) & 0x3;
+  m_BRP_TXSS = (val1 >> 27) & 0x1;
+  m_TXSS_Initiator = (val1 >> 28) & 0x1;
+
+  m_TXSS_Packets = val2 & 0x7;
+  m_TXSS_Repeat = (val2 >> 3) & 0x7;
+  m_TXSS_MIMO = (val2 >> 6) & 0x1;
+  m_BRP_CDOWN = (val2 >> 7) & 0x3F;
+  m_TX_Antenna_Mask = (val2 >> 13) & 0xFF;
+  m_comebackDelay = (val2 >> 21) & 0x7;
+  m_firstPathTraining = (val2 >> 24) & 0x1;
+  m_dualPolarizationTrn = (val2 >> 25) & 0x1;
+  m_digitalBFRequest = (val2 >> 26) & 0x1;
+  m_feedbackType = static_cast<FbckType> ((val2 >> 27) & 0x1);
+  m_ncIndex = (val2 >> 28) & 0x3;
+  return length;
+}
+
+
+void
+EdmgBrpRequestElement::SetL_RX (uint8_t lRx)
+{
+  m_L_RX = lRx;
+}
+
+void
+EdmgBrpRequestElement::SetL_TX_RX (uint8_t lTxRx)
+{
+  m_L_TX_RX = lTxRx;
+}
+
+void
+EdmgBrpRequestElement::SetTXSectorID (uint16_t txSectorId)
+{
+  m_TXSectorID = txSectorId;
+}
+
+void
+EdmgBrpRequestElement::SetRequestedEDMG_TRN_UnitP (uint8_t edmgTrnUnitP)
+{
+  if (edmgTrnUnitP <= 2)
+    m_reqEDMG_TRN_UnitP = edmgTrnUnitP;
+  else if (edmgTrnUnitP == 4)
+    m_reqEDMG_TRN_UnitP = 3;
+  else
+    NS_FATAL_ERROR("Invalid Requested EDMG TRN Unit P value");
+}
+
+void
+EdmgBrpRequestElement::SetRequestedEDMG_TRN_UnitM (uint8_t edmgTrnUnitM)
+{
+  m_reqEDMG_TRN_UnitM = edmgTrnUnitM - 1;
+}
+
+void
+EdmgBrpRequestElement::SetRequestedEDMG_TRN_UnitN (uint8_t edmgTrnUnitN)
+{
+  if ((edmgTrnUnitN == 3) || (edmgTrnUnitN == 8))
+    m_reqEDMG_TRN_UnitN = 2;
+  else if ((edmgTrnUnitN == 1) || (edmgTrnUnitN == 2) || (edmgTrnUnitN == 4))
+    m_reqEDMG_TRN_UnitN = edmgTrnUnitN -1;
+  else
+    NS_FATAL_ERROR("Invalid Requested EDMG TRN Unit N value");
+}
+
+void
+EdmgBrpRequestElement::SetBRP_TXSS (bool brpTxss)
+{
+  m_BRP_TXSS = brpTxss;
+}
+
+void
+EdmgBrpRequestElement::SetTXSS_Initiator (bool txssInitiator)
+{
+  m_TXSS_Initiator = txssInitiator;
+}
+
+void
+EdmgBrpRequestElement::SetTXSS_Packets (uint8_t txssPackets)
+{
+  m_TXSS_Packets = txssPackets - 1;
+}
+
+void
+EdmgBrpRequestElement::SetTXSS_Repeat (uint8_t txssRepeat)
+{
+  m_TXSS_Repeat = txssRepeat - 1;
+}
+
+void
+EdmgBrpRequestElement::SetTXSS_MIMO (bool txssMimo)
+{
+  m_TXSS_MIMO = txssMimo;
+}
+
+void
+EdmgBrpRequestElement::SetBRP_CDOWN (uint8_t brpCdown)
+{
+  m_BRP_CDOWN = brpCdown;
+}
+
+//// NINA ////
+void
+EdmgBrpRequestElement::SetTX_Antenna_Mask (std::vector<ANTENNA_ID> txAntennaIds)
+{
+  m_TX_Antenna_Mask = 0;
+  for (std::vector<ANTENNA_ID>::iterator it = txAntennaIds.begin(); it != txAntennaIds.end (); it++)
+    {
+      uint8_t antennaBitmap = 1 << ((*it) - 1);
+      m_TX_Antenna_Mask = m_TX_Antenna_Mask + antennaBitmap;
+    }
+}
+//// NINA ////
+
+void
+EdmgBrpRequestElement::SetComebackDelay (uint8_t comebackDelay)
+{
+  m_comebackDelay = comebackDelay;
+}
+
+void
+EdmgBrpRequestElement::SetFirstPathTraining (bool firstPathTraining)
+{
+  m_firstPathTraining = firstPathTraining;
+}
+
+void
+EdmgBrpRequestElement::SetDualPolarizationTrn (bool dualPolarizationTrn)
+{
+  m_dualPolarizationTrn = dualPolarizationTrn;
+}
+
+void
+EdmgBrpRequestElement::SetDigitalBFRequest (bool digitalBfReq)
+{
+  m_digitalBFRequest = digitalBfReq;
+}
+
+void
+EdmgBrpRequestElement::SetFeedbackType (FbckType feedbackType)
+{
+  m_feedbackType = feedbackType;
+}
+
+void
+EdmgBrpRequestElement::SetNcIndex (uint8_t ncIndex)
+{
+  ncIndex = ncIndex - 1;
+}
+
+
+uint8_t
+EdmgBrpRequestElement::GetL_RX (void) const
+{
+  return m_L_RX;
+}
+
+uint8_t
+EdmgBrpRequestElement::GetL_TX_RX (void) const
+{
+  return m_L_TX_RX;
+}
+uint16_t
+EdmgBrpRequestElement::GetTXSectorID (void) const
+{
+  return m_TXSectorID;
+}
+uint8_t
+EdmgBrpRequestElement::GetRequestedEDMG_TRN_UnitP (void) const
+{
+  if (m_reqEDMG_TRN_UnitP <= 2)
+    return m_reqEDMG_TRN_UnitP;
+  else if (m_reqEDMG_TRN_UnitP == 3)
+    return 4;
+  else
+    NS_FATAL_ERROR("Invalid Requested EDMG TRN Unit P value");
+}
+
+uint8_t
+EdmgBrpRequestElement::GetRequestedEDMG_TRN_UnitM (void) const
+{
+  return m_reqEDMG_TRN_UnitM + 1;
+}
+
+uint8_t
+EdmgBrpRequestElement::GetRequestedEDMG_TRN_UnitN (void) const
+{
+  if ((m_reqEDMG_TRN_UnitN == 0) || (m_reqEDMG_TRN_UnitN == 1) || (m_reqEDMG_TRN_UnitN == 3))
+    return  m_reqEDMG_TRN_UnitN + 1;
+  else if (m_reqEDMG_TRN_UnitN == 2)
+    {
+      if ((m_reqEDMG_TRN_UnitM == 2) || (m_reqEDMG_TRN_UnitM == 5) || (m_reqEDMG_TRN_UnitM == 8)
+          || (m_reqEDMG_TRN_UnitM == 11) || (m_reqEDMG_TRN_UnitM == 14) )
+        return 3;
+      else if ((m_reqEDMG_TRN_UnitM == 7) || (m_reqEDMG_TRN_UnitM == 15))
+        return 8;
+      else
+        NS_FATAL_ERROR("Invalid Requested EDMG TRN Unit N value");
+    }
+  else
+    NS_FATAL_ERROR("Invalid Requested EDMG TRN Unit N value");
+}
+
+bool
+EdmgBrpRequestElement::GetBRP_TXSS (void) const
+{
+  return m_BRP_TXSS;
+}
+
+bool
+EdmgBrpRequestElement::GetTXSS_Initiator (void) const
+{
+  return m_TXSS_Initiator;
+}
+uint8_t
+EdmgBrpRequestElement::GetTXSS_Packets (void) const
+
+{
+  return m_TXSS_Packets + 1;
+}
+
+uint8_t
+EdmgBrpRequestElement::GetTXSS_Repeat (void) const
+{
+  return m_TXSS_Repeat + 1;
+}
+
+bool
+EdmgBrpRequestElement::GetTXSS_MIMO (void) const
+{
+  return m_TXSS_MIMO;
+}
+
+uint8_t
+EdmgBrpRequestElement::GetBRP_CDOWN (void) const
+{
+  return m_BRP_CDOWN;
+}
+
+//// NINA ////
+std::vector<ANTENNA_ID>
+EdmgBrpRequestElement::GetTX_Antenna_Mask (void) const
+{
+  std::vector<ANTENNA_ID> antennaIds;
+  uint8_t dmgAnt;
+  for (uint8_t i = 0; i < 8; i++)
+    {
+      dmgAnt = (m_TX_Antenna_Mask >> i) & 0x1;
+      if (dmgAnt == 1)
+        {
+          antennaIds.push_back (i+1);
+        }
+    }
+  return antennaIds;
+}
+//// NINA ////
+
+uint8_t
+EdmgBrpRequestElement::GetComebackDelay (void) const
+{
+  return m_comebackDelay;
+}
+
+bool
+EdmgBrpRequestElement::GetFirstPathTraining (void) const
+{
+  return m_firstPathTraining;
+}
+
+bool
+EdmgBrpRequestElement::GetDualPolarizationTrn (void) const
+{
+  return m_dualPolarizationTrn;
+}
+
+bool
+EdmgBrpRequestElement::GetDigitalBFRequest (void) const
+{
+  return m_digitalBFRequest;
+}
+
+FbckType
+EdmgBrpRequestElement::GetFeedbackType (void) const
+{
+  return m_feedbackType;
+}
+
+uint8_t
+EdmgBrpRequestElement::GetNcIndex (void) const
+{
+  return m_ncIndex + 1;
+}
+
+ATTRIBUTE_HELPER_CPP (EdmgBrpRequestElement);
+
+std::ostream &operator << (std::ostream &os, const EdmgBrpRequestElement &element)
+{
+  return os;
+}
+
+std::istream &operator >> (std::istream &is, EdmgBrpRequestElement &element)
 {
   return is;
 }

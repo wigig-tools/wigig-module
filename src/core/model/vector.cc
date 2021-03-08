@@ -130,8 +130,8 @@ std::istream &operator >> (std::istream &is, Vector3D &vector)
 {
   char c1, c2;
   is >> vector.x >> c1 >> vector.y >> c2 >> vector.z;
-  if (c1 != ':' ||
-      c2 != ':')
+  if (c1 != ':'
+      || c2 != ':')
     {
       is.setstate (std::ios_base::failbit);
     }
@@ -141,6 +141,30 @@ bool operator < (const Vector3D &a, const Vector3D &b)
 {
   return std::tie (a.x, a.y, a.z) <
          std::tie (b.x, b.y, b.z);
+}
+bool operator <= (const Vector3D &a, const Vector3D &b)
+{
+  return std::tie (a.x, a.y, a.z) <=
+         std::tie (b.x, b.y, b.z);
+}
+bool operator > (const Vector3D &a, const Vector3D &b)
+{
+  return std::tie (a.x, a.y, a.z) >
+         std::tie (b.x, b.y, b.z);
+}
+bool operator >= (const Vector3D &a, const Vector3D &b)
+{
+  return std::tie (a.x, a.y, a.z) >=
+         std::tie (b.x, b.y, b.z);
+}
+bool operator == (const Vector3D &a, const Vector3D &b)
+{
+  return std::tie (a.x, a.y, a.z) ==
+         std::tie (b.x, b.y, b.z);
+}
+bool operator != (const Vector3D &a, const Vector3D &b)
+{
+  return !(a == b);
 }
 Vector3D
 operator + (const Vector3D &a, const Vector3D &b)
@@ -171,6 +195,30 @@ bool operator < (const Vector2D &a, const Vector2D &b)
 {
   return std::tie (a.x, a.y) <
          std::tie (b.x, b.y);
+}
+bool operator <= (const Vector2D &a, const Vector2D &b)
+{
+  return std::tie (a.x, a.y) <=
+         std::tie (b.x, b.y);
+}
+bool operator > (const Vector2D &a, const Vector2D &b)
+{
+  return std::tie (a.x, a.y) >
+         std::tie (b.x, b.y);
+}
+bool operator >= (const Vector2D &a, const Vector2D &b)
+{
+  return std::tie (a.x, a.y) >=
+         std::tie (b.x, b.y);
+}
+bool operator == (const Vector2D &a, const Vector2D &b)
+{
+  return std::tie (a.x, a.y) ==
+         std::tie (b.x, b.y);
+}
+bool operator != (const Vector2D &a, const Vector2D &b)
+{
+  return !(a == b);
 }
 Vector2D
 operator + (const Vector2D &a, const Vector2D &b)

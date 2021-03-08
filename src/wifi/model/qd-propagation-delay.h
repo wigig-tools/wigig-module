@@ -18,8 +18,8 @@
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
-#ifndef QD_PROPAGATION_DELAY_H
-#define QD_PROPAGATION_DELAY_H
+#ifndef QD_PROPAGATION_DELAY_MODEL_H
+#define QD_PROPAGATION_DELAY_MODEL_H
 
 #include <ns3/mobility-model.h>
 #include <ns3/propagation-delay-model.h>
@@ -28,37 +28,43 @@
 
 namespace ns3 {
 
-typedef std::vector<double> doubleVector_t;
-typedef std::pair<uint32_t, uint32_t> CommunicatingPair;
-typedef std::map<CommunicatingPair, doubleVector_t> PropagationDelays;
-typedef PropagationDelays::iterator PropagationDelays_I;
+class QdPropagationEngine;
 
-class QdPropagationDelay : public PropagationDelayModel
+class QdPropagationDelayModel : public PropagationDelayModel
 {
 public:
+  /**
+   * \brief Get the type ID.
+   * \return the object TypeId
+   */
   static TypeId GetTypeId (void);
-  QdPropagationDelay ();
-  virtual ~QdPropagationDelay ();
+  /**
+   * Use the default parameters from PropagationDelayConstantSpeed.
+   */
+  QdPropagationDelayModel ();
+  virtual ~QdPropagationDelayModel ();
+  /**
+   * Class constructor
+   * \param qdPropagationEngine Pointer to the Q-D Propagation Engine class.
+   */
+  QdPropagationDelayModel (Ptr<QdPropagationEngine> qdPropagationEngine);
 
+  /**
+   * Get Delay
+   * \param a
+   * \param b
+   * \return
+   */
   virtual Time GetDelay (Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;
-  void SetSpeed (double speed);
-  double GetSpeed (void) const;
 
 protected:
   virtual void DoDispose ();
 
 private:
   virtual int64_t DoAssignStreams (int64_t stream);
-  doubleVector_t ReadQDPropagationDelays (uint16_t indexTx, uint16_t indexRx) const;
-  void SetQdModelFolder (std::string folderName);
-  void SetStartDistance (uint16_t startDistance);
 
 private:
-  std::string m_qdFolder;
-  double m_speed;
-  uint16_t m_startDistance;
-  mutable uint16_t m_currentIndex;
-  mutable PropagationDelays m_delays;
+  Ptr<QdPropagationEngine> m_qdPropagationEngine;
 
 };
 

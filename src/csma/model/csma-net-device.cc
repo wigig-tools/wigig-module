@@ -32,7 +32,6 @@
 #include "ns3/trace-source-accessor.h"
 #include "csma-net-device.h"
 #include "csma-channel.h"
-#include "ns3/net-device-queue-interface.h"
 
 namespace ns3 {
 
@@ -131,7 +130,7 @@ CsmaNetDevice::GetTypeId (void)
                      MakeTraceSourceAccessor (&CsmaNetDevice::m_macTxBackoffTrace),
                      "ns3::Packet::TracedCallback")
     //
-    // Trace souces at the "bottom" of the net device, where packets transition
+    // Trace sources at the "bottom" of the net device, where packets transition
     // to/from the channel.
     //
     .AddTraceSource ("PhyTxBegin", 
@@ -219,42 +218,7 @@ CsmaNetDevice::DoDispose ()
   m_channel = 0;
   m_node = 0;
   m_queue = 0;
-  m_queueInterface = 0;
   NetDevice::DoDispose ();
-}
-
-void
-CsmaNetDevice::DoInitialize (void)
-{
-  if (m_queueInterface)
-    {
-      NS_ASSERT_MSG (m_queue != 0, "A Queue object has not been attached to the device");
-
-      // connect the traced callbacks of m_queue to the static methods provided by
-      // the NetDeviceQueue class to support flow control and dynamic queue limits.
-      // This could not be done in NotifyNewAggregate because at that time we are
-      // not guaranteed that a queue has been attached to the netdevice
-      m_queueInterface->ConnectQueueTraces (m_queue, 0);
-    }
-
-  NetDevice::DoInitialize ();
-}
-
-void
-CsmaNetDevice::NotifyNewAggregate (void)
-{
-  NS_LOG_FUNCTION (this);
-  if (m_queueInterface == 0)
-    {
-      Ptr<NetDeviceQueueInterface> ndqi = this->GetObject<NetDeviceQueueInterface> ();
-      //verify that it's a valid netdevice queue interface and that
-      //the netdevice queue interface was not set before
-      if (ndqi != 0)
-        {
-          m_queueInterface = ndqi;
-        }
-    }
-  NetDevice::NotifyNewAggregate ();
 }
 
 void
@@ -541,6 +505,7 @@ CsmaNetDevice::TransmitStart (void)
       //
       // The channel is free, transmit the packet
       //
+      m_phyTxBeginTrace (m_currentPkt);
       if (m_channel->TransmitStart (m_currentPkt, m_deviceId) == false)
         {
           NS_LOG_WARN ("Channel TransmitStart returns an error");
@@ -556,7 +521,6 @@ CsmaNetDevice::TransmitStart (void)
           //
           m_backoff.ResetBackoffTime ();
           m_txMachineState = BUSY;
-          m_phyTxBeginTrace (m_currentPkt);
 
           Time tEvent = m_bps.CalculateBytesTxTime (m_currentPkt->GetSize ());
           NS_LOG_LOGIC ("Schedule TransmitCompleteEvent in " << tEvent.GetSeconds () << "sec");

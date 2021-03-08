@@ -20,16 +20,16 @@
  * Authors: Pavel Boyko <boyko@iitp.ru>
  */
 
+#include <iostream>
+#include <cmath>
 #include "ns3/aodv-module.h"
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/point-to-point-module.h"
-#include "ns3/wifi-module.h" 
 #include "ns3/v4ping-helper.h"
-#include <iostream>
-#include <cmath>
+#include "ns3/yans-wifi-helper.h"
 
 using namespace ns3;
 
@@ -43,6 +43,11 @@ using namespace ns3;
  * [10.0.0.1] <-- step --> [10.0.0.2] <-- step --> [10.0.0.3] <-- step --> [10.0.0.4]
  * 
  * ping 10.0.0.4
+ *
+ * When 1/3 of simulation time has elapsed, one of the nodes is moved out of
+ * range, thereby breaking the topology.  By default, this will result in
+ * only 34 of 100 pings being received.  If the step size is reduced
+ * to cover the gap, then all pings can be received.
  */
 class AodvExample 
 {
@@ -110,7 +115,7 @@ int main (int argc, char **argv)
 //-----------------------------------------------------------------------------
 AodvExample::AodvExample () :
   size (10),
-  step (100),
+  step (50),
   totalTime (100),
   pcap (true),
   printRoutes (true)
@@ -124,7 +129,7 @@ AodvExample::Configure (int argc, char **argv)
   // LogComponentEnable("AodvRoutingProtocol", LOG_LEVEL_ALL);
 
   SeedManager::SetSeed (12345);
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
 
   cmd.AddValue ("pcap", "Write PCAP traces.", pcap);
   cmd.AddValue ("printRoutes", "Print routing table dumps.", printRoutes);

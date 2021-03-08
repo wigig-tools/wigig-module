@@ -33,7 +33,7 @@ using namespace ns3;
 
 int main (int argc, char *argv[])
 {	
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
 	
   // to save a template default attribute file run it like this:
@@ -106,10 +106,6 @@ int main (int argc, char *argv[])
   // set ylabel "Y"
   // set cblabel "SINR (dB)"
   // plot "rem.out" using ($1):($2):(10*log10($4)) with image
-  
-    
-  BuildingsHelper::MakeMobilityModelConsistent ();
-
 
   Simulator::Run ();
 

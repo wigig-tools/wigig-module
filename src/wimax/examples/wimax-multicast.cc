@@ -59,7 +59,6 @@
 #include "ns3/csma-module.h"
 #include <iostream>
 #include "ns3/global-route-manager.h"
-#include "ns3/mobility-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/vector.h"
 
@@ -101,7 +100,7 @@ int main (int argc, char *argv[])
   int nbSS = 10, duration = 7, schedType = 0;
   WimaxHelper::SchedulerType scheduler = WimaxHelper::SCHED_TYPE_SIMPLE;
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("nbSS", "number of subscriber station to create", nbSS);
   cmd.AddValue ("scheduler", "type of scheduler to use with the netdevices", schedType);
   cmd.AddValue ("duration", "duration of the simulation in seconds", duration);

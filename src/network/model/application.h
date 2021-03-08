@@ -103,6 +103,26 @@ public:
    * \param node the node to which this Application object is attached.
    */
   void SetNode (Ptr<Node> node);
+
+  /**
+   * \brief Common callback signature for packet delay and address.
+   *
+   * \param delay The packet delay.
+   * \param from The source socket address associated with the packet,
+   *             indicating the packet's origin.
+   */
+  typedef void (*DelayAddressCallback) (const Time &delay,
+                                        const Address &from);
+
+  /**
+   * \brief Common signature used by callbacks to application's state
+   *        transition trace source.
+   * \param oldState The name of the previous state.
+   * \param newState The name of the current state.
+   */
+  typedef void (*StateTransitionCallback)(const std::string &oldState,
+                                          const std::string &newState);
+
   /**
    * \brief Application specific startup code
    *
@@ -111,6 +131,7 @@ public:
    * subclasses.
    */
   virtual void StartApplication (void);
+
   /**
    * \brief Application specific shutdown code
    *
@@ -119,7 +140,6 @@ public:
    * subclasses.
    */
   virtual void StopApplication (void);
-
 protected:
   virtual void DoDispose (void);
   virtual void DoInitialize (void);

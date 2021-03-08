@@ -47,22 +47,22 @@ ObjectPtrContainerValue::End (void) const
   NS_LOG_FUNCTION (this);
   return m_objects.end ();
 }
-uint32_t
+std::size_t
 ObjectPtrContainerValue::GetN (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_objects.size ();
 }
 Ptr<Object>
-ObjectPtrContainerValue::Get (uint32_t i) const
+ObjectPtrContainerValue::Get (std::size_t i) const
 {
   NS_LOG_FUNCTION (this << i);
-  Iterator it = m_objects.find (i); 
+  Iterator it = m_objects.find (i);
   Ptr<Object> value = 0;
   if ( it != m_objects.end () )
-  {
-    value = m_objects.find (i)->second;
-  }
+    {
+      value = m_objects.find (i)->second;
+    }
   return value;
 }
 
@@ -72,7 +72,7 @@ ObjectPtrContainerValue::Copy (void) const
   NS_LOG_FUNCTION (this);
   return ns3::Create<ObjectPtrContainerValue> (*this);
 }
-std::string 
+std::string
 ObjectPtrContainerValue::SerializeToString (Ptr<const AttributeChecker> checker) const
 {
   NS_LOG_FUNCTION (this << checker);
@@ -88,7 +88,7 @@ ObjectPtrContainerValue::SerializeToString (Ptr<const AttributeChecker> checker)
     }
   return oss.str ();
 }
-bool 
+bool
 ObjectPtrContainerValue::DeserializeFromString (std::string value, Ptr<const AttributeChecker> checker)
 {
   NS_LOG_FUNCTION (this << value << checker);
@@ -96,14 +96,14 @@ ObjectPtrContainerValue::DeserializeFromString (std::string value, Ptr<const Att
   return true;
 }
 
-bool 
+bool
 ObjectPtrContainerAccessor::Set (ObjectBase * object, const AttributeValue & value) const
 {
   // not allowed.
   NS_LOG_FUNCTION (this << object << &value);
   return false;
 }
-bool 
+bool
 ObjectPtrContainerAccessor::Get (const ObjectBase * object, AttributeValue &value) const
 {
   NS_LOG_FUNCTION (this << object << &value);
@@ -113,27 +113,27 @@ ObjectPtrContainerAccessor::Get (const ObjectBase * object, AttributeValue &valu
       return false;
     }
   v->m_objects.clear ();
-  uint32_t n;
+  std::size_t n;
   bool ok = DoGetN (object, &n);
   if (!ok)
     {
       return false;
     }
-  for (uint32_t i = 0; i < n; i++)
+  for (std::size_t i = 0; i < n; i++)
     {
-      uint32_t index;
+      std::size_t index;
       Ptr<Object> o = DoGet (object, i, &index);
-      v->m_objects.insert (std::pair <uint32_t, Ptr<Object> > (index, o));
+      v->m_objects[index] = o;
     }
   return true;
 }
-bool 
+bool
 ObjectPtrContainerAccessor::HasGetter (void) const
 {
   NS_LOG_FUNCTION (this);
   return true;
 }
-bool 
+bool
 ObjectPtrContainerAccessor::HasSetter (void) const
 {
   NS_LOG_FUNCTION (this);

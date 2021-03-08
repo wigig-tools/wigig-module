@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf-8
 # Thomas Nagy, 2006-2010 (ita)
 
@@ -45,7 +45,7 @@ def action_process_file_func(tsk):
 
 @feature('cmd')
 def apply_cmd(self):
-	"call a command everytime"
+	"call a command every time"
 	if not self.fun: raise Errors.WafError('cmdobj needs a function!')
 	tsk = Task.TaskBase()
 	tsk.fun = self.fun

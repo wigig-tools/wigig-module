@@ -21,6 +21,7 @@
 #include "wifi-radio-energy-model-helper.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/wifi-tx-current-model.h"
+#include "ns3/wifi-phy.h"
 
 namespace ns3 {
 
@@ -127,7 +128,7 @@ WifiRadioEnergyModelHelper::DoInstall (Ptr<NetDevice> device,
   source->AppendDeviceEnergyModel (model);
   // set energy source pointer
   model->SetEnergySource (source);
-  // create and register energy model phy listener
+  // create and register energy model PHY listener
   wifiPhy->RegisterListener (model->GetPhyListener ());
   //
   if (m_txCurrentModel.GetTypeId ().GetUid ())

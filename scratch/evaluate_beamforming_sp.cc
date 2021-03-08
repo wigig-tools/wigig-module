@@ -23,15 +23,19 @@
  * West DMG STA (-1,0)                      East DMG STA (1,0)
  *
  * Simulation Description:
- * Once all the stations have assoicated successfully with the PCP/AP, the PCP/AP allocates three SPs
- * to perform Beamforming Training (TxSS) as following:
+ * Once all the stations have assoicated successfully with the DMG PCP/AP, the PCP/AP allocates three SPs
+ * to perform Beamforming Training (TXSS) as following:
  *
  * SP1: DMG West STA -----> DMG East STA
  * SP2: DMG AP -----> DMG East STA
  * SP3: DMG West STA -----> DMG AP
  *
+ * In this scenario, the DMG STAs do not exchange the DMG Capabilities information which is necessary for
+ * performing beamforming training. Once all the DMG STAs associate with the DMG PCP/AP, we store the
+ * DMG capabilities of the peer statinos. All the DMG STAs use CodebookAnalytical with 8 virtual sectors.
+ *
  * Running the Simulation:
- * To run the script with the default parameters:
+ * To run the script with the default parameters, type the following command line:
  * ./waf --run "evaluate_beamforming_sp"
  *
  * Simulation Output:
@@ -106,28 +110,30 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t
 }
 
 void
-SLSCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> wifiMac, SlsCompletionAttrbitutes attributes)
 {
-  if (accessPeriod == CHANNEL_ACCESS_BHI)
+  if (attributes.accessPeriod == CHANNEL_ACCESS_BHI)
     {
       if (wifiMac == apWifiMac)
         {
-          std::cout << "DMG AP " << apWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
+          std::cout << "DMG AP " << apWifiMac->GetAddress ()
+                    << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
         }
       else
         {
-          std::cout << "DMG STA " << wifiMac->GetAddress () << " completed SLS phase with DMG AP " << address << std::endl;
+          std::cout << "DMG STA " << wifiMac->GetAddress ()
+                    << " completed SLS phase with DMG AP " << attributes.peerStation << std::endl;
         }
-      std::cout << "Best Tx Antenna Configuration: SectorID=" << uint (sectorId) << ", AntennaID=" << uint (antennaId) << std::endl;
+      std::cout << "Best Tx Antenna Configuration: AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
     }
-  else if (accessPeriod == CHANNEL_ACCESS_DTI)
+  else if (attributes.accessPeriod == CHANNEL_ACCESS_DTI)
     {
       beamformedLinks++;
-      std::cout << "DMG STA " << wifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-      std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
-                << ", AntennaID=" << uint32_t (antennaId) << std::endl;
+      std::cout << "DMG STA " << wifiMac->GetAddress ()
+                << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
+      std::cout << "Best Tx Antenna Configuration: AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
       if (beamformedLinks == 6)
         {
           apWifiMac->PrintSnrTable ();
@@ -185,9 +191,17 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
+  /* Set the correct error model */
+  wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
+                             "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
+  // The value correspond to DMG MCS-0.
+  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
+  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
+  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
+  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
+  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
+  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue ("DMG_MCS12"),
                                                                 "DataMode", StringValue ("DMG_MCS12"));
@@ -230,7 +244,7 @@ main (int argc, char *argv[])
   /* Setting mobility model */
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0.0, +1.0, 0.0));   /* PCP/AP */
+  positionAlloc->Add (Vector (0.0, +1.0, 0.0));   /* DMG PCP/AP */
   positionAlloc->Add (Vector (-1.0, 0.0, 0.0));   /* West STA */
   positionAlloc->Add (Vector (+1.0, 0.0, 0.0));   /* East STA */
 

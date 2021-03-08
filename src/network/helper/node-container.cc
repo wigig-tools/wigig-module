@@ -36,6 +36,11 @@ NodeContainer::NodeContainer (std::string nodeName)
   Ptr<Node> node = Names::Find<Node> (nodeName);
   m_nodes.push_back (node);
 }
+NodeContainer::NodeContainer (uint32_t n, uint32_t systemId /* = 0 */)
+{
+  m_nodes.reserve (n);
+  Create (n, systemId);
+}
 NodeContainer::NodeContainer (const NodeContainer &a, const NodeContainer &b)
 {
   Add (a);
@@ -134,6 +139,19 @@ NodeContainer::GetGlobal (void)
       c.Add (*i);
     }
   return c;
+}
+
+bool
+NodeContainer::Contains (uint32_t id) const
+{
+  for (uint32_t i = 0; i < m_nodes.size (); i++)
+    {
+      if (m_nodes[i]->GetId () == id)
+        {
+          return true;
+        }
+    }
+  return false;
 }
 
 } // namespace ns3

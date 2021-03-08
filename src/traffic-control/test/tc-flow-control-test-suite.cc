@@ -29,10 +29,10 @@
 #include "ns3/node-container.h"
 #include "ns3/traffic-control-layer.h"
 #include "ns3/traffic-control-helper.h"
-#include "ns3/simple-net-device.h"
-#include "ns3/simple-channel.h"
-#include "ns3/drop-tail-queue.h"
+#include "ns3/simple-net-device-helper.h"
+#include "ns3/data-rate.h"
 #include "ns3/net-device-queue-interface.h"
+#include "ns3/queue.h"
 #include "ns3/config.h"
 
 using namespace ns3;
@@ -99,19 +99,12 @@ QueueDiscTestItem::Mark (void)
 class TcFlowControlTestCase : public TestCase
 {
 public:
-  /// Device queue operating mode
-  enum TestType
-    {
-      PACKET_MODE,
-      BYTE_MODE
-    };
-
   /**
    * Constructor
    *
    * \param tt the test type
    */
-  TcFlowControlTestCase (TestType tt);
+  TcFlowControlTestCase (QueueSizeUnit tt);
   virtual ~TcFlowControlTestCase ();
 private:
   virtual void DoRun (void);
@@ -142,10 +135,10 @@ private:
    * \param msg the message to print if a different number of packets are stored
    */
   void CheckPacketsInQueueDisc (Ptr<NetDevice> dev, uint16_t nPackets, const char* msg);
-  TestType m_type;       //!< the test type
+  QueueSizeUnit m_type;       //!< the test type
 };
 
-TcFlowControlTestCase::TcFlowControlTestCase (TestType tt)
+TcFlowControlTestCase::TcFlowControlTestCase (QueueSizeUnit tt)
   : TestCase ("Test the operation of the flow control mechanism"),
     m_type (tt)
 {
@@ -178,6 +171,7 @@ void
 TcFlowControlTestCase::CheckDeviceQueueStopped (Ptr<NetDevice> dev, bool value, const char* msg)
 {
   Ptr<NetDeviceQueueInterface> ndqi = dev->GetObject<NetDeviceQueueInterface> ();
+  NS_ASSERT_MSG (ndqi, "A device queue interface has not been aggregated to the device");
   NS_TEST_EXPECT_MSG_EQ (ndqi->GetTxQueue (0)->IsStopped (), value, msg);
 }
 
@@ -199,30 +193,16 @@ TcFlowControlTestCase::DoRun (void)
   n.Get (0)->AggregateObject (CreateObject<TrafficControlLayer> ());
   n.Get (1)->AggregateObject (CreateObject<TrafficControlLayer> ());
 
-  Ptr<Queue<Packet> > queue;
+  SimpleNetDeviceHelper simple;
 
-  if (m_type == PACKET_MODE)
-    {
-      queue = CreateObjectWithAttributes<DropTailQueue<Packet> > ("Mode", EnumValue (QueueBase::QUEUE_MODE_PACKETS),
-                                                                  "MaxPackets", UintegerValue (5));
-    }
-  else
-    {
-      queue = CreateObjectWithAttributes<DropTailQueue<Packet> > ("Mode", EnumValue (QueueBase::QUEUE_MODE_BYTES),
-                                                                  "MaxBytes", UintegerValue (5000));
-    }
+  NetDeviceContainer rxDevC = simple.Install (n.Get (1));
 
-  // link the two nodes
-  Ptr<SimpleNetDevice> txDev, rxDev;
-  txDev = CreateObjectWithAttributes<SimpleNetDevice> ("TxQueue", PointerValue (queue),
-                                                       "DataRate", DataRateValue (DataRate ("1Mb/s")));
-  rxDev = CreateObject<SimpleNetDevice> ();
-  n.Get (0)->AddDevice (txDev);
-  n.Get (1)->AddDevice (rxDev);
-  Ptr<SimpleChannel> channel1 = CreateObject<SimpleChannel> ();
-  txDev->SetChannel (channel1);
-  rxDev->SetChannel (channel1);
+  simple.SetDeviceAttribute ("DataRate", DataRateValue (DataRate ("1Mb/s")));
+  simple.SetQueue ("ns3::DropTailQueue", "MaxSize",
+                   StringValue (m_type == QueueSizeUnit::PACKETS ? "5p" : "5000B"));
 
+  Ptr<NetDevice> txDev;
+  txDev = simple.Install (n.Get (0), DynamicCast<SimpleChannel> (rxDevC.Get (0)->GetChannel ())).Get (0);
   txDev->SetMtu (2500);
 
   TrafficControlHelper tch = TrafficControlHelper::Default ();
@@ -232,7 +212,7 @@ TcFlowControlTestCase::DoRun (void)
   Simulator::Schedule (Time (Seconds (0)), &TcFlowControlTestCase::SendPackets,
                       this, n.Get (0), 10);
 
-  if (m_type == PACKET_MODE)
+  if (m_type == QueueSizeUnit::PACKETS)
     {
       /*
        * When the device queue is in packet mode, all the packets enqueued in the
@@ -395,7 +375,7 @@ public:
   TcFlowControlTestSuite ()
     : TestSuite ("tc-flow-control", UNIT)
   {
-    AddTestCase (new TcFlowControlTestCase (TcFlowControlTestCase::PACKET_MODE), TestCase::QUICK);
-    AddTestCase (new TcFlowControlTestCase (TcFlowControlTestCase::BYTE_MODE), TestCase::QUICK);
+    AddTestCase (new TcFlowControlTestCase (QueueSizeUnit::PACKETS), TestCase::QUICK);
+    AddTestCase (new TcFlowControlTestCase (QueueSizeUnit::BYTES), TestCase::QUICK);
   }
 } g_tcFlowControlTestSuite; ///< the test suite

@@ -42,7 +42,7 @@ main (int argc, char *argv[])
 
   // Allow the user to override any of the defaults and the above
   // DefaultValue::Bind ()s at run-time, via command-line arguments
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
 
   Ptr<Node> nA = CreateObject<Node> ();
@@ -64,7 +64,7 @@ main (int argc, char *argv[])
   p2p.SetChannelAttribute ("Delay", StringValue ("2ms"));
   NetDeviceContainer dAdB = p2p.Install (nAnB);
 
-  NetDeviceContainer dBdC = p2p.Install (nBnC);;
+  NetDeviceContainer dBdC = p2p.Install (nBnC);
 
   Ptr<CsmaNetDevice> deviceA = CreateObject<CsmaNetDevice> ();
   deviceA->SetAddress (Mac48Address::Allocate ());

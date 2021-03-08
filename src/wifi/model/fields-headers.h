@@ -8,6 +8,7 @@
 
 #include "ns3/header.h"
 #include "ns3/mac48-address.h"
+#include "wigig-data-types.h"
 
 namespace ns3 {
 
@@ -32,7 +33,7 @@ public:
 
   static TypeId GetTypeId (void);
   virtual TypeId GetInstanceTypeId (void) const;
-  void Print(std::ostream &os) const;
+  void Print (std::ostream &os) const;
   uint32_t GetSerializedSize (void) const;
   Buffer::Iterator Serialize (Buffer::Iterator start) const;
   Buffer::Iterator Deserialize (Buffer::Iterator start);
@@ -108,13 +109,6 @@ private:
 /****************************************
  * Dynamic Allocation Info Field (8.4a.2)
  ****************************************/
-
-typedef enum  {
-  SERVICE_PERIOD_ALLOCATION = 0,
-  CBAP_ALLOCATION = 1
-} AllocationType;
-
-typedef uint8_t AllocationID;
 
 /**
  * \ingroup wifi
@@ -217,10 +211,10 @@ public:
   */
   void SetDMGAntenna (uint8_t antennas);
   /**
-  * Set the SNR Report in case not ISS or the reserved value in case ISS.
-  * \param antennas
+  * Set the SNR Report if not ISS or the reserved value in the case of ISS.
+  * \param value the SNR value is measured in linear scale.
   */
-  void SetSNRReport (uint8_t antennas);
+  void SetSNRReport (double value);
   /**
   * Set whether a non-PCP/non-AP STA requires the PCP/AP to initiate the communication.
   * \param value
@@ -236,16 +230,22 @@ public:
   * \param value True if the SSW Feedback Field is transmitted as part of ISS, otherwise false.
   */
   void IsPartOfISS (bool value);
+
   uint16_t GetSector (void) const;
   uint8_t GetDMGAntenna (void) const;
+  /**
+  * Return the SNR Report if not ISS or the reserved value in the case of ISS.
+  * \return The SNR value is measured in dB.
+  */
+  double GetSNRReport (void) const;
   bool GetPollRequired (void) const;
   uint8_t GetReserved (void) const;
 
 private:
   uint16_t m_sectors;
   uint8_t m_antennas;
-  uint8_t m_snr_report;
-  bool m_poll_required;
+  int8_t m_snrReport;
+  bool m_pollRequired;
   uint8_t m_reserved;
   bool m_iss;
 
@@ -302,6 +302,8 @@ public:
   void SetTXSectorID (uint8_t value);
   void SetOtherAID (uint8_t value);
   void SetTXAntennaID (uint8_t value);
+  void SetEdmgShortBrp (bool value);
+  void SetEdmgShortFbck (bool value);
   void SetReserved (uint8_t value);
 
   uint8_t GetL_RX (void);
@@ -314,6 +316,8 @@ public:
   uint8_t GetTXSectorID (void);
   uint8_t GetOtherAID (void);
   uint8_t GetTXAntennaID (void);
+  bool GetEdmgShortBrp (void);
+  bool GetEdmgShortFbck (void);
   uint8_t GetReserved (void);
 
 private:
@@ -327,6 +331,8 @@ private:
   uint8_t m_TXSectorID;
   uint8_t m_OtherAID;
   uint8_t m_TXAntennaID;
+  bool m_edmgShortBrp;
+  bool m_edmgShortFbck;
   uint8_t m_Reserved;
 
 };
@@ -353,29 +359,29 @@ public:
   Buffer::Iterator Deserialize (Buffer::Iterator start);
 
   void SetBeamformTraining (bool value);
-  void SetAsInitiatorTxss (bool value);
-  void SetAsResponderTxss (bool value);
+  void SetAsInitiatorTXSS (bool value);
+  void SetAsResponderTXSS (bool value);
 
   void SetTotalNumberOfSectors (uint8_t sectors);
   void SetNumberOfRxDmgAntennas (uint8_t antennas);
 
-  void SetRxssLength (uint8_t length);
-  void SetRxssTxRate (bool rate);
+  void SetRXSSLength (uint8_t length);
+  void SetRXSSTxRate (bool rate);
 
   bool IsBeamformTraining (void) const;
-  bool IsInitiatorTxss (void) const;
-  bool IsResponderTxss (void) const;
+  bool IsInitiatorTXSS (void) const;
+  bool IsResponderTXSS (void) const;
 
   uint8_t GetTotalNumberOfSectors (void) const;
   uint8_t GetNumberOfRxDmgAntennas (void) const;
 
-  uint8_t GetRxssLength (void) const;
-  bool GetRxssTxRate (void) const;
+  uint8_t GetRXSSLength (void) const;
+  bool GetRXSSTxRate (void) const;
 
 private:
   bool m_beamformTraining;
-  bool m_isInitiatorTxss;
-  bool m_isResponderTxss;
+  bool m_isInitiatorTXSS;
+  bool m_isResponderTXSS;
 
   /* BF Control Fields when both IsInitiatorTXSS and IsResponderTXSS subfields are
    * equal to 1 and the BF Control field is transmitted in Grant or Grant ACK frames */

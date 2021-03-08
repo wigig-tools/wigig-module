@@ -26,7 +26,7 @@
 #include <ns3/simple-ref-count.h>
 #include <ns3/ptr.h>
 #include <ns3/nstime.h>
-
+#include "vector"
 
 namespace ns3 {
 
@@ -110,6 +110,24 @@ struct SpectrumSignalParameters : public SimpleRefCount<SpectrumSignalParameters
    * The AntennaModel instance that was used to transmit this signal.
    */
   Ptr<AntennaModel> txAntenna;
+
+  //// WIGIG ////
+  /**
+   * A list of Power Spectral Density of the
+   * concurrent waveforms, in linear units. The exact unit will depend on the
+   * type of transmission medium involved: W for radio communications, Pa for
+   * underwater acoustic communications. Other transmission media to
+   * be defined.
+   *
+   * \note when SpectrumSignalParameters is copied, only the pointer to the PSD will be copied. This is because SpectrumChannel objects normally overwrite the psd anyway, so there is no point in making a copy.
+   */
+  std::vector<Ptr<SpectrumValue> > psdList;
+  /**
+   * Indicate whether the transmission is MIMO or SISO.
+   */
+  bool isMimo;
+  //// WIGIG ////
+
 };
 
 

@@ -27,6 +27,8 @@
 #include "ns3/socket.h"
 #include "ns3/net-device.h"
 #include "ns3/uinteger.h"
+#include "ns3/string.h"
+#include "ns3/boolean.h"
 #include "ns3/trace-source-accessor.h"
 #include "ns3/object-vector.h"
 #include "ns3/ipv4-header.h"
@@ -69,6 +71,21 @@ Ipv4L3Protocol::GetTypeId (void)
                    TimeValue (Seconds (30)),
                    MakeTimeAccessor (&Ipv4L3Protocol::m_fragmentExpirationTimeout),
                    MakeTimeChecker ())
+    .AddAttribute ("EnableDuplicatePacketDetection",
+                   "Enable multicast duplicate packet detection based on RFC 6621",
+                   BooleanValue (false),
+                   MakeBooleanAccessor (&Ipv4L3Protocol::m_enableDpd),
+                   MakeBooleanChecker ())
+    .AddAttribute ("DuplicateExpire", "Expiration delay for duplicate cache entries",
+                   TimeValue (MilliSeconds (1)),
+                   MakeTimeAccessor (&Ipv4L3Protocol::m_expire),
+                   MakeTimeChecker ())
+    .AddAttribute ("PurgeExpiredPeriod", 
+                   "Time between purges of expired duplicate packet entries, "
+                   "0 means never purge",
+                   TimeValue (Seconds (1)),
+                   MakeTimeAccessor (&Ipv4L3Protocol::m_purge),
+                   MakeTimeChecker (Seconds (0)))
     .AddTraceSource ("Tx",
                      "Send ipv4 packet to outgoing interface.",
                      MakeTraceSourceAccessor (&Ipv4L3Protocol::m_txTrace),
@@ -245,7 +262,7 @@ Ipv4L3Protocol::DeleteRawSocket (Ptr<Socket> socket)
   return;
 }
 /*
- * This method is called by AddAgregate and completes the aggregation
+ * This method is called by AggregateObject and completes the aggregation
  * by setting the node in the ipv4 stack
  */
 void
@@ -307,16 +324,18 @@ Ipv4L3Protocol::DoDispose (void)
       it->second = 0;
     }
 
-  for (MapFragmentsTimers_t::iterator it = m_fragmentsTimers.begin (); it != m_fragmentsTimers.end (); it++)
+  m_fragments.clear ();
+  m_timeoutEventList.clear ();
+  if (m_timeoutEvent.IsRunning ())
     {
-      if (it->second.IsRunning ())
-        {
-          it->second.Cancel ();
-        }
+      m_timeoutEvent.Cancel ();
     }
 
-  m_fragments.clear ();
-  m_fragmentsTimers.clear ();
+  if (m_cleanDpd.IsRunning ())
+    {
+      m_cleanDpd.Cancel ();
+    }
+  m_dups.clear ();
 
   Object::DoDispose ();
 }
@@ -388,7 +407,6 @@ Ipv4L3Protocol::AddInterface (Ptr<NetDevice> device)
   interface->SetDevice (device);
   interface->SetTrafficControl (tc);
   interface->SetForwarding (m_ipForward);
-  tc->SetupDevice (device);
   return AddIpv4Interface (interface);
 }
 
@@ -507,7 +525,7 @@ Ipv4L3Protocol::IsDestinationAddress (Ipv4Address address, uint32_t iif) const
 #endif
       if (true)
         {
-          NS_LOG_LOGIC ("For me (Ipv4Addr multicast address");
+          NS_LOG_LOGIC ("For me (Ipv4Addr multicast address)");
           return true;
         }
     }
@@ -628,6 +646,13 @@ Ipv4L3Protocol::Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t p
       NS_LOG_LOGIC ("Forwarding to raw socket"); 
       Ptr<Ipv4RawSocketImpl> socket = *i;
       socket->ForwardUp (packet, ipHeader, ipv4Interface);
+    }
+
+  if (m_enableDpd && ipHeader.GetDestination ().IsMulticast () && UpdateDuplicate (packet, ipHeader))
+    {
+      NS_LOG_LOGIC ("Dropping received packet -- duplicate.");
+      m_dropTrace (ipHeader, packet, DROP_DUPLICATE, m_node->GetObject<Ipv4> (), interface);
+      return;
     }
 
   NS_ASSERT_MSG (m_routingProtocol != 0, "Need a routing protocol object to process packets");
@@ -925,7 +950,7 @@ Ipv4L3Protocol::SendRealOut (Ptr<Ipv4Route> route,
   Ptr<Ipv4Interface> outInterface = GetInterface (interface);
   NS_LOG_LOGIC ("Send via NetDevice ifIndex " << outDev->GetIfIndex () << " ipv4InterfaceIndex " << interface);
 
-  if (!route->GetGateway ().IsEqual (Ipv4Address ("0.0.0.0")))
+  if (route->GetGateway () != Ipv4Address ("0.0.0.0"))
     {
       if (outInterface->IsUp ())
         {
@@ -1030,9 +1055,8 @@ Ipv4L3Protocol::IpForward (Ptr<Ipv4Route> rtentry, Ptr<const Packet> p, const Ip
   ipHeader.SetTtl (ipHeader.GetTtl () - 1);
   if (ipHeader.GetTtl () == 0)
     {
-      // Do not reply to ICMP or to multicast/broadcast IP address 
-      if (ipHeader.GetProtocol () != Icmpv4L4Protocol::PROT_NUMBER && 
-          ipHeader.GetDestination ().IsBroadcast () == false &&
+      // Do not reply to multicast/broadcast IP address
+      if (ipHeader.GetDestination ().IsBroadcast () == false &&
           ipHeader.GetDestination ().IsMulticast () == false)
         {
           Ptr<Icmpv4L4Protocol> icmp = GetIcmp ();
@@ -1479,7 +1503,7 @@ Ipv4L3Protocol::DoFragmentation (Ptr<Packet> packet, const Ipv4Header & ipv4Head
 
       NS_LOG_LOGIC ("New fragment " << *fragment);
 
-      listFragments.push_back (Ipv4PayloadHeaderPair (fragment, fragmentHeader));
+      listFragments.emplace_back (fragment, fragmentHeader);
 
       offset += currentFragmentablePartSize;
 
@@ -1496,7 +1520,7 @@ Ipv4L3Protocol::ProcessFragment (Ptr<Packet>& packet, Ipv4Header& ipHeader, uint
 
   uint64_t addressCombination = uint64_t (ipHeader.GetSource ().Get ()) << 32 | uint64_t (ipHeader.GetDestination ().Get ());
   uint32_t idProto = uint32_t (ipHeader.GetIdentification ()) << 16 | uint32_t (ipHeader.GetProtocol ());
-  std::pair<uint64_t, uint32_t> key;
+  FragmentKey_t key;
   bool ret = false;
   Ptr<Packet> p = packet->Copy ();
 
@@ -1510,9 +1534,9 @@ Ipv4L3Protocol::ProcessFragment (Ptr<Packet>& packet, Ipv4Header& ipHeader, uint
     {
       fragments = Create<Fragments> ();
       m_fragments.insert (std::make_pair (key, fragments));
-      m_fragmentsTimers[key] = Simulator::Schedule (m_fragmentExpirationTimeout,
-                                                    &Ipv4L3Protocol::HandleFragmentsTimeout, this,
-                                                    key, ipHeader, iif);
+
+      FragmentsTimeoutsListI_t iter = SetTimeout (key, ipHeader, iif);
+      fragments->SetTimeoutIter (iter);
     }
   else
     {
@@ -1526,14 +1550,9 @@ Ipv4L3Protocol::ProcessFragment (Ptr<Packet>& packet, Ipv4Header& ipHeader, uint
   if ( fragments->IsEntire () )
     {
       packet = fragments->GetPacket ();
+      m_timeoutEventList.erase (fragments->GetTimeoutIter ());
       fragments = 0;
       m_fragments.erase (key);
-      if (m_fragmentsTimers[key].IsRunning ())
-        {
-          NS_LOG_LOGIC ("Stopping WaitFragmentsTimer at " << Simulator::Now ().GetSeconds () << " due to complete packet");
-          m_fragmentsTimers[key].Cancel ();
-        }
-      m_fragmentsTimers.erase (key);
       ret = true;
     }
 
@@ -1678,7 +1697,21 @@ Ipv4L3Protocol::Fragments::GetPartialPacket () const
 }
 
 void
-Ipv4L3Protocol::HandleFragmentsTimeout (std::pair<uint64_t, uint32_t> key, Ipv4Header & ipHeader, uint32_t iif)
+Ipv4L3Protocol::Fragments::SetTimeoutIter (FragmentsTimeoutsListI_t iter)
+{
+  m_timeoutIter = iter;
+  return;
+}
+
+Ipv4L3Protocol::FragmentsTimeoutsListI_t
+Ipv4L3Protocol::Fragments::GetTimeoutIter ()
+{
+  return m_timeoutIter;
+}
+
+
+void
+Ipv4L3Protocol::HandleFragmentsTimeout (FragmentKey_t key, Ipv4Header & ipHeader, uint32_t iif)
 {
   NS_LOG_FUNCTION (this << &key << &ipHeader << iif);
 
@@ -1697,6 +1730,152 @@ Ipv4L3Protocol::HandleFragmentsTimeout (std::pair<uint64_t, uint32_t> key, Ipv4H
   it->second = 0;
 
   m_fragments.erase (key);
-  m_fragmentsTimers.erase (key);
 }
+
+bool
+Ipv4L3Protocol::UpdateDuplicate (Ptr<const Packet> p, const Ipv4Header &header)
+{
+  NS_LOG_FUNCTION (this << p << header);
+
+  // \todo RFC 6621 mandates SHA-1 hash.  For now ns3 hash should be fine.
+  uint8_t proto = header.GetProtocol ();
+  Ipv4Address src = header.GetSource ();
+  Ipv4Address dst = header.GetDestination ();
+  uint64_t id = header.GetIdentification ();
+
+  // concat hash value onto id
+  uint64_t hash = id << 32;
+  if (header.GetFragmentOffset () || !header.IsLastFragment ())
+    {
+      // use I-DPD (RFC 6621, Sec 6.2.1)
+      hash |= header.GetFragmentOffset ();
+    }
+  else
+    {
+      // use H-DPD (RFC 6621, Sec 6.2.2)
+
+      // serialize packet
+      Ptr<Packet> pkt = p->Copy ();
+      pkt->AddHeader (header);
+
+      std::ostringstream oss (std::ios_base::binary);
+      pkt->CopyData (&oss, pkt->GetSize ());
+      std::string bytes = oss.str ();
+
+      NS_ASSERT_MSG (bytes.size () >= 20, "Degenerate header serialization");
+
+      // zero out mutable fields
+      bytes[1] = 0;               // DSCP / ECN
+      bytes[6] = bytes[7] = 0;    // Flags / Fragment offset
+      bytes[8] = 0;               // TTL
+      bytes[10] = bytes[11] = 0;  // Header checksum
+      if (header.GetSerializedSize () > 20)     // assume options should be 0'd
+        {
+          std::fill_n (bytes.begin () + 20, header.GetSerializedSize () - 20, 0);
+        }
+        
+      // concat hash onto ID
+      hash |= (uint64_t)Hash32 (bytes);
+    }
+
+  // set cleanup job for new duplicate entries
+  if (!m_cleanDpd.IsRunning () && m_purge.IsStrictlyPositive ())
+    {
+      m_cleanDpd = Simulator::Schedule (m_expire, &Ipv4L3Protocol::RemoveDuplicates, this);
+    }
+
+  // assume this is a new entry
+  DupTuple_t key {hash, proto, src, dst};
+  NS_LOG_DEBUG ("Packet " << p->GetUid () << " key = (" <<
+                std::hex << std::get<0> (key) << ", " <<
+                std::dec << +std::get<1> (key) << ", " <<
+                std::get<2> (key) << ", " <<
+                std::get<3> (key) << ")");
+
+  // place a new entry, on collision the existing entry iterator is returned
+  DupMap_t::iterator iter;
+  bool inserted, isDup;
+  std::tie (iter, inserted) = m_dups.emplace (key, Seconds (0));
+  isDup = !inserted && iter->second > Simulator::Now ();
+
+  // set the expiration event
+  iter->second = Simulator::Now () + m_expire;
+  return isDup;
+}
+
+void
+Ipv4L3Protocol::RemoveDuplicates (void)
+{
+  NS_LOG_FUNCTION (this);
+
+  DupMap_t::size_type n = 0;
+  Time expire = Simulator::Now ();
+  auto iter = m_dups.cbegin ();
+  while (iter != m_dups.cend ())
+    {
+      if (iter->second < expire)
+        {
+          NS_LOG_LOGIC ("Remove key = (" <<
+                        std::hex << std::get<0> (iter->first) << ", " <<
+                        std::dec << +std::get<1> (iter->first) << ", " <<
+                        std::get<2> (iter->first) << ", " <<
+                        std::get<3> (iter->first) << ")");
+          iter = m_dups.erase (iter);
+          ++n;
+        }
+      else
+        {
+          ++iter;
+        }
+    }
+  
+  NS_LOG_DEBUG ("Purged " << n << " expired duplicate entries out of " << (n + m_dups.size ()));
+  
+  // keep cleaning up if necessary
+  if (!m_dups.empty () && m_purge.IsStrictlyPositive ())
+    {
+      m_cleanDpd = Simulator::Schedule (m_purge, &Ipv4L3Protocol::RemoveDuplicates, this);
+    }
+}
+
+Ipv4L3Protocol::FragmentsTimeoutsListI_t
+Ipv4L3Protocol::SetTimeout (FragmentKey_t key, Ipv4Header ipHeader, uint32_t iif)
+{
+  Time now = Simulator::Now () + m_fragmentExpirationTimeout;
+
+  if (m_timeoutEventList.empty ())
+    {
+      m_timeoutEvent = Simulator::Schedule (m_fragmentExpirationTimeout, &Ipv4L3Protocol::HandleTimeout, this);
+    }
+  m_timeoutEventList.emplace_back (now, key, ipHeader, iif);
+
+  Ipv4L3Protocol::FragmentsTimeoutsListI_t iter = --m_timeoutEventList.end();
+
+  return (iter);
+}
+
+void
+Ipv4L3Protocol::HandleTimeout (void)
+{
+  Time now = Simulator::Now ();
+
+  while (!m_timeoutEventList.empty () && std::get<0> (*m_timeoutEventList.begin ()) == now)
+    {
+      HandleFragmentsTimeout (std::get<1> (*m_timeoutEventList.begin ()),
+                              std::get<2> (*m_timeoutEventList.begin ()),
+                              std::get<3> (*m_timeoutEventList.begin ()));
+      m_timeoutEventList.pop_front ();
+    }
+
+  if (m_timeoutEventList.empty ())
+    {
+      return;
+    }
+
+  Time difference = std::get<0> (*m_timeoutEventList.begin ()) - now;
+  m_timeoutEvent = Simulator::Schedule (difference, &Ipv4L3Protocol::HandleTimeout, this);
+
+  return;
+}
+
 } // namespace ns3

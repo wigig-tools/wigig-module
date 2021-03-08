@@ -42,7 +42,7 @@ private:
    * Checks the buffer content
    * \param b The buffer to check
    * \param n The number of bytes to check
-   * \param array The aray of bytes that should be in the buffer
+   * \param array The array of bytes that should be in the buffer
    * \param file The file name
    * \param line The line number
    */
@@ -189,7 +189,18 @@ BufferTest::DoRun (void)
   // test self-assignment
   {
     Buffer a = o;
+#if defined(__clang__)
+  #if __has_warning("-Wself-assign-overloaded")
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wself-assign-overloaded"
+  #endif
+#endif
     a = a;
+#if defined(__clang__)
+  #if __has_warning("-Wself-assign-overloaded")
+    #pragma clang diagnostic pop
+  #endif
+#endif
   }
 
   // test Remove start.

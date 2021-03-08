@@ -21,7 +21,7 @@
 #ifndef WIFI_SPECTRUM_PHY_INTERFACE_H
 #define WIFI_SPECTRUM_PHY_INTERFACE_H
 
-#include <ns3/spectrum-phy.h>
+#include "ns3/spectrum-phy.h"
 
 namespace ns3 {
 
@@ -66,7 +66,7 @@ public:
 
 private:
   virtual void DoDispose (void);
-  Ptr<SpectrumWifiPhy> m_spectrumWifiPhy; ///< spectrum phy
+  Ptr<SpectrumWifiPhy> m_spectrumWifiPhy; ///< spectrum PHY
   Ptr<NetDevice> m_netDevice; ///< the device
   Ptr<SpectrumChannel> m_channel; ///< spectrum channel
 };

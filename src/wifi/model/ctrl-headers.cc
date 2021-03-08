@@ -35,8 +35,7 @@ NS_OBJECT_ENSURE_REGISTERED (CtrlBAckRequestHeader);
 
 CtrlBAckRequestHeader::CtrlBAckRequestHeader ()
   : m_barAckPolicy (false),
-    m_multiTid (false),
-    m_compressed (false)
+    m_baType (BASIC_BLOCK_ACK)
 {
 }
 
@@ -72,20 +71,19 @@ CtrlBAckRequestHeader::GetSerializedSize () const
 {
   uint32_t size = 0;
   size += 2; //Bar control
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      size += 2; //Starting sequence control
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          size += (2 + 2) * (m_tidInfo + 1);  //Multi-tid block ack
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+      case BASIC_BLOCK_ACK:
+      case COMPRESSED_BLOCK_ACK:
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        size += 2;
+        break;
+      case MULTI_TID_BLOCK_ACK:
+        size += (2 + 2) * (m_tidInfo + 1);
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   return size;
 }
@@ -95,20 +93,19 @@ CtrlBAckRequestHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
   i.WriteHtolsbU16 (GetBarControl ());
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      i.WriteHtolsbU16 (GetStartingSequenceControl ());
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+      case BASIC_BLOCK_ACK:
+      case COMPRESSED_BLOCK_ACK:
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        i.WriteHtolsbU16 (GetStartingSequenceControl ());
+        break;
+      case MULTI_TID_BLOCK_ACK:
+        NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
 }
 
@@ -117,20 +114,19 @@ CtrlBAckRequestHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
   SetBarControl (i.ReadLsbtohU16 ());
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      SetStartingSequenceControl (i.ReadLsbtohU16 ());
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+      case BASIC_BLOCK_ACK:
+      case COMPRESSED_BLOCK_ACK:
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        SetStartingSequenceControl (i.ReadLsbtohU16 ());
+        break;
+      case MULTI_TID_BLOCK_ACK:
+        NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   return i.GetDistanceFrom (start);
 }
@@ -139,17 +135,22 @@ uint16_t
 CtrlBAckRequestHeader::GetBarControl (void) const
 {
   uint16_t res = 0;
-  if (m_barAckPolicy)
+  switch (m_baType)
     {
-      res |= 0x1;
-    }
-  if (m_multiTid)
-    {
-      res |= (0x1 << 1);
-    }
-  if (m_compressed)
-    {
-      res |= (0x1 << 2);
+      case BASIC_BLOCK_ACK:
+        break;
+      case COMPRESSED_BLOCK_ACK:
+        res |= (0x02 << 1);
+        break;
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        res |= (0x01 << 1);
+        break;
+      case MULTI_TID_BLOCK_ACK:
+        res |= (0x03 << 1);
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   res |= (m_tidInfo << 12) & (0xf << 12);
   return res;
@@ -159,8 +160,22 @@ void
 CtrlBAckRequestHeader::SetBarControl (uint16_t bar)
 {
   m_barAckPolicy = ((bar & 0x01) == 1) ? true : false;
-  m_multiTid = (((bar >> 1) & 0x01) == 1) ? true : false;
-  m_compressed = (((bar >> 2) & 0x01) == 1) ? true : false;
+  if (((bar >> 1) & 0x0f) == 0x03)
+    {
+      m_baType = MULTI_TID_BLOCK_ACK;
+    }
+  else if (((bar >> 1) & 0x0f) == 0x01)
+    {
+      m_baType = EXTENDED_COMPRESSED_BLOCK_ACK;
+    }
+  else if (((bar >> 1) & 0x0f) == 0x02)
+    {
+      m_baType = COMPRESSED_BLOCK_ACK;
+    }
+  else
+    {
+      m_baType = BASIC_BLOCK_ACK;
+    }
   m_tidInfo = (bar >> 12) & 0x0f;
 }
 
@@ -185,24 +200,13 @@ CtrlBAckRequestHeader::SetHtImmediateAck (bool immediateAck)
 void
 CtrlBAckRequestHeader::SetType (BlockAckType type)
 {
-  switch (type)
-    {
-    case BASIC_BLOCK_ACK:
-      m_multiTid = false;
-      m_compressed = false;
-      break;
-    case COMPRESSED_BLOCK_ACK:
-      m_multiTid = false;
-      m_compressed = true;
-      break;
-    case MULTI_TID_BLOCK_ACK:
-      m_multiTid = true;
-      m_compressed = true;
-      break;
-    default:
-      NS_FATAL_ERROR ("Invalid variant type");
-      break;
-    }
+  m_baType = type;
+}
+
+BlockAckType
+CtrlBAckRequestHeader::GetType (void) const
+{
+  return m_baType;
 }
 
 void
@@ -239,19 +243,25 @@ CtrlBAckRequestHeader::GetStartingSequence (void) const
 bool
 CtrlBAckRequestHeader::IsBasic (void) const
 {
-  return (!m_multiTid && !m_compressed) ? true : false;
+  return (m_baType == BASIC_BLOCK_ACK) ? true : false;
 }
 
 bool
 CtrlBAckRequestHeader::IsCompressed (void) const
 {
-  return (!m_multiTid && m_compressed) ? true : false;
+  return (m_baType == COMPRESSED_BLOCK_ACK) ? true : false;
+}
+
+bool
+CtrlBAckRequestHeader::IsExtendedCompressed (void) const
+{
+  return (m_baType == EXTENDED_COMPRESSED_BLOCK_ACK) ? true : false;
 }
 
 bool
 CtrlBAckRequestHeader::IsMultiTid (void) const
 {
-  return (m_multiTid && m_compressed) ? true : false;
+  return (m_baType == MULTI_TID_BLOCK_ACK) ? true : false;
 }
 
 
@@ -263,8 +273,10 @@ NS_OBJECT_ENSURE_REGISTERED (CtrlBAckResponseHeader);
 
 CtrlBAckResponseHeader::CtrlBAckResponseHeader ()
   : m_baAckPolicy (false),
-    m_multiTid (false),
-    m_compressed (false)
+    m_baType (BASIC_BLOCK_ACK),
+    //// WIGIG ////
+    m_edmgCompressedBlockAckSize (EDMG_COMPRESSED_BLOCK_ACK_BITMAP_1024)
+    //// WIGIG ////
 {
   memset (&bitmap, 0, sizeof (bitmap));
 }
@@ -301,27 +313,28 @@ CtrlBAckResponseHeader::GetSerializedSize (void) const
 {
   uint32_t size = 0;
   size += 2; //Bar control
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      if (!m_compressed)
-        {
-          size += (2 + 128); //Basic block ack
-        }
-      else
-        {
-          size += (2 + 8); //Compressed block ack
-        }
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          size += (2 + 2 + 8) * (m_tidInfo + 1); //Multi-tid block ack
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+      case BASIC_BLOCK_ACK:
+        size += (2 + 128);
+        break;
+      case COMPRESSED_BLOCK_ACK:
+        size += (2 + 8);
+        break;
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        size += (2 + 32);
+        break;
+      case MULTI_TID_BLOCK_ACK:
+        size += (2 + 2 + 8) * (m_tidInfo + 1); //Multi-TID block ack
+        break;
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+        size += (2 + 128 + 1); // Consider that the compressed BlockAckBitmap is 1024 bits
+        break;
+      //// WIGIG ////
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   return size;
 }
@@ -331,21 +344,27 @@ CtrlBAckResponseHeader::Serialize (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
   i.WriteHtolsbU16 (GetBaControl ());
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      i.WriteHtolsbU16 (GetStartingSequenceControl ());
-      i = SerializeBitmap (i);
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+      case BASIC_BLOCK_ACK:
+      case COMPRESSED_BLOCK_ACK:
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        i.WriteHtolsbU16 (GetStartingSequenceControl ());
+        i = SerializeBitmap (i);
+        break;
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+        i.WriteHtolsbU16 (GetStartingSequenceControl ());
+        i = SerializeBitmap (i);
+        i.WriteU8 (m_rbufcapValue);
+        break;
+      //// WIGIG ////
+      case MULTI_TID_BLOCK_ACK:
+        NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
 }
 
@@ -354,21 +373,27 @@ CtrlBAckResponseHeader::Deserialize (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
   SetBaControl (i.ReadLsbtohU16 ());
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      SetStartingSequenceControl (i.ReadLsbtohU16 ());
-      i = DeserializeBitmap (i);
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+      case BASIC_BLOCK_ACK:
+      case COMPRESSED_BLOCK_ACK:
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        SetStartingSequenceControl (i.ReadLsbtohU16 ());
+        i = DeserializeBitmap (i);
+        break;
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+        SetStartingSequenceControl (i.ReadLsbtohU16 ());
+        i = DeserializeBitmap (i);
+        m_rbufcapValue = i.ReadU8 ();
+        break;
+      //// WIGIG ////
+      case MULTI_TID_BLOCK_ACK:
+        NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   return i.GetDistanceFrom (start);
 }
@@ -382,24 +407,13 @@ CtrlBAckResponseHeader::SetHtImmediateAck (bool immediateAck)
 void
 CtrlBAckResponseHeader::SetType (BlockAckType type)
 {
-  switch (type)
-    {
-    case BASIC_BLOCK_ACK:
-      m_multiTid = false;
-      m_compressed = false;
-      break;
-    case COMPRESSED_BLOCK_ACK:
-      m_multiTid = false;
-      m_compressed = true;
-      break;
-    case MULTI_TID_BLOCK_ACK:
-      m_multiTid = true;
-      m_compressed = true;
-      break;
-    default:
-      NS_FATAL_ERROR ("Invalid variant type");
-      break;
-    }
+  m_baType = type;
+}
+
+BlockAckType
+CtrlBAckResponseHeader::GetType (void) const
+{
+  return m_baType;
 }
 
 void
@@ -436,20 +450,33 @@ CtrlBAckResponseHeader::GetStartingSequence (void) const
 bool
 CtrlBAckResponseHeader::IsBasic (void) const
 {
-  return (!m_multiTid && !m_compressed) ? true : false;
+  return (m_baType == BASIC_BLOCK_ACK) ? true : false;
 }
 
 bool
 CtrlBAckResponseHeader::IsCompressed (void) const
 {
-  return (!m_multiTid && m_compressed) ? true : false;
+  return (m_baType == COMPRESSED_BLOCK_ACK) ? true : false;
+}
+
+bool
+CtrlBAckResponseHeader::IsExtendedCompressed (void) const
+{
+  return (m_baType == EXTENDED_COMPRESSED_BLOCK_ACK) ? true : false;
 }
 
 bool
 CtrlBAckResponseHeader::IsMultiTid (void) const
 {
-  return (m_multiTid && m_compressed) ? true : false;
+  return (m_baType == MULTI_TID_BLOCK_ACK) ? true : false;
 }
+//// WIGIG ////
+bool
+CtrlBAckResponseHeader::IsEdmgCompressed (void) const
+{
+  return (m_baType == EDMG_COMPRESSED_BLOCK_ACK) ? true : false;
+}
+//// WIGIG ////
 
 uint16_t
 CtrlBAckResponseHeader::GetBaControl (void) const
@@ -459,13 +486,27 @@ CtrlBAckResponseHeader::GetBaControl (void) const
     {
       res |= 0x1;
     }
-  if (m_multiTid)
+  switch (m_baType)
     {
-      res |= (0x1 << 1);
-    }
-  if (m_compressed)
-    {
-      res |= (0x1 << 2);
+      case BASIC_BLOCK_ACK:
+        break;
+      case COMPRESSED_BLOCK_ACK:
+        res |= (0x02 << 1);
+        break;
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        res |= (0x01 << 1);
+        break;
+      case MULTI_TID_BLOCK_ACK:
+        res |= (0x03 << 1);
+        break;
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+        res |= (0x08 << 1);
+        break;
+      //// WIGIG ////
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   res |= (m_tidInfo << 12) & (0xf << 12);
   return res;
@@ -475,8 +516,28 @@ void
 CtrlBAckResponseHeader::SetBaControl (uint16_t ba)
 {
   m_baAckPolicy = ((ba & 0x01) == 1) ? true : false;
-  m_multiTid = (((ba >> 1) & 0x01) == 1) ? true : false;
-  m_compressed = (((ba >> 2) & 0x01) == 1) ? true : false;
+  if (((ba >> 1) & 0x0f) == 0x03)
+    {
+      m_baType = MULTI_TID_BLOCK_ACK;
+    }
+  else if (((ba >> 1) & 0x0f) == 0x01)
+    {
+      m_baType = EXTENDED_COMPRESSED_BLOCK_ACK;
+    }
+  else if (((ba >> 1) & 0x0f) == 0x02)
+    {
+      m_baType = COMPRESSED_BLOCK_ACK;
+    }
+  //// WIGIG ////
+  else if (((ba >> 1) & 0x0f) == 0x08)
+    {
+      m_baType = EDMG_COMPRESSED_BLOCK_ACK;
+    }
+  //// WIGIG ////
+  else
+    {
+      m_baType = BASIC_BLOCK_ACK;
+    }
   m_tidInfo = (ba >> 12) & 0x0f;
 }
 
@@ -491,35 +552,61 @@ CtrlBAckResponseHeader::SetStartingSequenceControl (uint16_t seqControl)
 {
   m_startingSeq = (seqControl >> 4) & 0x0fff;
 }
+//// WIGIG ////
+void
+CtrlBAckResponseHeader::SetCompresssedBlockAckSize (EDMG_COMPRESSED_BLOCK_ACK_BITMAP_SIZE size)
+{
+  m_edmgCompressedBlockAckSize = size;
+}
+
+void
+CtrlBAckResponseHeader::SetReceiveBufferCapability (uint8_t capability)
+{
+  m_rbufcapValue = capability;
+}
+
+uint8_t
+CtrlBAckResponseHeader::GetReceiveBufferCapability (void) const
+{
+  return m_rbufcapValue;
+}
+//// WIGIG ////
 
 Buffer::Iterator
 CtrlBAckResponseHeader::SerializeBitmap (Buffer::Iterator start) const
 {
   Buffer::Iterator i = start;
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      if (!m_compressed)
-        {
+      case BASIC_BLOCK_ACK:
           for (uint8_t j = 0; j < 64; j++)
             {
               i.WriteHtolsbU16 (bitmap.m_bitmap[j]);
             }
-        }
-      else
-        {
+          break;
+      case COMPRESSED_BLOCK_ACK:
           i.WriteHtolsbU64 (bitmap.m_compressedBitmap);
-        }
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+          break;
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+          i.WriteHtolsbU64 (bitmap.m_extendedCompressedBitmap[0]);
+          i.WriteHtolsbU64 (bitmap.m_extendedCompressedBitmap[1]);
+          i.WriteHtolsbU64 (bitmap.m_extendedCompressedBitmap[2]);
+          i.WriteHtolsbU64 (bitmap.m_extendedCompressedBitmap[3]);
+          break;
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+          for (uint8_t j = 0; j < m_edmgCompressedBlockAckSize; j++)
+            {
+              i.WriteHtolsbU64 (bitmap.m_edmgCompressedBitmap[j]);
+            }
+          break;
+      //// WIGIG ////
+      case MULTI_TID_BLOCK_ACK:
+        NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   return i;
 }
@@ -528,30 +615,37 @@ Buffer::Iterator
 CtrlBAckResponseHeader::DeserializeBitmap (Buffer::Iterator start)
 {
   Buffer::Iterator i = start;
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      if (!m_compressed)
-        {
+      case BASIC_BLOCK_ACK:
           for (uint8_t j = 0; j < 64; j++)
             {
               bitmap.m_bitmap[j] = i.ReadLsbtohU16 ();
             }
-        }
-      else
-        {
+          break;
+      case COMPRESSED_BLOCK_ACK:
           bitmap.m_compressedBitmap = i.ReadLsbtohU64 ();
-        }
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+          break;
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+          bitmap.m_extendedCompressedBitmap[0] = i.ReadLsbtohU64 ();
+          bitmap.m_extendedCompressedBitmap[1] = i.ReadLsbtohU64 ();
+          bitmap.m_extendedCompressedBitmap[2] = i.ReadLsbtohU64 ();
+          bitmap.m_extendedCompressedBitmap[3] = i.ReadLsbtohU64 ();
+          break;
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+          for (uint8_t j = 0; j < m_edmgCompressedBlockAckSize; j++)
+            {
+              bitmap.m_edmgCompressedBitmap[j] = i.ReadLsbtohU64 ();
+            }
+          break;
+      //// WIGIG ////
+      case MULTI_TID_BLOCK_ACK:
+        NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
   return i;
 }
@@ -563,28 +657,43 @@ CtrlBAckResponseHeader::SetReceivedPacket (uint16_t seq)
     {
       return;
     }
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      if (!m_compressed)
+      case BASIC_BLOCK_ACK:
         {
           /* To set correctly basic block ack bitmap we need fragment number too.
              So if it's not specified, we consider packet not fragmented. */
           bitmap.m_bitmap[IndexInBitmap (seq)] |= 0x0001;
+          break;
         }
-      else
+      case COMPRESSED_BLOCK_ACK:
         {
           bitmap.m_compressedBitmap |= (uint64_t (0x0000000000000001) << IndexInBitmap (seq));
+          break;
         }
-    }
-  else
-    {
-      if (m_compressed)
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        {
+          uint16_t index = IndexInBitmap (seq);
+          bitmap.m_extendedCompressedBitmap[index/64] |= (uint64_t (0x0000000000000001) << index);
+          break;
+        }
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+        {
+          uint16_t index = IndexInBitmap (seq);
+          bitmap.m_edmgCompressedBitmap[index/64] |= (uint64_t (0x0000000000000001) << index);
+          break;
+        }
+      //// WIGIG ////
+      case MULTI_TID_BLOCK_ACK:
         {
           NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+          break;
         }
-      else
+      default:
         {
-          NS_FATAL_ERROR ("Reserved configuration.");
+          NS_FATAL_ERROR ("Invalid BA type");
+          break;
         }
     }
 }
@@ -597,28 +706,25 @@ CtrlBAckResponseHeader::SetReceivedFragment (uint16_t seq, uint8_t frag)
     {
       return;
     }
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      if (!m_compressed)
-        {
-          bitmap.m_bitmap[IndexInBitmap (seq)] |= (0x0001 << frag);
-        }
-      else
-        {
-          /* We can ignore this...compressed block ack doesn't support
-             acknowledgement of single fragments */
-        }
-    }
-  else
-    {
-      if (m_compressed)
-        {
-          NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
-        }
-      else
-        {
-          NS_FATAL_ERROR ("Reserved configuration.");
-        }
+      case BASIC_BLOCK_ACK:
+        bitmap.m_bitmap[IndexInBitmap (seq)] |= (0x0001 << frag);
+        break;
+      case COMPRESSED_BLOCK_ACK:
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+      //// WIGIG //// /* WIGIG: To check */
+      case EDMG_COMPRESSED_BLOCK_ACK:
+      //// WIGIG ////
+        /* We can ignore this...compressed block ack doesn't support
+           acknowledgment of single fragments */
+        break;
+      case MULTI_TID_BLOCK_ACK:
+        NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+        break;
+      default:
+        NS_FATAL_ERROR ("Invalid BA type");
+        break;
     }
 }
 
@@ -629,28 +735,44 @@ CtrlBAckResponseHeader::IsPacketReceived (uint16_t seq) const
     {
       return false;
     }
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      if (!m_compressed)
+      case BASIC_BLOCK_ACK:
         {
           /*It's impossible to say if an entire packet was correctly received. */
           return false;
         }
-      else
+      case COMPRESSED_BLOCK_ACK:
         {
+          /* Although this could make no sense, if packet with sequence number
+             equal to <i>seq</i> was correctly received, also all of its fragments
+             were correctly received. */
           uint64_t mask = uint64_t (0x0000000000000001);
           return (((bitmap.m_compressedBitmap >> IndexInBitmap (seq)) & mask) == 1) ? true : false;
         }
-    }
-  else
-    {
-      if (m_compressed)
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        {
+          uint64_t mask = uint64_t (0x0000000000000001);
+          uint16_t index = IndexInBitmap (seq);
+          return (((bitmap.m_extendedCompressedBitmap[index/64] >> index) & mask) == 1) ? true : false;
+        }
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+        {
+          uint64_t mask = uint64_t (0x0000000000000001);
+          uint16_t index = IndexInBitmap (seq);
+          return (((bitmap.m_edmgCompressedBitmap[index/64] >> index) & mask) == 1) ? true : false;
+        }
+      //// WIGIG ////
+      case MULTI_TID_BLOCK_ACK:
         {
           NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+          break;
         }
-      else
+      default:
         {
-          NS_FATAL_ERROR ("Reserved configuration.");
+          NS_FATAL_ERROR ("Invalid BA type");
+          break;
         }
     }
   return false;
@@ -664,13 +786,13 @@ CtrlBAckResponseHeader::IsFragmentReceived (uint16_t seq, uint8_t frag) const
     {
       return false;
     }
-  if (!m_multiTid)
+  switch (m_baType)
     {
-      if (!m_compressed)
+      case BASIC_BLOCK_ACK:
         {
           return ((bitmap.m_bitmap[IndexInBitmap (seq)] & (0x0001 << frag)) != 0x0000) ? true : false;
         }
-      else
+      case COMPRESSED_BLOCK_ACK:
         {
           /* Although this could make no sense, if packet with sequence number
              equal to <i>seq</i> was correctly received, also all of its fragments
@@ -678,25 +800,33 @@ CtrlBAckResponseHeader::IsFragmentReceived (uint16_t seq, uint8_t frag) const
           uint64_t mask = uint64_t (0x0000000000000001);
           return (((bitmap.m_compressedBitmap >> IndexInBitmap (seq)) & mask) == 1) ? true : false;
         }
-    }
-  else
-    {
-      if (m_compressed)
+      case EXTENDED_COMPRESSED_BLOCK_ACK:
+        {
+          uint64_t mask = uint64_t (0x0000000000000001);
+          uint16_t index = IndexInBitmap (seq);
+          return (((bitmap.m_extendedCompressedBitmap[index/64] >> index) & mask) == 1) ? true : false;
+        }
+      //// WIGIG ////
+      case EDMG_COMPRESSED_BLOCK_ACK:
+      //// WIGIG ////
+      case MULTI_TID_BLOCK_ACK:
         {
           NS_FATAL_ERROR ("Multi-tid block ack is not supported.");
+          break;
         }
-      else
+      default:
         {
-          NS_FATAL_ERROR ("Reserved configuration.");
+          NS_FATAL_ERROR ("Invalid BA type");
+          break;
         }
     }
   return false;
 }
 
-uint8_t
+uint16_t
 CtrlBAckResponseHeader::IndexInBitmap (uint16_t seq) const
 {
-  uint8_t index;
+  uint16_t index;
   if (seq >= m_startingSeq)
     {
       index = seq - m_startingSeq;
@@ -705,14 +835,40 @@ CtrlBAckResponseHeader::IndexInBitmap (uint16_t seq) const
     {
       index = 4096 - m_startingSeq + seq;
     }
-  NS_ASSERT (index <= 63);
+  //// WIGIG ////
+  if (m_baType == EDMG_COMPRESSED_BLOCK_ACK)
+    {
+      NS_ASSERT (index <= 1023);
+    }
+  //// WIGIG ////
+  else if (m_baType == EXTENDED_COMPRESSED_BLOCK_ACK)
+    {
+      NS_ASSERT (index <= 255);
+    }
+  else
+    {
+      NS_ASSERT (index <= 63);
+    }
   return index;
 }
 
 bool
 CtrlBAckResponseHeader::IsInBitmap (uint16_t seq) const
 {
-  return (seq - m_startingSeq + 4096) % 4096 < 64;
+  //// WIGIG ////
+  if (m_baType == EDMG_COMPRESSED_BLOCK_ACK)
+    {
+      return (seq - m_startingSeq + 4096) % 4096 < 1024;
+    }
+  //// WIGIG ////
+  else if (m_baType == EXTENDED_COMPRESSED_BLOCK_ACK)
+    {
+      return (seq - m_startingSeq + 4096) % 4096 < 256;
+    }
+  else
+    {
+      return (seq - m_startingSeq + 4096) % 4096 < 64;
+    }
 }
 
 const uint16_t*
@@ -725,6 +881,18 @@ uint64_t
 CtrlBAckResponseHeader::GetCompressedBitmap (void) const
 {
   return bitmap.m_compressedBitmap;
+}
+
+const uint64_t*
+CtrlBAckResponseHeader::GetExtendedCompressedBitmap (void) const
+{
+  return bitmap.m_extendedCompressedBitmap;
+}
+
+const uint64_t*
+CtrlBAckResponseHeader::GetEdmgCompressedBitmap (void) const
+{
+  return bitmap.m_edmgCompressedBitmap;
 }
 
 void
@@ -753,7 +921,7 @@ CtrlDmgPoll::~CtrlDmgPoll ()
 TypeId
 CtrlDmgPoll::GetTypeId (void)
 {
-  NS_LOG_FUNCTION_NOARGS();
+  NS_LOG_FUNCTION_NOARGS ();
   static TypeId tid = TypeId ("ns3::CtrlDmgPoll")
     .SetParent<Header> ()
     .AddConstructor<CtrlDmgPoll> ()
@@ -764,14 +932,14 @@ CtrlDmgPoll::GetTypeId (void)
 TypeId
 CtrlDmgPoll::GetInstanceTypeId (void) const
 {
-  NS_LOG_FUNCTION(this);
-  return GetTypeId();
+  NS_LOG_FUNCTION (this);
+  return GetTypeId ();
 }
 
 void
 CtrlDmgPoll::Print (std::ostream &os) const
 {
-  NS_LOG_FUNCTION(this << &os);
+  NS_LOG_FUNCTION (this << &os);
   os << "Response Offset=" << m_responseOffset;
 }
 
@@ -830,7 +998,7 @@ CtrlDMG_SPR::~CtrlDMG_SPR ()
 }
 
 TypeId
-CtrlDMG_SPR::GetTypeId(void)
+CtrlDMG_SPR::GetTypeId (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
   static TypeId tid = TypeId ("ns3::CtrlDMG_SPR")
@@ -1030,7 +1198,7 @@ CtrlDMG_SSW::~CtrlDMG_SSW ()
 TypeId
 CtrlDMG_SSW::GetTypeId (void)
 {
-  NS_LOG_FUNCTION_NOARGS();
+  NS_LOG_FUNCTION_NOARGS ();
   static TypeId tid = TypeId ("ns3::CtrlDMG_SSW")
     .SetParent<Header> ()
     .AddConstructor<CtrlDMG_SSW> ()
@@ -1232,7 +1400,7 @@ CtrlDMG_SSW_ACK::~CtrlDMG_SSW_ACK ()
 }
 
 TypeId
-CtrlDMG_SSW_ACK::GetTypeId(void)
+CtrlDMG_SSW_ACK::GetTypeId (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
   static TypeId tid = TypeId ("ns3::CtrlDMG_SSW_ACK")
@@ -1318,6 +1486,633 @@ CtrlGrantAck::Deserialize (Buffer::Iterator start)
   i = m_bfControl.Deserialize (i);
 
   return i.GetDistanceFrom (start);
+}
+
+/***********************************************
+ *   TDD Beamforming frame format (9.3.1.24.1)
+ ***********************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (TDD_Beamforming);
+
+TDD_Beamforming::TDD_Beamforming ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TDD_Beamforming::~TDD_Beamforming ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TypeId
+TDD_Beamforming::GetTypeId (void)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+  static TypeId tid = TypeId ("ns3::TDD_Beamforming")
+    .SetParent<Header> ()
+    .AddConstructor<TDD_Beamforming> ()
+    ;
+  return tid;
+}
+
+TypeId
+TDD_Beamforming::GetInstanceTypeId (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return GetTypeId ();
+}
+
+void TDD_Beamforming::Print (std::ostream &os) const
+{
+  NS_LOG_FUNCTION (this << &os);
+}
+
+uint32_t
+TDD_Beamforming::GetSerializedSize () const
+{
+  NS_LOG_FUNCTION (this);
+  return 1;
+}
+
+void
+TDD_Beamforming::Serialize (Buffer::Iterator start) const
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  uint8_t controlField = 0;
+  controlField |= m_groupBeamforming & 0x1;
+  controlField |= (m_beamMeasurement & 0x1) << 1;
+  controlField |= (m_beamformingFrameType & 0x3) << 2;
+  controlField |= (m_endOfTraining & 0x1) << 4;
+  i.WriteU8 (controlField);
+}
+
+uint32_t
+TDD_Beamforming::Deserialize (Buffer::Iterator start)
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  uint8_t controlField = i.ReadU8 ();
+  m_groupBeamforming = controlField & 0x1;
+  m_beamMeasurement = (controlField >> 1) & 0x1;
+  m_beamformingFrameType = static_cast<TDD_Beamforming_Frame_Type> ((controlField << 2) & 0x3);
+  m_endOfTraining = (controlField >> 4) & 0x1;
+  return i.GetDistanceFrom (start);
+}
+
+void
+TDD_Beamforming::SetGroup_Beamforming (bool value)
+{
+  m_groupBeamforming = value;
+}
+
+void
+TDD_Beamforming::SetBeam_Measurement (bool value)
+{
+  m_beamMeasurement = value;
+}
+
+void
+TDD_Beamforming::SetBeamformingFrameType (TDD_Beamforming_Frame_Type type)
+{
+  m_beamformingFrameType = type;
+}
+
+void
+TDD_Beamforming::SetEndOfTraining (bool value)
+{
+  m_endOfTraining = value;
+}
+
+bool
+TDD_Beamforming::GetGroup_Beamforming (void) const
+{
+  return m_groupBeamforming;
+}
+
+bool
+TDD_Beamforming::GetBeam_Measurement (void) const
+{
+  return m_beamMeasurement;
+}
+
+TDD_Beamforming_Frame_Type
+TDD_Beamforming::GetBeamformingFrameType (void) const
+{
+  return m_beamformingFrameType;
+}
+
+bool
+TDD_Beamforming::GetEndOfTraining (void) const
+{
+  return m_endOfTraining;
+}
+
+TDD_BEAMFORMING_PROCEDURE
+TDD_Beamforming::GetBeamformingProcedure (Mac48Address receiver) const
+{
+  return TDD_BEAMFORMING_INDIVIDUAL;
+}
+
+/*********************************************
+ * TDD Sector Sweep (SSW) format (9.3.1.24.2)
+ *********************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (TDD_Beamforming_SSW);
+
+TDD_Beamforming_SSW::TDD_Beamforming_SSW ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TDD_Beamforming_SSW::~TDD_Beamforming_SSW ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TypeId
+TDD_Beamforming_SSW::GetTypeId (void)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+  static TypeId tid = TypeId ("ns3::TDD_Beamforming_SSW")
+    .SetParent<TDD_Beamforming> ()
+    .AddConstructor<TDD_Beamforming_SSW> ()
+    ;
+  return tid;
+}
+
+TypeId
+TDD_Beamforming_SSW::GetInstanceTypeId (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return GetTypeId ();
+}
+
+void TDD_Beamforming_SSW::Print (std::ostream &os) const
+{
+  NS_LOG_FUNCTION (this << &os);
+}
+
+uint32_t
+TDD_Beamforming_SSW::GetSerializedSize () const
+{
+  NS_LOG_FUNCTION (this);
+  return 6;
+}
+
+void
+TDD_Beamforming_SSW::Serialize (Buffer::Iterator start) const
+{
+  NS_LOG_FUNCTION (this << &start);
+//  Buffer::Iterator i = start;
+}
+
+uint32_t
+TDD_Beamforming_SSW::Deserialize (Buffer::Iterator start)
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  return i.GetDistanceFrom (start);
+}
+
+void
+TDD_Beamforming_SSW::SetTxSectorID (uint16_t sectorID)
+{
+  m_sectorID = sectorID;
+}
+
+void
+TDD_Beamforming_SSW::SetTxAntennaID (uint8_t antennaID)
+{
+  m_antennaID = antennaID;
+}
+
+void
+TDD_Beamforming_SSW::SetCountIndex (uint8_t index)
+{
+  m_countIndex = index;
+}
+
+void
+TDD_Beamforming_SSW::SetBeamformingTimeUnit (uint8_t unit)
+{
+  m_beamformingTimeUnit = unit;
+}
+
+void
+TDD_Beamforming_SSW::SetTransmitPeriod (uint8_t period)
+{
+  m_transmitPeriod = period;
+}
+
+void
+TDD_Beamforming_SSW::SetResponderFeedbackOffset (uint16_t offset)
+{
+  m_responderFeedbackOffset = offset;
+}
+
+void
+TDD_Beamforming_SSW::SetInitiatorAckOffset (uint16_t offset)
+{
+  m_initiatorAckOffset = offset;
+}
+
+void
+TDD_Beamforming_SSW::SetNumberOfRequestedFeedback (uint8_t feedback)
+{
+  m_numRequestedFeedback = feedback;
+}
+
+
+void
+TDD_Beamforming_SSW::SetTDDSlotCDOWN (uint16_t cdown)
+{
+  m_tddSlotCDOWN = cdown;
+}
+
+void
+TDD_Beamforming_SSW::SetFeedbackRequested (bool feedback)
+{
+  m_feedbackRequested = feedback;
+}
+
+uint16_t
+TDD_Beamforming_SSW::GetTxSectorID (void) const
+{
+  return m_sectorID;
+}
+
+uint8_t
+TDD_Beamforming_SSW::GetTxAntennaID (void) const
+{
+  return m_antennaID;
+}
+
+uint8_t
+TDD_Beamforming_SSW::GetCountIndex (void) const
+{
+  return m_countIndex;
+}
+
+uint8_t
+TDD_Beamforming_SSW::GetBeamformingTimeUnit (void) const
+{
+  return m_beamformingTimeUnit;
+}
+
+uint8_t
+TDD_Beamforming_SSW::GetTransmitPeriod (void) const
+{
+  return m_transmitPeriod;
+}
+
+uint16_t
+TDD_Beamforming_SSW::GetResponderFeedbackOffset (void) const
+{
+  return m_responderFeedbackOffset;
+}
+
+uint16_t
+TDD_Beamforming_SSW::GetInitiatorAckOffset (void) const
+{
+  return m_initiatorAckOffset;
+}
+
+uint8_t
+TDD_Beamforming_SSW::GetNumberOfRequestedFeedback (void) const
+{
+  return m_numRequestedFeedback;
+}
+
+uint16_t
+TDD_Beamforming_SSW::GetTDDSlotCDOWN (void) const
+{
+  return m_tddSlotCDOWN;
+}
+
+bool
+TDD_Beamforming_SSW::GetFeedbackRequested (void) const
+{
+  return m_feedbackRequested;
+}
+
+/*********************************************
+ *     TDD SSW Feedback format (9.3.1.24.3)
+ *********************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (TDD_Beamforming_SSW_FEEDBACK);
+
+TDD_Beamforming_SSW_FEEDBACK::TDD_Beamforming_SSW_FEEDBACK ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TDD_Beamforming_SSW_FEEDBACK::~TDD_Beamforming_SSW_FEEDBACK ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TypeId
+TDD_Beamforming_SSW_FEEDBACK::GetTypeId (void)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+  static TypeId tid = TypeId ("ns3::TDD_Beamforming_SSW_FEEDBACK")
+    .SetParent<TDD_Beamforming> ()
+    .AddConstructor<TDD_Beamforming_SSW_FEEDBACK> ()
+    ;
+  return tid;
+}
+
+TypeId
+TDD_Beamforming_SSW_FEEDBACK::GetInstanceTypeId (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return GetTypeId ();
+}
+
+void TDD_Beamforming_SSW_FEEDBACK::Print (std::ostream &os) const
+{
+  NS_LOG_FUNCTION (this << &os);
+}
+
+uint32_t
+TDD_Beamforming_SSW_FEEDBACK::GetSerializedSize () const
+{
+  NS_LOG_FUNCTION (this);
+  return TDD_Beamforming::GetSerializedSize () + 6;
+}
+
+void
+TDD_Beamforming_SSW_FEEDBACK::Serialize (Buffer::Iterator start) const
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+  TDD_Beamforming::Serialize (i);
+  uint32_t value1 = 0;
+  uint16_t value2 = 0;
+  value1 |= (m_sectorID & 0x1FF);
+  value1 |= (m_antennaID & 0x7) << 9;
+  value1 |= (m_decodedSectorID & 0x1FF) << 12;
+  value1 |= (m_decodedAntennaID & 0x7) << 21;
+  value1 |= (m_snrReport & 0xFF) << 24;
+  value2 |= (m_feedbackCountIndex & 0x33);
+  i.WriteHtolsbU32 (value1);
+  i.WriteHtolsbU16 (value2);
+}
+
+uint32_t
+TDD_Beamforming_SSW_FEEDBACK::Deserialize (Buffer::Iterator start)
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+//  i += TDD_Beamforming::Deserialize (i);
+  uint32_t value1 = i.ReadLsbtohU32 ();
+  uint16_t value2 = i.ReadLsbtohU16 ();
+  m_sectorID = (value1 & 0x1FF);
+  m_antennaID = (value1 >> 9) & 0x7;
+  m_decodedSectorID = (value1 >> 12) & 0x1FF;
+  m_decodedAntennaID = (value1 >> 21) & 0x7;
+  m_snrReport = (value1 >> 24) & 0xFF;
+  m_feedbackCountIndex = (value2 & 0x33);
+  return i.GetDistanceFrom (start);
+}
+
+void
+TDD_Beamforming_SSW_FEEDBACK::SetTxSectorID (uint16_t sectorID)
+{
+  m_sectorID = sectorID;
+}
+
+void
+TDD_Beamforming_SSW_FEEDBACK::SetTxAntennaID (uint8_t antennaID)
+{
+  m_antennaID = antennaID;
+}
+
+void
+TDD_Beamforming_SSW_FEEDBACK::SetDecodedTxSectorID (uint16_t sectorID)
+{
+  m_decodedSectorID = sectorID;
+}
+
+void
+TDD_Beamforming_SSW_FEEDBACK::SetDecodedTxAntennaID (uint8_t antennaID)
+{
+  m_decodedAntennaID = antennaID;
+}
+
+void
+TDD_Beamforming_SSW_FEEDBACK::SetSnrReport (uint8_t snr)
+{
+  m_snrReport = snr;
+}
+
+void
+TDD_Beamforming_SSW_FEEDBACK::SetFeedbackCountIndex (uint8_t index)
+{
+  m_feedbackCountIndex = index;
+}
+
+uint16_t
+TDD_Beamforming_SSW_FEEDBACK::GetTxSectorID (void) const
+{
+  return m_sectorID;
+}
+
+uint8_t
+TDD_Beamforming_SSW_FEEDBACK::GetTxAntennaID (void) const
+{
+  return m_antennaID;
+}
+
+uint16_t
+TDD_Beamforming_SSW_FEEDBACK::GetDecodedTxSectorID (void) const
+{
+  return m_decodedSectorID;
+}
+
+uint8_t
+TDD_Beamforming_SSW_FEEDBACK::GetDecodedTxAntennaID (void) const
+{
+  return m_decodedAntennaID;
+}
+
+uint8_t
+TDD_Beamforming_SSW_FEEDBACK::GetSnrReport (void) const
+{
+  return m_snrReport;
+}
+
+uint8_t
+TDD_Beamforming_SSW_FEEDBACK::GetFeedbackCountIndex (void) const
+{
+  return m_feedbackCountIndex;
+}
+
+/*********************************************
+ *      TDD SSW ACK format (9.3.1.24.3)
+ *********************************************/
+
+NS_OBJECT_ENSURE_REGISTERED (TDD_Beamforming_SSW_ACK);
+
+TDD_Beamforming_SSW_ACK::TDD_Beamforming_SSW_ACK ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TDD_Beamforming_SSW_ACK::~TDD_Beamforming_SSW_ACK ()
+{
+  NS_LOG_FUNCTION (this);
+}
+
+TypeId
+TDD_Beamforming_SSW_ACK::GetTypeId (void)
+{
+  NS_LOG_FUNCTION_NOARGS ();
+  static TypeId tid = TypeId ("ns3::TDD_Beamforming_SSW_ACK")
+    .SetParent<TDD_Beamforming> ()
+    .AddConstructor<TDD_Beamforming_SSW_ACK> ()
+  ;
+  return tid;
+}
+
+TypeId
+TDD_Beamforming_SSW_ACK::GetInstanceTypeId (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return GetTypeId ();
+}
+
+void TDD_Beamforming_SSW_ACK::Print (std::ostream &os) const
+{
+  NS_LOG_FUNCTION (this << &os);
+}
+
+uint32_t
+TDD_Beamforming_SSW_ACK::GetSerializedSize () const
+{
+  NS_LOG_FUNCTION (this);
+  return 6;
+}
+
+void
+TDD_Beamforming_SSW_ACK::Serialize (Buffer::Iterator start) const
+{
+  NS_LOG_FUNCTION (this << &start);
+//  Buffer::Iterator i = start;
+  if (m_beamformingFrameType == TDD_SSW)
+    {
+
+    }
+  else if (m_beamformingFrameType == TDD_SSW_Feedback)
+    {
+
+    }
+}
+
+uint32_t
+TDD_Beamforming_SSW_ACK::Deserialize (Buffer::Iterator start)
+{
+  NS_LOG_FUNCTION (this << &start);
+  Buffer::Iterator i = start;
+
+  return i.GetDistanceFrom (start);
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetDecodedTxSectorID (uint16_t sectorID)
+{
+  m_sectorID = sectorID;
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetDecodedTxAntennaID (uint8_t antennaID)
+{
+  m_antennaID = antennaID;
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetCountIndex (uint8_t index)
+{
+  m_countIndex = index;
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetTransmitPeriod (uint8_t period)
+{
+  m_transmitPeriod = period;
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetSnrReport (uint8_t snr)
+{
+  m_snrReport = snr;
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetInitiatorTransmitOffset (uint16_t offset)
+{
+  m_InitiatorTransmitOffset = offset;
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetResponderTransmitOffset (uint8_t offset)
+{
+  m_responderTransmitOffset = offset;
+}
+
+void
+TDD_Beamforming_SSW_ACK::SetAckCountIndex (uint8_t count)
+{
+  m_ackCountIndex = count;
+}
+
+uint16_t
+TDD_Beamforming_SSW_ACK::GetDecodedTxSectorID (void) const
+{
+  return m_sectorID;
+}
+
+uint8_t
+TDD_Beamforming_SSW_ACK::GetDecodedTxAntennaID (void) const
+{
+  return m_antennaID;
+}
+
+uint8_t
+TDD_Beamforming_SSW_ACK::GetCountIndex (void) const
+{
+  return m_countIndex;
+}
+
+uint8_t
+TDD_Beamforming_SSW_ACK::GetTransmitPeriod (void) const
+{
+  return m_transmitPeriod;
+}
+
+uint8_t
+TDD_Beamforming_SSW_ACK::GetSnrReport (void) const
+{
+  return m_snrReport;
+}
+
+uint16_t
+TDD_Beamforming_SSW_ACK::GetInitiatorTransmitOffGet (void) const
+{
+  return m_InitiatorTransmitOffset;
+}
+
+uint8_t
+TDD_Beamforming_SSW_ACK::GetResponderTransmitOffGet (void) const
+{
+  return m_responderTransmitOffset;
+}
+
+uint8_t
+TDD_Beamforming_SSW_ACK::GetAckCountIndex (void) const
+{
+  return m_ackCountIndex;
 }
 
 }  // namespace ns3

@@ -21,7 +21,7 @@
 #define TCPBIC_H
 
 #include "ns3/tcp-congestion-ops.h"
-#include "ns3/traced-value.h"
+#include "ns3/tcp-recovery-ops.h"
 
 class TcpBicIncrementTest;
 class TcpBicDecrementTest;
@@ -103,6 +103,7 @@ public:
                                uint32_t segmentsAcked);
   virtual uint32_t GetSsThresh (Ptr<const TcpSocketState> tcb,
                                 uint32_t bytesInFlight);
+  virtual void ReduceCwnd (Ptr<TcpSocketState> tcb);
 
   virtual Ptr<TcpCongestionOps> Fork ();
 
@@ -131,7 +132,7 @@ private:
   double   m_beta;             //!< Beta for cubic multiplicative increase
   uint32_t m_maxIncr;          //!< Maximum window increment
   uint32_t m_lowWnd;           //!< Lower bound on congestion window
-  int      m_smoothPart;       //!< Number of RTT needed to reach Wmax from Wmax-B
+  uint32_t m_smoothPart;       //!< Number of RTT needed to reach Wmax from Wmax-B
 
   // Bic parameters
   uint32_t     m_cWndCnt;         //!<  cWnd integer-to-float counter

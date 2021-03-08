@@ -49,23 +49,24 @@ Ptr<DmgApWifiMac> apWifiMac;
 Ptr<DmgStaWifiMac> staWifiMac;
 
 void
-SLSCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> wifiMac, SlsCompletionAttrbitutes attributes)
 {
   if (wifiMac == apWifiMac)
     {
-      std::cout << "DMG AP " << apWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
+      std::cout << "DMG AP " << apWifiMac->GetAddress ()
+                << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
     }
   else
     {
-      std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG AP " << address << std::endl;
+      std::cout << "DMG STA " << staWifiMac->GetAddress ()
+                << " completed SLS phase with DMG AP " << attributes.peerStation << std::endl;
     }
-  std::cout << "Best Tx Antenna Configuration: SectorID=" << uint (sectorId) << ", AntennaID=" << uint (antennaId) << std::endl;
+  std::cout << "Best Tx Antenna Configuration: AntennaID=" << uint16_t (attributes.antennaID)
+            << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
 }
 
 int
-main(int argc, char *argv[])
+main (int argc, char *argv[])
 {
   AntennaID antennas = 1;                       /* The number of antennas. */
   SectorID sectors = 8;                         /* The number of sectors per antenna. */
@@ -120,9 +121,17 @@ main(int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
+  /* Set the correct error model */
+  wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
+                             "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
+  // The value correspond to DMG MCS-0.
+  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
+  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
+  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
+  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
+  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
+  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
                                                                 "DataMode", StringValue (phyMode));

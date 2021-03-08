@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2006 INRIA
  * Copyright (c) 2009 MIRKO BANCHI
- * Copyright (c) 2015-2017 IMDEA NEtworks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -28,22 +28,30 @@
 #include <stdint.h>
 
 #include "ns3/header.h"
+#include "ns3/mac48-address.h"
 #include "status-code.h"
 #include "capability-information.h"
 #include "supported-rates.h"
 #include "ssid.h"
 #include "dsss-parameter-set.h"
+#include "extended-capabilities.h"
 #include "ht-capabilities.h"
 #include "ht-operation.h"
 #include "vht-capabilities.h"
+#include "vht-operation.h"
 #include "erp-information.h"
 #include "edca-parameter-set.h"
+#include "he-capabilities.h"
+#include "he-operation.h"
+#include "cf-parameter-set.h"
+//// WIGIG ////
+#include "common-header.h"
+#include "ctrl-headers.h"
 #include "dmg-capabilities.h"
 #include "dmg-information-elements.h"
-#include "ctrl-headers.h"
 #include "ext-headers.h"
 #include "fields-headers.h"
-#include "common-header.h"
+//// WIGIG ////
 
 namespace ns3 {
 
@@ -58,18 +66,6 @@ public:
   ~MgtAssocRequestHeader ();
 
   /**
-   * Set the Capability information.
-   *
-   * \param capabilities Capability information
-   */
-  void SetCapabilities (CapabilityInformation capabilities);
-  /**
-   * Set the listen interval.
-   *
-   * \param interval the listen interval
-   */
-  void SetListenInterval (uint16_t interval);
-  /**
    * Set the Service Set Identifier (SSID).
    *
    * \param ssid SSID
@@ -81,19 +77,24 @@ public:
    * \param rates the supported rates
    */
   void SetSupportedRates (SupportedRates rates);
-
+  /**
+   * Set the listen interval.
+   *
+   * \param interval the listen interval
+   */
+  void SetListenInterval (uint16_t interval);
+  /**
+   * Set the Capability information.
+   *
+   * \param capabilities Capability information
+   */
+  void SetCapabilities (CapabilityInformation capabilities);
   /**
    * Return the Capability information.
    *
    * \return Capability information
    */
   CapabilityInformation GetCapabilities (void) const;
-  /**
-   * Return the listen interval.
-   *
-   * \return the listen interval
-   */
-  uint16_t GetListenInterval (void) const;
   /**
    * Return the Service Set Identifier (SSID).
    *
@@ -106,6 +107,12 @@ public:
    * \return the supported rates
    */
   SupportedRates GetSupportedRates (void) const;
+  /**
+   * Return the listen interval.
+   *
+   * \return the listen interval
+   */
+  uint16_t GetListenInterval (void) const;
 
   /**
    * Register this type.
@@ -118,12 +125,12 @@ public:
   void Serialize (Buffer::Iterator start) const;
   uint32_t Deserialize (Buffer::Iterator start);
 
-private:
-  CapabilityInformation m_capability;       //!< Capability information.
-  uint16_t m_listenInterval;
-  Ssid m_ssid;                              //!< Service Set ID (SSID).
-  SupportedRates m_rates;                   //!< List of supported rates
 
+private:
+  Ssid m_ssid;                        //!< Service Set ID (SSID)
+  SupportedRates m_rates;             //!< List of supported rates
+  CapabilityInformation m_capability; //!< Capability information
+  uint16_t m_listenInterval;          //!< listen interval
 };
 
 
@@ -215,7 +222,7 @@ private:
 
 /**
  * \ingroup wifi
- * Implement the header for management frames of type association response.
+ * Implement the header for management frames of type association and reassociation response.
  */
 class MgtAssocResponseHeader : public Header, public MgtFrame
 {
@@ -224,29 +231,17 @@ public:
   ~MgtAssocResponseHeader ();
 
   /**
-   * Set the Capability information.
+   * Return the status code.
    *
-   * \param capabilities Capability information
+   * \return the status code
    */
-  void SetCapabilities (CapabilityInformation capabilities);
+  StatusCode GetStatusCode (void);
   /**
-   * Set the status code.
+   * Return the supported rates.
    *
-   * \param code the status code
+   * \return the supported rates
    */
-  void SetStatusCode (StatusCode code);
-  /**
-   * Set the association identifier.
-   *
-   * \param the association identifier.
-   */
-  void SetAssociationId (uint16_t aid);
-  /**
-   * Set the supported rates.
-   *
-   * \param rates the supported rates
-   */
-  void SetSupportedRates (SupportedRates rates);
+  SupportedRates GetSupportedRates (void);
   /**
    * Return the Capability information.
    *
@@ -254,23 +249,35 @@ public:
    */
   CapabilityInformation GetCapabilities (void) const;
   /**
-   * Return the status code.
+   * Return the association ID.
    *
-   * \return the status code
+   * \return the association ID
    */
-  StatusCode GetStatusCode (void);
+  uint16_t GetAssociationId (void) const;
   /**
-   * Get the association identifier.
+   * Set the Capability information.
    *
-   * \return the association identifier.
+   * \param capabilities Capability information
    */
-  uint16_t GetAid (void) const;
+  void SetCapabilities (CapabilityInformation capabilities);
   /**
-   * Return the supported rates.
+   * Set the supported rates.
    *
-   * \return the supported rates
+   * \param rates the supported rates
    */
-  SupportedRates GetSupportedRates (void) const;
+  void SetSupportedRates (SupportedRates rates);
+  /**
+   * Set the status code.
+   *
+   * \param code the status code
+   */
+  void SetStatusCode (StatusCode code);
+  /**
+   * Set the association ID.
+   *
+   * \param aid the association ID
+   */
+  void SetAssociationId (uint16_t aid);
 
   /**
    * Register this type.
@@ -283,12 +290,12 @@ public:
   void Serialize (Buffer::Iterator start) const;
   uint32_t Deserialize (Buffer::Iterator start);
 
+
 private:
+  SupportedRates m_rates;                   //!< List of supported rates
   CapabilityInformation m_capability;       //!< Capability information
   StatusCode m_code;                        //!< Status code
   uint16_t m_aid;                           //!< Association Identifier.
-  SupportedRates m_rates;                   //!< List of supported rates
-
 };
 
 
@@ -337,11 +344,12 @@ public:
   void Serialize (Buffer::Iterator start) const;
   uint32_t Deserialize (Buffer::Iterator start);
 
-private:
-  Ssid m_ssid;                            //!< Service Set ID (SSID)
-  SupportedRates m_rates;                 //!< List of supported rates
 
+private:
+  Ssid m_ssid;                     //!< Service Set ID (SSID)
+  SupportedRates m_rates;          //!< List of supported rates
 };
+
 
 /**
  * \ingroup wifi
@@ -420,14 +428,15 @@ public:
   void Serialize (Buffer::Iterator start) const;
   uint32_t Deserialize (Buffer::Iterator start);
 
-private:
-  uint64_t m_timestamp;                     //!< Timestamp
-  Ssid m_ssid;                              //!< Service set ID (SSID)
-  uint64_t m_beaconInterval;                //!< Beacon interval
-  CapabilityInformation m_capability;       //!< Capability information
-  SupportedRates m_rates;                   //!< List of supported rates
 
+private:
+  uint64_t m_timestamp;                //!< Timestamp
+  Ssid m_ssid;                         //!< Service set ID (SSID)
+  uint64_t m_beaconInterval;           //!< Beacon interval
+  SupportedRates m_rates;              //!< List of supported rates
+  CapabilityInformation m_capability;  //!< Capability information
 };
+
 
 /**
  * \ingroup wifi
@@ -512,7 +521,7 @@ public:
   };
 
   /**
-   * Block ACK action field values
+   * Block Ack Action field values
    * See 802.11 Table 8-202
    */
   enum BlockAckActionValue
@@ -619,16 +628,16 @@ public:
   typedef union
   {
     QosActionValue qos;
-    BlockAckActionValue blockAck;
+    BlockAckActionValue blockAck; ///< block ack
     RadioMeasurementActionValue radioMeasurementAction;
     PublicActionValue publicAction;
-    SelfProtectedActionValue selfProtectedAction;
-    MultihopActionValue multihopAction;
-    MeshActionValue meshAction;
+    SelfProtectedActionValue selfProtectedAction; ///< self protected action
+    MultihopActionValue multihopAction; ///< multi hop action
+    MeshActionValue meshAction; ///< mesh action
     DmgActionValue dmgAction;
     FstActionValue fstAction;
     UnprotectedDmgValue unprotectedAction;
-  } ActionValue;
+  } ActionValue; ///< the action value
   /**
    * Set action for this Action header.
    *
@@ -666,7 +675,7 @@ private:
   /**
    * Category value to string function
    * \param value the category value
-   * \returns the categoty value string
+   * \returns the category value string
    */
   std::string CategoryValueToString (CategoryValue value) const;
   /**
@@ -792,7 +801,7 @@ private:
 
 /**
  * \ingroup wifi
- * Implement the header for management frames of type add block ack request.
+ * Implement the header for management frames of type Add Block Ack request.
  */
 class MgtAddBaRequestHeader : public Header
 {
@@ -811,11 +820,11 @@ public:
   uint32_t Deserialize (Buffer::Iterator start);
 
   /**
-   * Enable delayed Block ACK.
+   * Enable delayed BlockAck.
    */
   void SetDelayedBlockAck ();
   /**
-   * Enable immediate Block ACK
+   * Enable immediate BlockAck
    */
   void SetImmediateBlockAck ();
   /**
@@ -862,9 +871,9 @@ public:
    */
   uint8_t GetTid (void) const;
   /**
-   * Return whether the Block ACK policy is immediate Block ACK.
+   * Return whether the Block Ack policy is immediate Block Ack.
    *
-   * \return true if immediate Block ACK is being used, false otherwise
+   * \return true if immediate Block Ack is being used, false otherwise
    */
   bool IsImmediateBlockAck (void) const;
   /**
@@ -908,13 +917,13 @@ private:
   /**
    * Set sequence control with the given raw value.
    *
-   * \param seqControl
+   * \param seqControl the raw sequence control
    */
   void SetStartingSequenceControl (uint16_t seqControl);
 
   uint8_t m_dialogToken;   //!< Not used for now
   uint8_t m_amsduSupport;  //!< Flag if A-MSDU is supported
-  uint8_t m_policy;        //!< Block ACK policy
+  uint8_t m_policy;        //!< Block Ack policy
   uint8_t m_tid;           //!< Traffic ID
   uint16_t m_bufferSize;   //!< Buffer size
   uint16_t m_timeoutValue; //!< Timeout
@@ -924,7 +933,7 @@ private:
 
 /**
  * \ingroup wifi
- * Implement the header for management frames of type add block ack response.
+ * Implement the header for management frames of type Add Block Ack response.
  */
 class MgtAddBaResponseHeader : public Header
 {
@@ -943,11 +952,11 @@ public:
   uint32_t Deserialize (Buffer::Iterator start);
 
   /**
-   * Enable delayed Block ACK.
+   * Enable delayed BlockAck.
    */
   void SetDelayedBlockAck ();
   /**
-   * Enable immediate Block ACK
+   * Enable immediate BlockAck.
    */
   void SetImmediateBlockAck ();
   /**
@@ -994,9 +1003,9 @@ public:
    */
   uint8_t GetTid (void) const;
   /**
-   * Return whether the Block ACK policy is immediate Block ACK.
+   * Return whether the Block Ack policy is immediate Block Ack.
    *
-   * \return true if immediate Block ACK is being used, false otherwise
+   * \return true if immediate Block Ack is being used, false otherwise
    */
   bool IsImmediateBlockAck (void) const;
   /**
@@ -1045,7 +1054,7 @@ private:
 
 /**
  * \ingroup wifi
- * Implement the header for management frames of type del block ack.
+ * Implement the header for management frames of type Delete Block Ack.
  */
 class MgtDelBaHeader : public Header
 {
@@ -1065,9 +1074,9 @@ public:
   uint32_t Deserialize (Buffer::Iterator start);
 
   /**
-   * Check if the initiator bit in the DELBA is setted.
+   * Check if the initiator bit in the DELBA is set.
    *
-   * \return true if the initiator bit in the DELBA is setted,
+   * \return true if the initiator bit in the DELBA is set,
    *         false otherwise
    */
   bool IsByOriginator (void) const;
@@ -1264,13 +1273,13 @@ public:
    * Get List of SubElement associated with this frame.
    * \return
    */
-  WifiInformationElementMap GetListOfSubElements (void) const;
+  WifiInformationSubelementMap GetListOfSubElements (void) const;
 
 private:
   uint8_t m_dialogToken;
   uint8_t m_transmitPowerUsed;
   uint8_t m_maxTransmitPower;
-  WifiInformationElementMap m_map;
+  WifiInformationSubelementMap m_map;
 
 };
 
@@ -1320,7 +1329,7 @@ public:
    * Get List of SubElement associated with this frame.
    * \return
    */
-  WifiInformationElementMap GetListOfSubElements (void) const;
+  WifiInformationSubelementMap GetListOfSubElements (void) const;
 
 private:
   uint8_t m_dialogToken;
@@ -1329,7 +1338,7 @@ private:
   uint8_t m_transmitAntId;
   uint8_t m_rcpi;
   uint8_t m_rsni;
-  WifiInformationElementMap m_map;
+  WifiInformationSubelementMap m_map;
 
 };
 
@@ -1456,6 +1465,7 @@ public:
    */
   void AddDmgCapabilitiesElement (Ptr<DmgCapabilities> elem);
 
+
   Mac48Address GetSubjectAddress (void) const;
   Ptr<RequestElement> GetRequestInformationElement (void) const;
   DmgCapabilitiesList GetDmgCapabilitiesList (void) const;
@@ -1502,6 +1512,21 @@ public:
   virtual TypeId GetInstanceTypeId (void) const;
   void Serialize (Buffer::Iterator start) const;
   uint32_t Deserialize (Buffer::Iterator start);
+  virtual uint32_t GetSerializedSize (void) const;
+
+
+  Ptr<BeamRefinementElement> GetBeamRefinementElement (void) const;
+  Ptr<ChannelMeasurementFeedbackElement> GetChannelMeasurementElement (void) const;
+  Ptr<EDMGChannelMeasurementFeedbackElement> GetEDMGChannelMeasurementElement (void) const;
+
+  void SetBeamRefinementElement (Ptr<BeamRefinementElement> element);
+  void SetChannelMeasurementElement (Ptr<ChannelMeasurementFeedbackElement> element);
+  void SetEdmgChannelMeasurementElement (Ptr<EDMGChannelMeasurementFeedbackElement> element);
+
+protected:
+  Ptr<BeamRefinementElement> m_beamRefinement;
+  Ptr<ChannelMeasurementFeedbackElement> m_channelElement;
+  Ptr<EDMGChannelMeasurementFeedbackElement> m_edmgChannelElement;
 
 };
 
@@ -2374,22 +2399,34 @@ public:
   void SetBrpRequestField (BRP_Request_Field &field);
   void SetBeamRefinementElement (BeamRefinementElement &element);
   void AddChannelMeasurementFeedback (ChannelMeasurementFeedbackElement *element);
+  void SetEdmgPartialSlsElement (EdmgPartialSectorLevelSweep *element);
+  void SetEdmgBrpRequestElement (EdmgBrpRequestElement *element);
+  void AddEdmgChannelMeasurementFeedback (EDMGChannelMeasurementFeedbackElement *element);
 
   uint8_t GetDialogToken (void) const;
   BRP_Request_Field GetBrpRequestField (void) const;
   BeamRefinementElement GetBeamRefinementElement (void) const;
   ChannelMeasurementFeedbackElementList GetChannelMeasurementFeedbackList (void) const;
+  Ptr<EdmgPartialSectorLevelSweep> GetEdmgPartialSlsElement (void) const;
+  Ptr<EdmgBrpRequestElement> GetEdmgBrpRequestElement (void) const;
+  EDMGChannelMeasurementFeedbackElementList GetEdmgChannelMeasurementFeedbackList (void) const;
 
 private:
   uint8_t m_dialogToken;
   BRP_Request_Field m_brpRequestField;
   BeamRefinementElement m_beamRefinementElement;
   ChannelMeasurementFeedbackElementList m_list;
+  Ptr<EdmgPartialSectorLevelSweep> m_partialSlsElement;
+  Ptr<EdmgBrpRequestElement> m_edmgBrpRequestElement;
+  EDMGChannelMeasurementFeedbackElementList m_edmgList;
 
 };
 
 /**
  * \ingroup wifi
+ *
+ * The MIMO BF Setup frame is an Action No Ack frame for IEEE 802.11ay.
+ *
  */
 class ExtMimoBfSetupFrame : public Header
 {
@@ -2422,6 +2459,9 @@ protected:
 
 /**
  * \ingroup wifi
+ *
+ * The MIMO BF Poll frame is an Action No Ack frame for IEEE 802.11ay.
+ *
  */
 class ExtMimoBfPollFrame : public Header
 {
@@ -2455,11 +2495,10 @@ protected:
 /**
  * \ingroup wifi
  *
- * The MIMO BF Feedback frame is an Action No Ack frame. The format of a MIMO BF Feedback frame
- * Action field is shown in Table 34.
+ * The MIMO BF Feedback frame is an Action No Ack frame for IEEE 802.11ay.
  *
- * NOTE— The length of a MIMO BF Feedback frame can limit the choice of channel measurement parameters
- * such as the number of measurements and the number of taps.
+ * Note: The length of a MIMO BF Feedback frame can limit the choice of channel
+ * measurement parameters such as the number of measurements and the number of taps.
  */
 class ExtMimoBfFeedbackFrame : public Header
 {
@@ -2529,8 +2568,7 @@ protected:
 /**
  * \ingroup wifi
  *
- * The MIMO BF Selection frame is an Action No Ack frame. The format of a MIMO BF Selection frame
- * Action field is shown in Table 35.
+ * The MIMO BF Selection frame is an Action No Ack frame. The format of a MIMO BF Selection frame.
  */
 class ExtMimoBFSelectionFrame : public Header
 {

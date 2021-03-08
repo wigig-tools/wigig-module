@@ -18,8 +18,9 @@
  */
 
 #include "tcp-hybla.h"
+#include "tcp-socket-state.h"
+
 #include "ns3/log.h"
-#include "ns3/tcp-socket-base.h"
 
 namespace ns3 {
 
@@ -40,7 +41,7 @@ TcpHybla::GetTypeId (void)
     .AddTraceSource ("Rho",
                      "Rho parameter of Hybla",
                      MakeTraceSourceAccessor (&TcpHybla::m_rho),
-                     "ns3::TracedValue::DoubleCallback")
+                     "ns3::TracedValueCallback::Double")
   ;
   return tid;
 }
@@ -143,7 +144,7 @@ TcpHybla::CongestionAvoidance (Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 
   if (m_cWndCnt >= 1.0)
     {
-      // double to int truncates everytime.
+      // double to int truncates every time.
       uint32_t inc = static_cast<uint32_t> (m_cWndCnt);
       m_cWndCnt -= inc;
 

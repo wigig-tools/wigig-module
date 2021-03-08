@@ -149,14 +149,12 @@ public:
    * Saves you from having to construct a temporary NodeContainer.
    */
   NetDeviceContainer Install (std::string aNode, std::string bNode);
-
   /**
    * Set the maximum length of packet data stored in the PCAP file.
    *
    * \param length The length of the snapshot in bytes.
    */
   void SetSnapshotLength (uint32_t length);
-
   /**
    * Get the maximum length of packet data stored in the PCAP file.
    *
@@ -200,7 +198,6 @@ private:
   ObjectFactory m_remoteChannelFactory; //!< Remote Channel Factory
   ObjectFactory m_deviceFactory;        //!< Device Factory
   uint32_t m_snaplen;                   //!< Snapshot length in bytes.
-
 };
 
 } // namespace ns3

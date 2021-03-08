@@ -372,51 +372,32 @@ ExtendedCapabilities::DeserializeInformationField (Buffer::Iterator start, uint8
 {
   Buffer::Iterator i = start;
   uint8_t byte1 = i.ReadU8 ();
-  uint8_t byte2 = i.ReadU8 ();
-  uint8_t byte3 = i.ReadU8 ();
-  uint8_t byte4 = i.ReadU8 ();
-  uint8_t byte5 = i.ReadU8 ();
-  uint8_t byte6 = i.ReadU8 ();
-  uint8_t byte7 = i.ReadU8 ();
-  uint8_t byte8 = i.ReadU8 ();
   SetExtendedCapabilitiesByte1 (byte1);
-  SetExtendedCapabilitiesByte2 (byte2);
-  SetExtendedCapabilitiesByte3 (byte3);
-  SetExtendedCapabilitiesByte4 (byte4);
-  SetExtendedCapabilitiesByte5 (byte5);
-  SetExtendedCapabilitiesByte6 (byte6);
-  SetExtendedCapabilitiesByte7 (byte7);
-  SetExtendedCapabilitiesByte8 (byte8);
+  if (m_vhtSupported > 0)
+    {
+      uint8_t byte2 = i.ReadU8 ();
+      uint8_t byte3 = i.ReadU8 ();
+      uint8_t byte4 = i.ReadU8 ();
+      uint8_t byte5 = i.ReadU8 ();
+      uint8_t byte6 = i.ReadU8 ();
+      uint8_t byte7 = i.ReadU8 ();
+      uint8_t byte8 = i.ReadU8 ();
+      SetExtendedCapabilitiesByte2 (byte2);
+      SetExtendedCapabilitiesByte3 (byte3);
+      SetExtendedCapabilitiesByte4 (byte4);
+      SetExtendedCapabilitiesByte5 (byte5);
+      SetExtendedCapabilitiesByte6 (byte6);
+      SetExtendedCapabilitiesByte7 (byte7);
+      SetExtendedCapabilitiesByte8 (byte8);
+    }
   return length;
 }
 
-ATTRIBUTE_HELPER_CPP (ExtendedCapabilities);
-
-/**
- * output stream output operator
- *
- * \param os output stream
- * \param extendedcapabilities the extended capabilities
- *
- * \returns output stream
- */
 std::ostream &
-operator << (std::ostream &os, const ExtendedCapabilities &extendedcapabilities)
+operator << (std::ostream &os, const ExtendedCapabilities &extendedCapabilities)
 {
+  os << +extendedCapabilities.GetExtendedCapabilitiesByte1 ();
   return os;
-}
-
-/**
- * input stream input operator
- *
- * \param is input stream
- * \param extendedcapabilities the extended capabilities
- *
- * \returns input stream
- */
-std::istream &operator >> (std::istream &is, ExtendedCapabilities &extendedcapabilities)
-{
-  return is;
 }
 
 } //namespace ns3

@@ -56,18 +56,11 @@ WifiInformationElement::Print (std::ostream &os) const
 uint16_t
 WifiInformationElement::GetSerializedSize () const
 {
-  if (ElementId () == IE_EXTENSION)
-    {
-      return (3 + GetInformationFieldSize ());
-    }
-  else
-    {
-      return (2 + GetInformationFieldSize ());
-    }
+  return (2 + GetInformationFieldSize ());
 }
 
 WifiInformationElementId
-WifiInformationElement::ElementIdExtension () const
+WifiInformationElement::ElementIdExt () const
 {
   return 0;
 }
@@ -79,10 +72,15 @@ WifiInformationElement::Serialize (Buffer::Iterator i) const
   i.WriteU8 (GetInformationFieldSize ());
   if (ElementId () == IE_EXTENSION)
     {
-      i.WriteU8 (ElementIdExtension ());
+      i.WriteU8 (ElementIdExt ());
+      SerializeInformationField (i);
+      i.Next (GetInformationFieldSize () - 1);
     }
-  SerializeInformationField (i);
-  i.Next (GetInformationFieldSize ());
+  else
+    {
+      SerializeInformationField (i);
+      i.Next (GetInformationFieldSize ());
+    }
   return i;
 }
 
@@ -118,16 +116,22 @@ WifiInformationElement::DeserializeIfPresent (Buffer::Iterator i)
   uint8_t length = i.ReadU8 ();
   if (ElementId () == IE_EXTENSION)
     {
-      uint8_t extElementId = i.ReadU8 ();
-      if (extElementId != ElementIdExtension ())
+      uint8_t elementIdExt = i.ReadU8 ();
+      //If the element here isn't the one we're after then we immediately
+      //return the iterator we were passed indicating that we haven't
+      //taken anything from the buffer.
+      if (elementIdExt != ElementIdExt ())
         {
           return start;
         }
+      DeserializeInformationField (i, length - 1);
+      i.Next (length - 1);
     }
-
-  DeserializeInformationField (i, length);
-  i.Next (length);
-
+  else
+    {
+      DeserializeInformationField (i, length);
+      i.Next (length);
+    }
   return i;
 }
 
@@ -152,7 +156,7 @@ WifiInformationElement::operator== (WifiInformationElement const & a) const
       return false;
     }
 
-  if (ElementIdExtension () != a.ElementIdExtension ())
+  if (ElementIdExt () != a.ElementIdExt ())
     {
       return false;
     }

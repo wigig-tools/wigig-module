@@ -9,7 +9,7 @@
 #include "ns3/random-variable-stream.h"
 
 #include "amsdu-subframe-header.h"
-#include "dmg-beacon-dca.h"
+#include "dmg-beacon-txop.h"
 #include "dmg-wifi-mac.h"
 
 namespace ns3 {
@@ -58,7 +58,7 @@ public:
    * dequeued as soon as the channel access function determines that
    * access is granted to this MAC.
    */
-  virtual void Enqueue (Ptr<const Packet> packet, Mac48Address to);
+  virtual void Enqueue (Ptr<Packet> packet, Mac48Address to);
   /**
    * \param packet the packet to send.
    * \param to the address to which the packet should be sent.
@@ -70,7 +70,7 @@ public:
    * this device to operate in a bridged mode, forwarding received
    * frames without altering the source address.
    */
-  virtual void Enqueue (Ptr<const Packet> packet, Mac48Address to, Mac48Address from);
+  virtual void Enqueue (Ptr<Packet> packet, Mac48Address to, Mac48Address from);
   virtual bool SupportsSendFrom (void) const;
   /**
    * \param address the current address of this MAC layer.
@@ -184,24 +184,24 @@ public:
    * \param srcAid The AID of the source DMG STA.
    * \param dstAid The AID of the destination DMG STA.
    * \param allocationStart The start time of the allocation relative to the beginning of DTI.
-   * \param isTxss Is the Beamforming TxSS or RxSS.
+   * \param isTXSS Is the Beamforming TXSS or RXSS for both the initiator and the responder.
    * \return The start of the next allocation period.
    */
   uint32_t AllocateBeamformingServicePeriod (uint8_t srcAid, uint8_t dstAid,
-                                             uint32_t allocationStart, bool isTxss);
+                                             uint32_t allocationStart, bool isTXSS);
   /**
    * Allocate SP allocation for Beamforming training.
    * \param srcAid The AID of the source DMG STA.
    * \param dstAid The AID of the destination DMG STA.
    * \param allocationStart The start time of the allocation relative to the beginning of DTI.
    * \param allocationDuration The duration of the beamforming allocation.
-   * \param isInitiatorTxss Is the Initiator Beamforming TxSS or RxSS.
-   * \param isResponderTxss Is the Responder Beamforming TxSS or RxSS.
+   * \param isInitiatorTXSS Is the Initiator Beamforming TXSS or RXSS.
+   * \param isResponderTXSS Is the Responder Beamforming TXSS or RXSS.
    * \return The start of the next allocation period.
    */
   uint32_t AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destAid,
                                              uint32_t allocationStart, uint16_t allocationDuration,
-                                             bool isInitiatorTxss, bool isResponderTxss);
+                                             bool isInitiatorTXSS, bool isResponderTXSS);
   /**
    * Modify schedulling parameters of an existing allocation.
    * \param id A unique identifier for the allocation.
@@ -274,9 +274,15 @@ public:
    * Start DMG AP Operation by transmitting Beaconing.
    */
   void StartAccessPoint (void);
+  /* EDMG MU-MIMO BF functions */
+  /**
+   * Define groups of MU-MIMO capable EDMG STAs to perform DL MU-MIMO beamforming training and transmissions.
+   * Create EDMG Group ID set element which will be transmitted in the beacons.
+   */
+  //void StartAccessPoint (void);
 
 protected:
-  friend class DmgBeaconDca;
+  friend class DmgBeaconTxop;
   Time GetBTIRemainingTime (void) const;
   /**
    * Start monitoring Beacon SP for DMG Beacons.
@@ -315,7 +321,7 @@ private:
   void FrameTxOk (const WifiMacHeader &hdr);
   virtual void BrpSetupCompleted (Mac48Address address);
   virtual void NotifyBrpPhaseCompleted (void);
-  virtual void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
+  virtual void Receive (Ptr<WifiMacQueueItem> mpdu);
 
   /**
    * Start Beacon Header Interval (BHI).
@@ -340,15 +346,12 @@ private:
    */
   virtual void TxFailed (const WifiMacHeader &hdr);
   /**
-   * This method is called to de-aggregate an A-MSDU and forward the
-   * constituent packets up the stack. We override the WifiMac version
-   * here because, as an AP, we also need to think about redistributing
-   * to other associated STAs.
+   * This method can be called to de-aggregate an A-MSDU and forward
+   * the constituent packets up the stack.
    *
-   * \param aggregatedPacket the Packet containing the A-MSDU.
-   * \param hdr a pointer to the MAC header for \c aggregatedPacket.
+   * \param mpdu the MPDU containing the A-MSDU.
    */
-  virtual void DeaggregateAmsduAndForward (Ptr<Packet> aggregatedPacket, const WifiMacHeader *hdr);
+  virtual void DeaggregateAmsduAndForward (Ptr<WifiMacQueueItem> mpdu);
   /**
    * Get MultiBand Element corresponding to this DMG STA.
    * \return Pointer to the MultiBand element.
@@ -370,7 +373,7 @@ private:
    * \param from the address to be used for Address 3 field in the header
    * \param to the address to be used for Address 1 field in the header
    */
-  void ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Address to);
+  void ForwardDown (Ptr<Packet> packet, Mac48Address from, Mac48Address to);
   /**
    * Forward the packet down to DCF/EDCAF (enqueue the packet).
    *
@@ -379,7 +382,7 @@ private:
    * \param to the address to be used for Address 1 field in the header
    * \param tid the traffic id for the packet
    */
-  void ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Address to, uint8_t tid);
+  void ForwardDown (Ptr<Packet> packet, Mac48Address from, Mac48Address to, uint8_t tid);
   /**
    * Forward a probe response packet to the DCF. The standard is not clear on the correct
    * queue for management frames if QoS is supported. We always use the DCF.
@@ -468,6 +471,11 @@ private:
    */
   Ptr<DmgOperationElement> GetDmgOperationElement (void) const;
   /**
+   * Get EDMG Operation element.
+   * \return Pointer to the EDMG Operation element.
+   */
+  Ptr<EdmgOperationElement> GetEdmgOperationElement (void) const;
+  /**
    * Get Next DMG ATI Information element.
    * \return The DMG ATI information element.
    */
@@ -477,6 +485,11 @@ private:
    * \return The extended schedule element.
    */
   Ptr<ExtendedScheduleElement> GetExtendedScheduleElement (void) const;
+  /**
+   * Get EDMG Training Field Schedule Element.
+   * \return The EDMG Training Field Schedule Element.
+   */
+  Ptr<EdmgTrainingFieldScheduleElement> GetEdmgTrainingFieldScheduleElement (void) const;
   /**
    * Cleanup non-static allocations. This is method is called after the transmission of the last DMG Beacon.
    */
@@ -498,6 +511,18 @@ private:
    * \return the next Association ID to be allocated by the DMG PCP/AP.
    */
   uint16_t GetNextAssociationId (void);
+  /**
+   * Calculates the duration of the EDMG TRN-R subfields appended to beacons. Depends on the TRN Sequence Length,
+   * the number of Tx Chains used to transmit the packet and whether aggregation is used as described in
+   * section 29.12.3, 802.11ay - Draft 4.
+   * \return EDMG TRN-R Subfield Duration.
+   */
+  double CalculateEdmgTrnSubfieldDuration (void) const;
+  /**
+   * Defines groups of MU capable EDMG STAs to perform DL MU-MIMO beamforming training and transmissions.
+   * Creates and updates the EDMG Group ID Set element, which is then announced in the beacons transmitted.
+   */
+  void CreateEdmgMuMimoGroups (void);
 
 private:
   /** DMG PCP/AP Power Status **/
@@ -507,22 +532,29 @@ private:
   std::map<uint16_t, Mac48Address> m_staList;//!< Map of all stations currently associated to the DMG PCP/AP with their association ID.
 
   /** BTI Period Variables **/
-  Ptr<DmgBeaconDca> m_beaconDca;        //!< Dedicated DcaTxop for DMG Beacons.
+  Ptr<DmgBeaconTxop> m_beaconTxop;        //!< Dedicated Txop for DMG Beacons.
   EventId m_beaconEvent;		//!< Event to generate one DMG Beacon.
   Time m_btiStarted;                    //!< The time at which we started BTI access period.
+  Time m_beaconTrnFieldsDuration;       //!< Duration of the TRN fields appended to the beacon.S
   Time m_dmgBeaconDuration;             //!< Exact DMG beacon duration.
   Time m_dmgBeaconDurationUs;           //!< DMG BEacon Duration in Microseconds.
-  Time m_nextDmgBeaconDelay;            //!< DMG Beacon transmission delay due to difference in clock.
+  Time m_nextDmgBeaconDelay;            //!< DMG Beacon transmission delay due to difference in clock + duration of TRN fields if there are any.
   Time m_btiDuration;                   //!< The length of the Beacon Transmission Interval (BTI).
   bool m_beaconRandomization;           //!< Flag to indicate whether we want to randomize selection of DMG Beacon at each BI.
   Ptr<RandomVariableStream> m_beaconJitter; //!< RandomVariableStream used to randomize the time of the first DMG beacon.
   bool m_enableBeaconJitter;            //!< Flag whether the first beacon should be generated at random time.
   bool m_allowBeaconing;                //!< Flag to indicate whether we want to start Beaconing upon initialization.
   bool m_announceDmgCapabilities;       //!< Flag to indicate whether we announce DMG Capabilities in DMG Beacons.
+  bool m_announceEdmgCapabilities;      //!< Flag to indicate whether we announce EDMG Capabilities in DMG Beacons.
+  //bool m_announceBeamformingCapability; //!< Flag to indicate whether the Beamforming Capability Subelement is transmitted as part of EDMG Capabilites.
   bool m_announceOperationElement;      //!< Flag to indicate whether we transmit DMG operation element in DMG Beacons.
   bool m_scheduleElement;               //!< Flag to indicate whether we transmit Extended Schedule element in DMG Beacons.
-  bool m_isABFTResponderTXSS;           //!< Flag to indicate whether the responder in A-BFT is TxSS or RxSS.
+  bool m_isABFTResponderTXSS;           //!< Flag to indicate whether the responder in A-BFT is TXSS or RXSS.
+  bool m_announceTrainingSchedule;      //!< Flag to indicate whether we transmit the schedule for TRN-R fields in DMG Beacons.
   std::vector<Mac48Address> m_beamformingInDTI; //!< List of the stations to train in DTI because beamforming is not completed in BTI.
+  uint8_t m_trnUnitsBeacon;             //!< Number of TRN-R units appended  to EDMG Beacons.
+  bool m_firstBeacon;                   //!< Flag to identify the first DMG Beacon that we send.
+  bool m_groupTraining;                 //!< Flag to indicate whether we beamforming training using TRN fields in Beacons is enabled or not.
 
   /** DMG PCP/AP Clustering **/
   bool m_enableDecentralizedClustering; //!< Flag to inidicate if decentralized clustering is enabled.
@@ -576,6 +608,23 @@ private:
 
   /** Beacon Interval **/
   TracedCallback<Mac48Address> m_biStarted;                 //!< Trace Callback for starting new Beacon Interval.
+  TracedCallback<Mac48Address, Time> m_btiStart;               //!< Trace Callback for starting A-BFT within the BI.
+  /**
+   * TracedCallback signature for BTI access period start event.
+   *
+   * \param address The MAC address of the station.
+   * \param duration The duration of the BTI period.
+   */
+  typedef void (* BTIStartedCallback)(Mac48Address address, Time duration);
+  TracedCallback<Mac48Address, Time> m_abftStarted;               //!< Trace Callback for starting A-BFT within the BI.
+  /**
+   * TracedCallback signature for A-BFT access period start event.
+   *
+   * \param address The MAC address of the station.
+   * \param duration The duration of the A-BFT period.
+   */
+  typedef void (* ABFTStartedCallback)(Mac48Address address, Time duration);
+
 
   /** Traffic Stream Allocation **/
   TracedCallback<Mac48Address, DmgTspecElement> m_addTsRequestReceived;   //!< DMG ADDTS Request received.

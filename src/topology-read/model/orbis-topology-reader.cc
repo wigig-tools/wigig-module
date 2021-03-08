@@ -21,12 +21,17 @@
 
 #include <fstream>
 #include <cstdlib>
-#include <iostream>
 #include <sstream>
-
+#include "ns3/node-container.h"
 #include "ns3/log.h"
 #include "orbis-topology-reader.h"
 
+
+/**
+ * \file
+ * \ingroup topology
+ * ns3::OrbisTopologyReader implementation.
+ */
 
 namespace ns3 {
 

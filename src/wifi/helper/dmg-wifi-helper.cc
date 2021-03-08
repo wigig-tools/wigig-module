@@ -18,17 +18,22 @@
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
+#include "ns3/string.h"
+#include "ns3/names.h"
+#include "ns3/pointer.h"
+#include "ns3/log.h"
 #include "dmg-wifi-helper.h"
 #include "ns3/propagation-loss-model.h"
 #include "ns3/propagation-delay-model.h"
 #include "ns3/dmg-wifi-phy.h"
 #include "ns3/dmg-wifi-mac.h"
-#include "ns3/names.h"
-#include "ns3/log.h"
+#include "ns3/wifi-mac-queue.h"
 #include "ns3/spectrum-dmg-wifi-phy.h"
 #include "ns3/wifi-net-device.h"
-#include "wifi-mac-helper.h"
 #include "ns3/error-rate-model.h"
+#include "ns3/wifi-ack-policy-selector.h"
+#include "ns3/net-device-queue-interface.h"
+#include "wifi-mac-helper.h"
 
 namespace ns3 {
 
@@ -130,12 +135,28 @@ DmgWifiPhyHelper::DmgWifiPhyHelper ()
   m_phy.SetTypeId ("ns3::DmgWifiPhy");
 }
 
+void
+DmgWifiPhyHelper::SetDefaultWiGigPhyValues (void)
+{
+  /* Set the correct error model */
+  SetErrorRateModel ("ns3::DmgErrorModel",
+                     "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
+  Set ("RxNoiseFigure", DoubleValue (10));
+  // The value correspond to DMG MCS-0.
+  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
+  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
+  Set ("RxSensitivity", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
+  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
+  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
+  Set ("CcaEdThreshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
+}
+
 DmgWifiPhyHelper
 DmgWifiPhyHelper::Default (void)
 {
   DmgWifiPhyHelper helper;
-  helper.SetErrorRateModel ("ns3::SensitivityModel60GHz");
-  helper.Set ("RxNoiseFigure", DoubleValue (10));
+  helper.SetDefaultWiGigPhyValues ();
   return helper;
 }
 
@@ -166,9 +187,10 @@ DmgWifiPhyHelper::Create (Ptr<Node> node, Ptr<NetDevice> device) const
 
 DmgWifiHelper::DmgWifiHelper ()
 {
-  SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue ("DMG_MCS4"),
-                                                           "DataMode", StringValue ("DMG_MCS12"));
   SetStandard (WIFI_PHY_STANDARD_80211ad);
+  SetRemoteStationManager ("ns3::ConstantRateWifiManager",
+                           "ControlMode", StringValue ("DMG_MCS4"),
+                           "DataMode", StringValue ("DMG_MCS12"));
 }
 
 DmgWifiHelper::~DmgWifiHelper ()
@@ -187,9 +209,10 @@ DmgWifiHelper::Install (const DmgWifiPhyHelper &phyHelper,
       Ptr<Node> node = *i;
       Ptr<WifiNetDevice> device = CreateObject<WifiNetDevice> ();
       Ptr<WifiRemoteStationManager> manager = m_stationManager.Create<WifiRemoteStationManager> ();
-      Ptr<DmgWifiMac> mac = StaticCast<DmgWifiMac> (macHelper.Create ());
+      Ptr<DmgWifiMac> mac = StaticCast<DmgWifiMac> (macHelper.Create (device));
       Ptr<DmgWifiPhy> phy = StaticCast<DmgWifiPhy> (phyHelper.Create (node, device));
       Ptr<Codebook> codebook = m_codeBook.Create<Codebook> ();
+      codebook->SetDevice (device);
       mac->SetAddress (Mac48Address::Allocate ());
       mac->ConfigureStandard (m_standard);
       mac->SetCodebook (codebook);
@@ -201,6 +224,61 @@ DmgWifiHelper::Install (const DmgWifiPhyHelper &phyHelper,
       node->AddDevice (device);
       devices.Add (device);
       NS_LOG_DEBUG ("node=" << node << ", mob=" << node->GetObject<MobilityModel> ());
+      // Aggregate a NetDeviceQueueInterface object if a RegularWifiMac is installed
+      Ptr<RegularWifiMac> rmac = DynamicCast<RegularWifiMac> (mac);
+      if (rmac)
+        {
+          Ptr<NetDeviceQueueInterface> ndqi;
+          BooleanValue qosSupported;
+          PointerValue ptr;
+          Ptr<WifiMacQueue> wmq;
+          Ptr<WifiAckPolicySelector> ackSelector;
+
+          rmac->GetAttributeFailSafe ("QosSupported", qosSupported);
+          if (qosSupported.Get ())
+            {
+              ndqi = CreateObjectWithAttributes<NetDeviceQueueInterface> ("NTxQueues",
+                                                                          UintegerValue (4));
+
+              rmac->GetAttributeFailSafe ("BE_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_BE].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (0)->ConnectQueueTraces (wmq);
+
+              rmac->GetAttributeFailSafe ("BK_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_BK].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (1)->ConnectQueueTraces (wmq);
+
+              rmac->GetAttributeFailSafe ("VI_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_VI].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (2)->ConnectQueueTraces (wmq);
+
+              rmac->GetAttributeFailSafe ("VO_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_VO].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (3)->ConnectQueueTraces (wmq);
+              ndqi->SetSelectQueueCallback (m_selectQueueCallback);
+            }
+          else
+            {
+              ndqi = CreateObject<NetDeviceQueueInterface> ();
+
+              rmac->GetAttributeFailSafe ("Txop", ptr);
+              wmq = ptr.Get<Txop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (0)->ConnectQueueTraces (wmq);
+            }
+          device->AggregateObject (ndqi);
+        }
     }
   return devices;
 }
@@ -253,7 +331,7 @@ NetDeviceContainer
 DmgWifiHelper::Install (const SpectrumDmgWifiPhyHelper &phyHelper,
                         const DmgWifiMacHelper &macHelper,
                         NodeContainer::Iterator first,
-                        NodeContainer::Iterator last) const
+                        NodeContainer::Iterator last, bool installCodebook) const
 {
   NetDeviceContainer devices;
   for (NodeContainer::Iterator i = first; i != last; ++i)
@@ -261,43 +339,102 @@ DmgWifiHelper::Install (const SpectrumDmgWifiPhyHelper &phyHelper,
       Ptr<Node> node = *i;
       Ptr<WifiNetDevice> device = CreateObject<WifiNetDevice> ();
       Ptr<WifiRemoteStationManager> manager = m_stationManager.Create<WifiRemoteStationManager> ();
-      Ptr<DmgWifiMac> mac = StaticCast<DmgWifiMac> (macHelper.Create ());
+      Ptr<DmgWifiMac> mac = StaticCast<DmgWifiMac> (macHelper.Create (device));
       Ptr<SpectrumDmgWifiPhy> phy = StaticCast<SpectrumDmgWifiPhy> (phyHelper.Create (node, device));
-      Ptr<Codebook> codebook = m_codeBook.Create<Codebook> ();
       mac->SetAddress (Mac48Address::Allocate ());
       mac->ConfigureStandard (m_standard);
-      mac->SetCodebook (codebook);
-      phy->SetCodebook (codebook);
+      if (installCodebook)
+        {
+          Ptr<Codebook> codebook = m_codeBook.Create<Codebook> ();
+          mac->SetCodebook (codebook);
+          phy->SetCodebook (codebook);
+        }
       phy->ConfigureStandard (m_standard);
       device->SetMac (mac);
       device->SetPhy (phy);
       device->SetRemoteStationManager (manager);
       node->AddDevice (device);
       devices.Add (device);
+
+      // Aggregate a NetDeviceQueueInterface object if a RegularWifiMac is installed
+      Ptr<RegularWifiMac> rmac = DynamicCast<RegularWifiMac> (mac);
+      if (rmac)
+        {
+          Ptr<NetDeviceQueueInterface> ndqi;
+          BooleanValue qosSupported;
+          PointerValue ptr;
+          Ptr<WifiMacQueue> wmq;
+          Ptr<WifiAckPolicySelector> ackSelector;
+
+          rmac->GetAttributeFailSafe ("QosSupported", qosSupported);
+          if (qosSupported.Get ())
+            {
+              ndqi = CreateObjectWithAttributes<NetDeviceQueueInterface> ("NTxQueues",
+                                                                          UintegerValue (4));
+
+              rmac->GetAttributeFailSafe ("BE_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_BE].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (0)->ConnectQueueTraces (wmq);
+
+              rmac->GetAttributeFailSafe ("BK_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_BK].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (1)->ConnectQueueTraces (wmq);
+
+              rmac->GetAttributeFailSafe ("VI_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_VI].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (2)->ConnectQueueTraces (wmq);
+
+              rmac->GetAttributeFailSafe ("VO_Txop", ptr);
+              ackSelector = m_ackPolicySelector[AC_VO].Create<WifiAckPolicySelector> ();
+              ackSelector->SetQosTxop (ptr.Get<QosTxop> ());
+              ptr.Get<QosTxop> ()->SetAckPolicySelector (ackSelector);
+              wmq = ptr.Get<QosTxop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (3)->ConnectQueueTraces (wmq);
+              ndqi->SetSelectQueueCallback (m_selectQueueCallback);
+            }
+          else
+            {
+              ndqi = CreateObject<NetDeviceQueueInterface> ();
+
+              rmac->GetAttributeFailSafe ("Txop", ptr);
+              wmq = ptr.Get<Txop> ()->GetWifiMacQueue ();
+              ndqi->GetTxQueue (0)->ConnectQueueTraces (wmq);
+            }
+          device->AggregateObject (ndqi);
+        }
     }
   return devices;
 }
 
 NetDeviceContainer
 DmgWifiHelper::Install (const SpectrumDmgWifiPhyHelper &phyHelper,
-                        const DmgWifiMacHelper &macHelper, NodeContainer c) const
+                        const DmgWifiMacHelper &macHelper, NodeContainer c, bool installCodebook) const
 {
-  return Install (phyHelper, macHelper, c.Begin (), c.End ());
+  return Install (phyHelper, macHelper, c.Begin (), c.End (), installCodebook);
 }
 
 NetDeviceContainer
 DmgWifiHelper::Install (const SpectrumDmgWifiPhyHelper &phy,
-                        const DmgWifiMacHelper &mac, Ptr<Node> node) const
+                        const DmgWifiMacHelper &mac, Ptr<Node> node, bool installCodebook) const
 {
-  return Install (phy, mac, NodeContainer (node));
+  return Install (phy, mac, NodeContainer (node), installCodebook);
 }
 
 NetDeviceContainer
 DmgWifiHelper::Install (const SpectrumDmgWifiPhyHelper &phy,
-                        const DmgWifiMacHelper &mac, std::string nodeName) const
+                        const DmgWifiMacHelper &mac, std::string nodeName, bool installCodebook) const
 {
   Ptr<Node> node = Names::Find<Node> (nodeName);
-  return Install (phy, mac, NodeContainer (node));
+  return Install (phy, mac, NodeContainer (node), installCodebook);
 }
 
 SpectrumDmgWifiPhyHelper::SpectrumDmgWifiPhyHelper ()
@@ -310,7 +447,7 @@ SpectrumDmgWifiPhyHelper
 SpectrumDmgWifiPhyHelper::Default (void)
 {
   SpectrumDmgWifiPhyHelper helper;
-  helper.SetErrorRateModel ("ns3::SensitivityModel60GHz");
+  helper.SetDefaultWiGigPhyValues ();
   return helper;
 }
 

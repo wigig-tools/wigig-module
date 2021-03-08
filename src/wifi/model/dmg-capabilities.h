@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 
@@ -14,6 +14,38 @@
 #include "ns3/wifi-information-element.h"
 
 namespace ns3 {
+
+enum EXTENDED_MCS_NAME {
+  EXTENDED_NONE     = 0,
+  EXTENDED_MCS_9_1  = 1,
+  EXTENDED_MCS_12_1 = 2,
+  EXTENDED_MCS_12_2 = 3,
+  EXTENDED_MCS_12_3 = 4,
+  EXTENDED_MCS_12_4 = 5,
+  EXTENDED_MCS_12_5 = 6,
+  EXTENDED_MCS_12_6 = 7,
+};
+
+enum MAXIMUM_BASIC_AMSDU_NUMBER {
+  BASIC_AMSDU_NUMBER_NONE = 0,
+  BASIC_AMSDU_NUMBER_4    = 1,
+  BASIC_AMSDU_NUMBER_8    = 2,
+  BASIC_AMSDU_NUMBER_16   = 3,
+  BASIC_AMSDU_NUMBER_32   = 4,
+  BASIC_AMSDU_NUMBER_64   = 5,
+  BASIC_AMSDU_NUMBER_128  = 6,
+  BASIC_AMSDU_NUMBER_256  = 7,
+};
+
+enum MAXIMUM_SHORT_AMSDU_NUMBER {
+  SHORT_AMSDU_NUMBER_NONE   = 0,
+  SHORT_AMSDU_NUMBER_32     = 1,
+  SHORT_AMSDU_NUMBER_64     = 2,
+  SHORT_AMSDU_NUMBER_128    = 3,
+  SHORT_AMSDU_NUMBER_256    = 4,
+  SHORT_AMSDU_NUMBER_512    = 5,
+  SHORT_AMSDU_NUMBER_1024   = 6,
+};
 
 /**
  * \ingroup wifi
@@ -54,6 +86,96 @@ public:
    * \param info the DMG PCP/AP Capability Info field in the DMG Capabilities information element
    */
   void SetDmgPcpApCapabilityInfo (uint16_t info);
+  /**
+   * The BeamTrackingTimeLimit subfield contains the value of dot11BeamTrackingTimeLimit. The resulting
+   * value of dot11BeamTrackingTimeLimit of beam link established between peer STA’s is negotiated
+   * following rules presented in Table 9-230 in IEEE 802.11-2016.
+   * \param limit
+   */
+  void SetDmgStaBeamTrackingTimeLimit (uint16_t limit);
+  /**
+   * The Maximum Extended SC Tx MCS subfield indicates the maximum transmit extended SC MCS
+   * supported by the STA.
+   * \param maximum
+   */
+  void SetMaximumExtendedScTxMcs (EXTENDED_MCS_NAME maximum);
+  /**
+   * A STA indicates support for transmission of code rate 7/8 by setting the Code Rate 7/8 Tx subfield to 1. If a
+   * STA indicates that it does not support code rate 7/8, then the STA does not support MCS 9.1 or 12.2 even if
+   * the value in the Maximum Extended SC Tx MCS subfield is greater than 1 or 3 respectively. A STA that indicates
+   * support for MCSs with a data rate higher than the data rate of MCS 9.1 in the Maximum Extended
+   * SC Rx MCS subfield shall set the value of the Maximum SC Rx MCS subfield of the Supported MCS Set subfield to 12.
+   * \param value
+   */
+  void SetCodeRate7_8_Tx (bool value);
+  /**
+   * The Maximum Extended SC Rx MCS subfield indicates the maximum receive extended SC MCS supported by the STA.
+   * A STA that indicates support for reception of an extended SC MCS by setting the value in the Maximum
+   * Extended SC Rx MCS subfield to k supports the subset of MCSs {9.1, 12.1, 12.2, 12.3, 12.4, 12.5 12.6} that
+   * have a data rate lower than or equal to the data rate of the MCS indicated by k.
+   * \param maximum
+   */
+  void SetMaximumExtendedScRxMcs (uint8_t maximum);
+  /**
+   * A STA indicates support for reception of code rate 7/8 by setting the Code Rate 7/8 Rx subfield to 1. If a
+   * STA indicates that it does not support code rate 7/8, the STA does not support MCS 9.1 or 12.2 even if the
+   * value in the Maximum Extended SC Rx MCS field is greater than 1 or 3 respectively.
+   * \param value
+   */
+  void SetCodeRate7_8_Rx (bool value);
+  /**
+   * The Maximum Number Of Basic A-MSDU Subframes In A-MSDU subfield is defined in Table 9-232 and
+   * indicates the maximum number of Basic A-MSDU subframes in an A-MSDU that the DMG STA is able to
+   * receive from another DMG STA.
+   * \param maximum
+   */
+  void SetMaximumNumberOfBasicAMSDU (MAXIMUM_BASIC_AMSDU_NUMBER maximum);
+  /**
+   * The Maximum Number Of Short A-MSDU Subframes In A-MSDU subfield is defined in Table 9-233 and
+   * indicates the maximum number of Short A-MSDU subfields in an A-MSDU that the DMG STA is able to
+   * receive from another DMG STA.
+   * \param maximum
+   */
+  void SetMaximumNumberOfShortAMSDU (MAXIMUM_SHORT_AMSDU_NUMBER maximum);
+
+  /** TDD Capabilities **/
+  /**
+   * The TDD Channel Access Supported subfield is set to 1 if dot11TDDOptionImplemented is true and indicates
+   * that the STA supports the TDD channel access described in 10.40.6.2.2. The subfield is set to 0 otherwise.
+   * \param supported
+   */
+  void SetTDD_ChannelAccessSupported (bool supported);
+  /**
+   * The RX Chain Statistics Supported subfield is set to 1 to indicate the STA supports reporting the RX chain
+   * statistics in the DMG Link Margin element (see 9.4.2.142). Otherwise, this field is set to 0.
+   * \param supported
+   */
+  void SetParameters_Across_RX_ChainsSupported (bool supported);
+  /**
+   * The PPDU Statistics Supported subfield is set to 1 to indicate the STA supports reporting the PPDU statistics
+   * in the DMG Link Margin element (see 9.4.2.142). Otherwise, this field is set to 0.
+   * \param supported
+   */
+  void SetPPDU_StatisticsSupported (bool supported);
+  /**
+   * The LDPC Statistics Supported subfield is set to 1 to indicate the STA supports reporting the LDPC statistics
+   * in the DMG Link Margin element (see 9.4.2.142). Otherwise, this field is set to 0.
+   * \param supported
+   */
+  void SetLDPC_StatisticsSupported (bool supported);
+  /**
+   * The SC/OFDM Statistics Supported subfield is set to 1 to indicate the STA supports reporting the parameters
+   * across SC blocks or OFDM symbols in the DMG Link Margin element (see 9.4.2.142). Otherwise, this field
+   * is set to 0.
+   * \param supported
+   */
+  void SetSC_OFDM_StatisticsSupported (bool supported);
+  /**
+   * The TDD Synchronization Mode subfield is set to 1 to indicate that the STA supports the TDD time
+   * synchronization described in 11.1.7. This subfield is set to 0 otherwise.
+   * \param mode
+   */
+  void SetTDD_SynchronizationMode (bool mode);
 
   /**
    * Return the STA Address Info field in the DMG Capabilities information element.
@@ -79,6 +201,22 @@ public:
    * \return the DMG PCP/AP Capability Info field in the DMG Capabilities information element
    */
   uint16_t GetDmgPcpApCapabilityInfo () const;
+
+  uint16_t GetDmgStaBeamTrackingTimeLimit (void) const;
+  EXTENDED_MCS_NAME GetMaximumExtendedScTxMcs (void) const;
+  bool GetCodeRate7_8_Tx (void) const;
+  uint8_t GetMaximumExtendedScRxMcs (void) const;
+  bool GetCodeRate7_8_Rx (void) const;
+  MAXIMUM_BASIC_AMSDU_NUMBER GetMaximumNumberOfBasicAMSDU (void) const;
+  MAXIMUM_SHORT_AMSDU_NUMBER GetMaximumNumberOfShortAMSDU (void) const;
+
+  /** TDD Capabilities **/
+  bool GetTDD_ChannelAccessSupported (void) const;
+  bool GetParameters_AcrossRXChainsSupported (void) const;
+  bool GetPPDU_StatisticsSupported (void) const;
+  bool GetLDPC_StatisticsSupported (void) const;
+  bool GetSC_OFDM_StatisticsSupported (void) const;
+  bool GetTDD_SynchronizationMode (void) const;
 
   /* DMG STA Capability Info fields */
 
@@ -123,7 +261,7 @@ public:
    * to the value of (RXSS Length+1)×2 times the total number of transmit DMG antennas of the peer device.
    * \param length the total number of receive sectors combined over all receive DMG antennas of the STA
    */
-  void SetRxssLength (uint8_t length);
+  void SetRXSSLength (uint8_t length);
   /**
    * The DMG Antenna Reciprocity field is set to 1 to indicate that the best transmit DMG antenna of the STA is
    * the same as the best receive DMG antenna of the STA and vice versa. Otherwise, this field is set to 0.
@@ -133,7 +271,7 @@ public:
   /**
    * Set the A-MPDU Parameters field.
    *
-   * \param maximumLength the maximum length of A-MPDU that the STA can receive.
+   * \param ampduExponent Using this field we set the maximum length of A-MPDU that the STA can receive.
    * This field is an integer in the range of 0 to 5. The length defined by this field is equal to
    * 2^(13 + Maximum A-MPDU Length Exponent) – 1 octets.
    * \param minimumMpduSpacing the minimum time between the start of adjacent MPDUs within
@@ -147,7 +285,7 @@ public:
    * Set to 6 for 512 ns
    * Set to 7 for 1024 ns
    */
-  void SetAmpduParameters (uint8_t maximumLength, uint8_t minimumMpduSpacing);
+  void SetAmpduParameters (uint8_t ampduExponent, uint8_t minimumMpduSpacing);
   /**
    * Set the BA Flow Control field to 1 if the STA supports BA with flow control as
    * defined in 9.36 and is set to 0 otherwise.
@@ -231,10 +369,11 @@ public:
   uint8_t GetNumberOfRxDmgAntennas (void) const;
   bool GetFastLinkAdaption (void) const;
   uint8_t GetNumberOfSectors (void) const;
-  uint8_t GetRxssLength (void) const;
+  uint8_t GetRXSSLength (void) const;
   bool GetDmgAntennaReciprocity (void) const;
-  uint8_t GetAmpduMaximumLength (void) const;
+  uint8_t GetAmpduExponent (void) const;
   uint8_t GetAmpduMinimumSpacing (void) const;
+  uint32_t GetMaxAmpduLength (void) const;
   bool GetBaFlowControl (void) const;
   uint8_t GetMaximumScRxMcs (void) const;
   uint8_t GetMaximumOfdmRxMcs (void) const;
@@ -320,6 +459,19 @@ public:
 private:
   Mac48Address m_staAddress;
   uint8_t m_aid;
+  uint16_t m_dmgStaBeamTrackingTimeLimit;
+  EXTENDED_MCS_NAME m_maximumExtendedScTxMcs;
+  bool m_codeRate7_8_Tx;
+  uint8_t m_maximumExtendedScRxMcs;
+  bool m_codeRate7_8_Rx;
+  MAXIMUM_BASIC_AMSDU_NUMBER m_maximumNumberOfBasicAMSDU;
+  MAXIMUM_SHORT_AMSDU_NUMBER m_maximumNumberOfShortAMSDU;
+  bool m_tddChannelAccessSupported;
+  bool m_parametersAcrossRXChainsSupported;
+  bool m_ppduStatisticsSupported;
+  bool m_ldpcStatisticsSupported ;
+  bool m_scOFDM_StatisticsSupported;
+  bool m_tddSynchronizationMode;
 
   /** DMG STA Capability Info fields **/
   bool m_reverseDirection;
@@ -331,7 +483,7 @@ private:
   uint8_t m_sectorsNumber;
   uint8_t m_rxssLength;
   bool m_dmgAntennaReciprocity;
-  uint8_t m_ampduMaximumLength;
+  uint8_t m_ampduExponent;
   uint8_t m_ampduMinimumSpacing;
   bool m_baFlowControl;
   /* Supported MCS Set field format */
@@ -349,7 +501,7 @@ private:
   bool m_antennaPatternReciprocity;
   uint8_t m_heartbeatElapsedIndication;
   bool m_GrantAckSupported;
-  bool m_RxssTxRateSupported;
+  bool m_rxssTxRateSupported;
 
   /** DMG PCP/AP Capability Info fields **/
   bool m_tddti;

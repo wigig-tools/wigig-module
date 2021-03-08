@@ -342,6 +342,27 @@ public:
    */
   void SetServiceFlowManager (Ptr<SsServiceFlowManager> sfm);
 
+  /// Callback for logging packets on ASCII traces
+  typedef Callback<void, std::string, Ptr<const Packet> > AsciiTraceCallback;
+
+  /**
+   * Set the Enqueue callback for ASCII tracing
+   * \param cb callback for ASCII tracing
+   */
+  void SetAsciiTxQueueEnqueueCallback (AsciiTraceCallback cb);
+
+  /**
+   * Set the Dequeue callback for ASCII tracing
+   * \param cb callback for ASCII tracing
+   */
+  void SetAsciiTxQueueDequeueCallback (AsciiTraceCallback cb);
+
+  /**
+   * Set the Drop callback for ASCII tracing
+   * \param cb callback for ASCII tracing
+   */
+  void SetAsciiTxQueueDropCallback (AsciiTraceCallback cb);
+
 private:
   /**
    * Get default lost DL map interval
@@ -412,7 +433,7 @@ private:
   uint16_t m_nrDlMapElements; ///< number DL Map elements
   uint16_t m_nrUlMapElements; ///< number UL Map elements
 
-  Ptr<WimaxConnection> m_basicConnection; ///< basci connection
+  Ptr<WimaxConnection> m_basicConnection; ///< basic connection
   Ptr<WimaxConnection> m_primaryConnection; ///< primary connection
 
   EventId m_lostDlMapEvent; ///< lost DL map event
@@ -430,7 +451,7 @@ private:
   OfdmUlBurstProfile *m_ulBurstProfile; ///< UL burst profile
 
   /*represents the (least robust) modulation type of the SS which it then requests in RNG-REQ and if accepted by BS uses it for receiving and
-   transmiting. currently it is set by user in simulation script, shall actually be determined based on SS's distance, power, signal etc*/
+   transmitting. currently it is set by user in simulation script, shall actually be determined based on SS's distance, power, signal etc*/
   WimaxPhy::ModulationType m_modulationType; ///< modulation type
 
   bool m_areManagementConnectionsAllocated; ///< are management connections allocated
@@ -483,6 +504,13 @@ private:
    * \see class CallBackTraceSource
    */
   TracedCallback<Ptr<const Packet> > m_ssRxDropTrace;
+
+  /// Bound callback to perform ASCII logging for Enqueue events
+  AsciiTraceCallback m_asciiTxQueueEnqueueCb;
+  /// Bound callback to perform ASCII logging for Dequeue events
+  AsciiTraceCallback m_asciiTxQueueDequeueCb;
+  /// Bound callback to perform ASCII logging for Drop events
+  AsciiTraceCallback m_asciiTxQueueDropCb;
 };
 
 } // namespace ns3

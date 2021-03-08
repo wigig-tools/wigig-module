@@ -54,11 +54,11 @@ def main(argv):
     #
     # No reason for pesky access points, so we'll use an ad-hoc network.
     #
-    wifiMac = ns.wifi.WifiMacHelper
+    wifiMac = ns.wifi.WifiMacHelper()
     wifiMac.SetType ("ns3::AdhocWifiMac");
 
     #
-    # Configure the physcial layer.
+    # Configure the physical layer.
     #
     wifiChannel = ns.wifi.YansWifiChannelHelper.Default()
     wifiPhy = ns.wifi.YansWifiPhyHelper.Default()

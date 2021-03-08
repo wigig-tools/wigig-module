@@ -19,47 +19,29 @@
  *          Sébastien Deronne <sebastien.deronne@gmail.com>
  */
 
+#include <cmath>
+#include "ns3/log.h"
 #include "wifi-mode.h"
 #include "wifi-tx-vector.h"
-#include "ns3/log.h"
-#include <cmath>
 
 namespace ns3 {
 
-/**
- * Check if the two WifiModes are identical.
- *
- * \param a WifiMode
- * \param b WifiMode
- *
- * \return true if the two WifiModes are identical,
- *         false otherwise
- */
 bool operator == (const WifiMode &a, const WifiMode &b)
 {
   return a.GetUid () == b.GetUid ();
 }
-/**
- * Serialize WifiMode to ostream (human-readable).
- *
- * \param os std::ostream
- * \param mode
- *
- * \return std::ostream
- */
+
+bool operator < (const WifiMode &a, const WifiMode &b)
+{
+  return a.GetUid () < b.GetUid ();
+}
+
 std::ostream & operator << (std::ostream & os, const WifiMode &mode)
 {
   os << mode.GetUniqueName ();
   return os;
 }
-/**
- * Serialize WifiMode from istream (human-readable).
- *
- * \param is std::istream
- * \param mode
- *
- * \return std::istream
- */
+
 std::istream & operator >> (std::istream &is, WifiMode &mode)
 {
   std::string str;
@@ -69,7 +51,7 @@ std::istream & operator >> (std::istream &is, WifiMode &mode)
 }
 
 bool
-WifiMode::IsAllowed (uint8_t channelWidth, uint8_t nss) const
+WifiMode::IsAllowed (uint16_t channelWidth, uint8_t nss) const
 {
   WifiModeFactory::WifiModeItem *item = WifiModeFactory::GetFactory ()->Get (m_uid);
   if (item->modClass == WIFI_MOD_CLASS_VHT)
@@ -83,17 +65,11 @@ WifiMode::IsAllowed (uint8_t channelWidth, uint8_t nss) const
           return false;
         }
     }
-  else
-    {
-      //We should not go here!
-      NS_ASSERT (false);
-      return false;
-    }
   return true;
 }
 
 uint64_t
-WifiMode::GetPhyRate (uint8_t channelWidth, uint16_t guardInterval, uint8_t nss) const
+WifiMode::GetPhyRate (uint16_t channelWidth, uint16_t guardInterval, uint8_t nss) const
 {
   //TODO: nss > 4 not supported yet
   NS_ASSERT (nss <= 4);
@@ -152,7 +128,7 @@ WifiMode::GetPhyRate (WifiTxVector txVector) const
 }
 
 uint64_t
-WifiMode::GetDataRate (uint8_t channelWidth) const
+WifiMode::GetDataRate (uint16_t channelWidth) const
 {
   return GetDataRate (channelWidth, 800, 1);
 }
@@ -164,7 +140,14 @@ WifiMode::GetDataRate (WifiTxVector txVector) const
 }
 
 uint64_t
-WifiMode::GetDataRate (uint8_t channelWidth, uint16_t guardInterval, uint8_t nss) const
+WifiMode::GetDmgDataRate (void) const
+{
+  WifiModeFactory::WifiModeItem *item = WifiModeFactory::GetFactory ()->Get (m_uid);
+  return item->dataRate;
+}
+
+uint64_t
+WifiMode::GetDataRate (uint16_t channelWidth, uint16_t guardInterval, uint8_t nss) const
 {
   //TODO: nss > 4 not supported yet
   NS_ASSERT (nss <= 4);
@@ -173,7 +156,7 @@ WifiMode::GetDataRate (uint8_t channelWidth, uint16_t guardInterval, uint8_t nss
   uint16_t usableSubCarriers = 0;
   double symbolRate = 0;
   double codingRate = 0;
-  uint32_t numberOfBitsPerSubcarrier = log2 (GetConstellationSize ());
+  uint16_t numberOfBitsPerSubcarrier = static_cast<uint16_t> (log2 (GetConstellationSize ()));
   if (item->modClass == WIFI_MOD_CLASS_DSSS)
     {
       dataRate = ((11000000 / 11) * numberOfBitsPerSubcarrier);
@@ -222,7 +205,7 @@ WifiMode::GetDataRate (uint8_t channelWidth, uint16_t guardInterval, uint8_t nss
     {
       if (item->modClass == WIFI_MOD_CLASS_VHT)
         {
-          NS_ASSERT_MSG (IsAllowed (channelWidth, nss), "VHT MCS " << +item->mcsValue << " forbidden at " << +channelWidth << " MHz when NSS is " << +nss);
+          NS_ASSERT_MSG (IsAllowed (channelWidth, nss), "VHT MCS " << +item->mcsValue << " forbidden at " << channelWidth << " MHz when NSS is " << +nss);
         }
 
       NS_ASSERT (guardInterval == 800 || guardInterval == 400);
@@ -332,7 +315,10 @@ WifiMode::GetDataRate (uint8_t channelWidth, uint16_t guardInterval, uint8_t nss
   else if ((item->modClass == WIFI_MOD_CLASS_DMG_CTRL) ||
            (item->modClass == WIFI_MOD_CLASS_DMG_SC) ||
            (item->modClass == WIFI_MOD_CLASS_DMG_OFDM) ||
-           (item->modClass == WIFI_MOD_CLASS_DMG_LP_SC))
+           (item->modClass == WIFI_MOD_CLASS_DMG_LP_SC) ||
+           (item->modClass == WIFI_MOD_CLASS_EDMG_CTRL) ||
+           (item->modClass == WIFI_MOD_CLASS_EDMG_SC) ||
+           (item->modClass == WIFI_MOD_CLASS_EDMG_OFDM) )
     {
       return item->dataRate;
     }
@@ -465,7 +451,7 @@ WifiMode::GetConstellationSize (void) const
           return 256;
         case 10:
         case 11:
-          NS_ASSERT (item->modClass == WIFI_MOD_CLASS_HE);
+          NS_ASSERT (item->modClass != WIFI_MOD_CLASS_VHT);
           return 1024;
         default:
           return 0;
@@ -498,7 +484,9 @@ WifiMode::GetMcsValue (void) const
   WifiModeFactory::WifiModeItem *item = WifiModeFactory::GetFactory ()->Get (m_uid);
   if (item->modClass == WIFI_MOD_CLASS_HT || item->modClass == WIFI_MOD_CLASS_VHT || item->modClass == WIFI_MOD_CLASS_HE
       || item->modClass == WIFI_MOD_CLASS_DMG_CTRL || item->modClass == WIFI_MOD_CLASS_DMG_SC
-      || item->modClass == WIFI_MOD_CLASS_DMG_OFDM || item->modClass == WIFI_MOD_CLASS_DMG_LP_SC)
+      || item->modClass == WIFI_MOD_CLASS_DMG_OFDM || item->modClass == WIFI_MOD_CLASS_DMG_LP_SC
+      || item->modClass == WIFI_MOD_CLASS_EDMG_CTRL || item->modClass == WIFI_MOD_CLASS_EDMG_SC
+      || item->modClass == WIFI_MOD_CLASS_EDMG_OFDM)
     {
       return item->mcsValue;
     }
@@ -549,7 +537,7 @@ WifiMode::GetNonHtReferenceRate (void) const
 {
   uint64_t dataRate;
   WifiModeFactory::WifiModeItem *item = WifiModeFactory::GetFactory ()->Get (m_uid);
-  if (item->modClass == WIFI_MOD_CLASS_HT || item->modClass == WIFI_MOD_CLASS_VHT || item->modClass == WIFI_MOD_CLASS_HE)
+  if (item->modClass >= WIFI_MOD_CLASS_HT)
     {
       WifiCodeRate codeRate = GetCodeRate ();
       switch (GetConstellationSize ())
@@ -762,8 +750,8 @@ WifiModeFactory::CreateWifiMode (std::string uniqueName,
   item->constellationSize = constellationSize;
   item->isMandatory = isMandatory;
 
-  NS_ASSERT (modClass != WIFI_MOD_CLASS_HT && modClass != WIFI_MOD_CLASS_VHT && modClass != WIFI_MOD_CLASS_HE);
-  //fill unused mcs item with a dummy value
+  NS_ASSERT (modClass < WIFI_MOD_CLASS_HT);
+  //fill unused MCS item with a dummy value
   item->mcsValue = 0;
 
   return WifiMode (uid);
@@ -852,8 +840,7 @@ WifiModeFactory::CreateWifiMcs (std::string uniqueName,
   item->uniqueUid = uniqueName;
   item->modClass = modClass;
 
-  //The modulation class must be either HT, VHT or HE
-  NS_ASSERT (modClass == WIFI_MOD_CLASS_HT || modClass == WIFI_MOD_CLASS_VHT || modClass == WIFI_MOD_CLASS_HE);
+  NS_ASSERT (modClass >= WIFI_MOD_CLASS_HT);
 
   item->mcsValue = mcsValue;
   //fill unused items with dummy values
@@ -912,7 +899,7 @@ WifiModeFactory::AllocateUid (std::string uniqueUid)
         }
       j++;
     }
-  uint32_t uid = m_itemList.size ();
+  uint32_t uid = static_cast<uint32_t> (m_itemList.size ());
   m_itemList.push_back (WifiModeItem ());
   return uid;
 }

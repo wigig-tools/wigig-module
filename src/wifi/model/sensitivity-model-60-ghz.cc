@@ -48,9 +48,12 @@ double
 SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector, double snr, uint64_t nbits) const
 {
   NS_ASSERT_MSG(mode.GetModulationClass () == WIFI_MOD_CLASS_DMG_CTRL ||
-    mode.GetModulationClass() == WIFI_MOD_CLASS_DMG_SC ||
-    mode.GetModulationClass() == WIFI_MOD_CLASS_DMG_OFDM,
-               "Expecting 802.11ad DMG CTRL, SC or OFDM modulation");
+    mode.GetModulationClass () == WIFI_MOD_CLASS_DMG_SC ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_DMG_OFDM ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_CTRL ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_SC ||
+    mode.GetModulationClass () == WIFI_MOD_CLASS_EDMG_OFDM,
+    "Expecting 802.11ad DMG CTRL, SC or OFDM modulation or 802.11ay EDMG CTRL, SC or OFDM modulation");
   std::string modename = mode.GetUniqueName ();
 
   /* This is kinda silly, but convert from SNR back to RSS (Hardcoding RxNoiseFigure)*/
@@ -64,33 +67,33 @@ SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector
   double ber;
 
   /**** Control PHY ****/
-  if (modename == "DMG_MCS0")
+  if (modename == "DMG_MCS0" || modename == "EDMG_MCS0")
     rss_delta = rss - -78;
 
   /**** SC PHY ****/
-  else if (modename == "DMG_MCS1")
+  else if (modename == "DMG_MCS1" || modename == "EDMG_SC_MCS1")
     rss_delta = rss - -68;
-  else if (modename == "DMG_MCS2")
+  else if (modename == "DMG_MCS2" || modename == "EDMG_SC_MCS2")
     rss_delta = rss - -66;
-  else if (modename == "DMG_MCS3")
+  else if (modename == "DMG_MCS3" || modename == "EDMG_SC_MCS3")
     rss_delta = rss - -65;
-  else if (modename == "DMG_MCS4")
+  else if (modename == "DMG_MCS4" || modename == "EDMG_SC_MCS4")
     rss_delta = rss - -64;
-  else if (modename == "DMG_MCS5")
+  else if (modename == "DMG_MCS5" || modename == "EDMG_SC_MCS5")
     rss_delta = rss - -62;
-  else if (modename == "DMG_MCS6")
+  else if (modename == "DMG_MCS6" || modename == "EDMG_SC_MCS7")
     rss_delta = rss - -63;
-  else if (modename == "DMG_MCS7")
+  else if (modename == "DMG_MCS7" || modename == "EDMG_SC_MCS8")
     rss_delta = rss - -62;
-  else if (modename == "DMG_MCS8")
+  else if (modename == "DMG_MCS8" || modename == "EDMG_SC_MCS9")
     rss_delta = rss - -61;
-  else if (modename == "DMG_MCS9")
+  else if (modename == "DMG_MCS9" || modename == "EDMG_SC_MCS10")
     rss_delta = rss - -59;
-  else if (modename == "DMG_MCS10")
+  else if (modename == "DMG_MCS10" || modename == "EDMG_SC_MCS12")
     rss_delta = rss - -55;
-  else if (modename == "DMG_MCS11")
+  else if (modename == "DMG_MCS11" || modename == "EDMG_SC_MCS13")
     rss_delta = rss - -54;
-  else if (modename == "DMG_MCS12")
+  else if (modename == "DMG_MCS12" || modename == "EDMG_SC_MCS14")
     rss_delta = rss - -53;
 
   /**** OFDM PHY ****/
@@ -143,7 +146,7 @@ SensitivityModel60GHz::GetChunkSuccessRate (WifiMode mode, WifiTxVector txVector
   else if (rss_delta > 6.0)
     ber = sensitivity_ber (180);
   else
-    ber = sensitivity_ber ((int) std::abs((10 * (rss_delta + 12))));
+    ber = sensitivity_ber ((int) std::abs ((10 * (rss_delta + 12))));
 
   NS_LOG_DEBUG ("SENSITIVITY: ber=" << ber << ", rss_delta=" << rss_delta << ", snr[linear]=" << snr << ", rss[dBm]=" << rss << ", bits=" << nbits);
 

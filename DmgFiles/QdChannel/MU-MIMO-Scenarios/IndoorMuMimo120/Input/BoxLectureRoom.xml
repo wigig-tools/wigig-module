@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<amf unit="millimeter">
+	<metadata type="author">Neeraj Varshney, neeraj.varshney@nist.gov</metadata> 
+	<object id="0">
+		<metadata type="name">BottomWall</metadata>
+		<mesh>
+			<vertices>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>0</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>0</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>0</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>0</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+			</vertices>
+			<volume materialid="5">
+				<triangle>
+					<v1>0</v1>
+					<v2>1</v2>
+					<v3>2</v3>
+				</triangle>
+				<triangle>
+					<v1>3</v1>
+					<v2>1</v2>
+					<v3>0</v3>
+				</triangle>
+			</volume>
+		</mesh>
+	</object>
+	<object id="1">
+		<metadata type="name">RightWall</metadata>
+		<mesh>
+			<vertices>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>10000</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>0</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>10000</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>0</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+			</vertices>
+			<volume materialid="3">
+				<triangle>
+					<v1>0</v1>
+					<v2>1</v2>
+					<v3>2</v3>
+				</triangle>
+				<triangle>
+					<v1>0</v1>
+					<v2>3</v2>
+					<v3>1</v3>
+				</triangle>
+			</volume>
+		</mesh>
+	</object>
+	<object id="2">
+		<metadata type="name">LeftWall</metadata>
+		<mesh>
+			<vertices>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>10000</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>0</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>10000</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>0</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+			</vertices>
+			<volume materialid="2">
+				<triangle>
+					<v1>0</v1>
+					<v2>1</v2>
+					<v3>2</v3>
+				</triangle>
+				<triangle>
+					<v1>0</v1>
+					<v2>3</v2>
+					<v3>1</v3>
+				</triangle>
+			</volume>
+		</mesh>
+	</object>
+	<object id="3">
+		<metadata type="name">Floor</metadata>
+		<mesh>
+			<vertices>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>0</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>10000</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>10000</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>0</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+			</vertices>
+			<volume materialid="6">
+				<triangle>
+					<v1>0</v1>
+					<v2>1</v2>
+					<v3>2</v3>
+				</triangle>
+				<triangle>
+					<v1>0</v1>
+					<v2>3</v2>
+					<v3>1</v3>
+				</triangle>
+			</volume>
+		</mesh>
+	</object>
+	<object id="4">
+		<metadata type="name">TopWall</metadata>
+		<mesh>
+			<vertices>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>10000</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>10000</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>10000</y>
+						<z>0</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>10000</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+			</vertices>
+			<volume materialid="4">
+				<triangle>
+					<v1>0</v1>
+					<v2>1</v2>
+					<v3>2</v3>
+				</triangle>
+				<triangle>
+					<v1>3</v1>
+					<v2>1</v2>
+					<v3>0</v3>
+				</triangle>
+			</volume>
+		</mesh>
+	</object>
+	<object id="5">
+		<metadata type="name">Ceiling</metadata>
+		<mesh>
+			<vertices>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>0</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>10000</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>0</x>
+						<y>10000</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+				<vertex>
+					<coordinates>
+						<x>5000</x>
+						<y>0</y>
+						<z>3000</z>
+					</coordinates>
+				</vertex>
+			</vertices>
+			<volume materialid="1">
+				<triangle>
+					<v1>0</v1>
+					<v2>1</v2>
+					<v3>2</v3>
+				</triangle>
+				<triangle>
+					<v1>0</v1>
+					<v2>3</v2>
+					<v3>1</v3>
+				</triangle>
+			</volume>
+		</mesh>
+	</object>
+	<material id="1">
+        <metadata type="name">Ceiling</metadata>
+        <color><r>0.1</r><g>0.1</g><b>0.1</b></color>
+    </material>
+    <material id="2">
+        <metadata type="name">LeftWall</metadata>
+        <color><r>0.1</r><g>0.1</g><b>0.1</b></color>
+    </material>
+    <material id="3">
+        <metadata type="name">RightWall</metadata>
+        <color><r>0.1</r><g>0.1</g><b>0.1</b></color>
+    </material>
+    <material id="4">
+        <metadata type="name">TopWall</metadata>
+        <color><r>0.1</r><g>0.1</g><b>0.1</b></color>
+    </material>
+    <material id="5">
+        <metadata type="name">BottomWall</metadata>
+        <color><r>0.1</r><g>0.1</g><b>0.1</b></color>
+    </material>
+    <material id="6">
+        <metadata type="name">Floor</metadata>
+        <color><r>0.1</r><g>0.1</g><b>0.1</b></color>
+    </material>
+</amf>

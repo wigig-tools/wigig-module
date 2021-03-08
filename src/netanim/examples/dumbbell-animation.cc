@@ -38,7 +38,7 @@ int main (int argc, char *argv[])
   uint32_t    nLeaf = 0; // If non-zero, number of both left and right
   std::string animFile = "dumbbell-animation.xml" ;  // Name of file for animation output
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("nLeftLeaf", "Number of left side leaf nodes", nLeftLeaf);
   cmd.AddValue ("nRightLeaf","Number of right side leaf nodes", nRightLeaf);
   cmd.AddValue ("nLeaf",     "Number of left and right side leaf nodes", nLeaf);
@@ -78,7 +78,7 @@ int main (int argc, char *argv[])
   clientHelper.SetAttribute ("OffTime", StringValue ("ns3::UniformRandomVariable"));
   ApplicationContainer clientApps;
 
-  for (uint32_t i = 0; i < d.RightCount (); ++i)
+  for (uint32_t i = 0; i < ((d.RightCount () < d.LeftCount ()) ? d.RightCount () : d.LeftCount ()); ++i)
     {
       // Create an on/off app sending packets to the same leaf right side
       AddressValue remoteAddress (InetSocketAddress (d.GetLeftIpv4Address (i), 1000));
@@ -97,7 +97,7 @@ int main (int argc, char *argv[])
   anim.EnablePacketMetadata (); // Optional
   anim.EnableIpv4L3ProtocolCounters (Seconds (0), Seconds (10)); // Optional
   
-  // Set up the acutal simulation
+  // Set up the actual simulation
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
   Simulator::Run ();

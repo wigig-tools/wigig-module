@@ -52,12 +52,12 @@ Reservation::Reservation ()
 
 }
 
-Reservation::Reservation (std::list<std::pair <Ptr<Packet>, UanAddress > > &list, uint8_t frameNo, uint32_t maxPkts)
+Reservation::Reservation (std::list<std::pair <Ptr<Packet>, Mac8Address > > &list, uint8_t frameNo, uint32_t maxPkts)
   : m_frameNo (frameNo),
     m_retryNo (0),
     m_transmitted (false)
 {
-  uint32_t numPkts = (maxPkts) ? maxPkts : list.size ();
+  uint32_t numPkts = (maxPkts) ? maxPkts : static_cast<uint32_t> (list.size ());
   uint32_t length = 0;
   UanHeaderRcData dh;
   UanHeaderCommon ch;
@@ -75,7 +75,7 @@ Reservation::Reservation (std::list<std::pair <Ptr<Packet>, UanAddress > > &list
 
 Reservation::~Reservation ()
 {
-  std::list<std::pair <Ptr<Packet>, UanAddress > >::iterator it;
+  std::list<std::pair <Ptr<Packet>, Mac8Address > >::iterator it;
   for (it = m_pktList.begin (); it != m_pktList.end (); it++)
     {
       it->first = Ptr<Packet> ((Packet *) 0);
@@ -86,7 +86,7 @@ Reservation::~Reservation ()
 uint32_t
 Reservation::GetNoFrames () const
 {
-  return m_pktList.size ();
+  return static_cast<uint32_t> (m_pktList.size ());
 }
 
 uint32_t
@@ -95,7 +95,7 @@ Reservation::GetLength () const
   return m_length;
 }
 
-const std::list<std::pair <Ptr<Packet>, UanAddress > > &
+const std::list<std::pair <Ptr<Packet>, Mac8Address > > &
 Reservation::GetPktList (void) const
 {
   return m_pktList;
@@ -146,6 +146,7 @@ Reservation::IncrementRetry ()
 void
 Reservation::SetTransmitted (bool t)
 {
+  NS_UNUSED (t);
   m_transmitted = true;
 }
 
@@ -186,7 +187,7 @@ UanMacRc::Clear ()
       m_phy->Clear ();
       m_phy = 0;
     }
-  std::list<std::pair <Ptr<Packet>, UanAddress > >::iterator it;
+  std::list<std::pair <Ptr<Packet>, Mac8Address > >::iterator it;
   for (it = m_pktQueue.begin (); it != m_pktQueue.end (); it++)
     {
       it->first = 0;
@@ -275,20 +276,8 @@ UanMacRc::AssignStreams (int64_t stream)
   return 1;
 }
 
-Address
-UanMacRc::GetAddress (void)
-{
-  return m_address;
-}
-
-void
-UanMacRc::SetAddress (UanAddress addr)
-{
-  m_address = addr;
-}
-
 bool
-UanMacRc::Enqueue (Ptr<Packet> packet, const Address &dest, uint16_t protocolNumber)
+UanMacRc::Enqueue (Ptr<Packet> packet, uint16_t protocolNumber, const Address &dest)
 {
   if (protocolNumber > 0)
     {
@@ -301,7 +290,7 @@ UanMacRc::Enqueue (Ptr<Packet> packet, const Address &dest, uint16_t protocolNum
       return false;
     }
 
-  m_pktQueue.push_back (std::make_pair (packet, UanAddress::ConvertFrom (dest)));
+  m_pktQueue.push_back (std::make_pair (packet, Mac8Address::ConvertFrom (dest)));
 
   switch (m_state)
     {
@@ -324,7 +313,7 @@ UanMacRc::Enqueue (Ptr<Packet> packet, const Address &dest, uint16_t protocolNum
 }
 
 void
-UanMacRc::SetForwardUpCb (Callback<void, Ptr<Packet>, const UanAddress&> cb)
+UanMacRc::SetForwardUpCb (Callback<void, Ptr<Packet>, uint16_t, const Mac8Address&> cb)
 {
   m_forwardUpCb = cb;
 }
@@ -336,19 +325,13 @@ UanMacRc::AttachPhy (Ptr<UanPhy> phy)
   m_phy->SetReceiveOkCallback (MakeCallback (&UanMacRc::ReceiveOkFromPhy, this));
 }
 
-Address
-UanMacRc::GetBroadcast (void) const
-{
-  return UanAddress::GetBroadcast ();
-}
-
 void
 UanMacRc::ReceiveOkFromPhy (Ptr<Packet> pkt, double sinr, UanTxMode mode)
 {
-
+  NS_UNUSED (sinr);
   UanHeaderCommon ch;
   pkt->RemoveHeader (ch);
-  if (ch.GetDest () == m_address || ch.GetDest () == UanAddress::GetBroadcast ())
+  if (ch.GetDest () == Mac8Address::ConvertFrom (GetAddress ()) || ch.GetDest () == Mac8Address::GetBroadcast ())
     {
       m_rxLogger (pkt, mode);
     }
@@ -357,12 +340,13 @@ UanMacRc::ReceiveOkFromPhy (Ptr<Packet> pkt, double sinr, UanTxMode mode)
     {
     case TYPE_DATA:
 
-      if (ch.GetDest () == m_address)
+      if (ch.GetDest () == Mac8Address::ConvertFrom (GetAddress ()))
         {
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " UanMacRc Receiving DATA packet from PHY");
+          NS_LOG_DEBUG (Now ().As (Time::S) << " Node " << Mac8Address::ConvertFrom (GetAddress ()) << 
+                        " UanMacRc Receiving DATA packet from PHY");
           UanHeaderRcData dh;
           pkt->RemoveHeader (dh);
-          m_forwardUpCb (pkt, ch.GetSrc ());
+          m_forwardUpCb (pkt, ch.GetProtocolNumber (), ch.GetSrc ());
         }
       break;
     case TYPE_RTS:
@@ -382,22 +366,23 @@ UanMacRc::ReceiveOkFromPhy (Ptr<Packet> pkt, double sinr, UanTxMode mode)
 
         Time winDelay = ctsg.GetWindowTime ();
 
-        if (winDelay.GetSeconds () > 0)
+        if (winDelay > 0)
           {
             m_rtsBlocked = false;
             Simulator::Schedule (winDelay, &UanMacRc::BlockRtsing, this);
           }
         else
           {
-            NS_FATAL_ERROR (Simulator::Now ().GetSeconds () << " Node " << m_address << " Received window period < 0");
+            NS_FATAL_ERROR (Now ().As (Time::S) << " Node " << 
+                            Mac8Address::ConvertFrom (GetAddress ()) << " Received window period < 0");
           }
 
         UanHeaderRcCts ctsh;
-        ctsh.SetAddress (UanAddress::GetBroadcast ());
+        ctsh.SetAddress (Mac8Address::GetBroadcast ());
         while (pkt->GetSize () > 0)
           {
             pkt->RemoveHeader (ctsh);
-            if (ctsh.GetAddress () == m_address)
+            if (ctsh.GetAddress () == Mac8Address::ConvertFrom (GetAddress ()))
               {
                 if (m_state == GWPSENT)
                   {
@@ -410,7 +395,9 @@ UanMacRc::ReceiveOkFromPhy (Ptr<Packet> pkt, double sinr, UanTxMode mode)
                   }
                 else
                   {
-                    NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " received CTS while state != RTSSENT or GWPING");
+                    NS_LOG_DEBUG (Now ().As (Time::S) << " Node " << 
+                                  Mac8Address::ConvertFrom (GetAddress ()) << 
+                                  " received CTS while state != RTSSENT or GWPING");
                   }
               }
           }
@@ -421,7 +408,7 @@ UanMacRc::ReceiveOkFromPhy (Ptr<Packet> pkt, double sinr, UanTxMode mode)
       break;
     case TYPE_ACK:
       m_rtsBlocked = true;
-      if (ch.GetDest () != m_address)
+      if (ch.GetDest () != Mac8Address::ConvertFrom (GetAddress ()))
         {
           return;
         }
@@ -450,10 +437,14 @@ UanMacRc::ScheduleData (const UanHeaderRcCts &ctsh, const UanHeaderRcCtsGlobal &
     }
   if (it == m_resList.end ())
     {
-      NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " received CTS packet with no corresponding reservation!");
+      NS_LOG_DEBUG (Now ().As (Time::S) << " Node " << 
+                    Mac8Address::ConvertFrom (GetAddress ()) << 
+                    " received CTS packet with no corresponding reservation!");
       return;
     }
-  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " received CTS packet.  Scheduling data");
+  NS_LOG_DEBUG (Now ().As (Time::S) << 
+                " Node " << Mac8Address::ConvertFrom (GetAddress ()) << 
+                " received CTS packet.  Scheduling data");
   it->SetTransmitted ();
 
   double currentBps = m_phy->GetMode (m_currentRate).GetDataRateBps ();
@@ -468,13 +459,13 @@ UanMacRc::ScheduleData (const UanHeaderRcCts &ctsh, const UanHeaderRcCtsGlobal &
 
   Time frameDelay = Seconds (0);
 
-  const std::list<std::pair <Ptr<Packet>, UanAddress > > l = it->GetPktList ();
-  std::list<std::pair <Ptr<Packet>, UanAddress > >::const_iterator pit;
+  const std::list<std::pair <Ptr<Packet>, Mac8Address > > l = it->GetPktList ();
+  std::list<std::pair <Ptr<Packet>, Mac8Address > >::const_iterator pit;
   pit = l.begin ();
 
 
 
-  for (uint32_t i = 0; i < it->GetNoFrames (); i++, pit++)
+  for (uint8_t i = 0; i < it->GetNoFrames (); i++, pit++)
     {
       Ptr<Packet> pkt = (*pit).first->Copy ();
 
@@ -486,22 +477,27 @@ UanMacRc::ScheduleData (const UanHeaderRcCts &ctsh, const UanHeaderRcCtsGlobal &
       UanHeaderCommon ch;
       ch.SetType (TYPE_DATA);
       ch.SetDest (m_assocAddr);
-      ch.SetSrc (m_address);
+      ch.SetSrc (Mac8Address::ConvertFrom (GetAddress ()));
 
       pkt->AddHeader (ch);
       Time eventTime = startDelay + frameDelay;
-      if (eventTime.GetSeconds () < 0)
+      if (eventTime < 0)
         {
-          if (eventTime.GetSeconds () > -0.001)
+          if (eventTime > -0.001)
             {
-              eventTime = Seconds (0);
+              eventTime = Time ();
             }
           else
             {
-              NS_FATAL_ERROR ("Scheduling error resulted in very negative data transmission time! eventTime = " << eventTime.GetSeconds ());
+              NS_FATAL_ERROR ("Scheduling error resulted in very negative data transmission time! eventTime = " << eventTime.As (Time::S));
             }
         }
-      NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " scheduling with delay " << eventTime.GetSeconds () << " propDelay " << m_learnedProp.GetSeconds () << " start delay " << startDelay.GetSeconds () << " arrival time " << arrTime.GetSeconds ());
+      NS_LOG_DEBUG (Now ().As (Time::S) << 
+                    " Node " << Mac8Address::ConvertFrom (GetAddress ()) << 
+                    " scheduling with delay " << eventTime.As (Time::S) << 
+                    " propDelay " << m_learnedProp.As (Time::S) << 
+                    " start delay " << startDelay.As (Time::S) << 
+                    " arrival time " << arrTime.As (Time::S));
       Simulator::Schedule (eventTime, &UanMacRc::SendPacket, this, pkt, m_currentRate);
       frameDelay = frameDelay + m_sifs + Seconds (pkt->GetSize () / currentBps);
     }
@@ -549,7 +545,11 @@ UanMacRc::SendPacket (Ptr<Packet> pkt, uint32_t rate)
       type = "UNKNOWN";
       break;
     }
-  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " transmitting " << pkt->GetSize () << " byte packet of type " << type << " with rate " << rate << "(" << m_phy->GetMode (rate).GetDataRateBps () << ") to " << ch.GetDest ());
+  NS_LOG_DEBUG (Now ().As (Time::S) << 
+                " Node " << Mac8Address::ConvertFrom (GetAddress ()) << 
+                " transmitting " << pkt->GetSize () << 
+                " byte packet of type " << type << " with rate " << rate << 
+                "(" << m_phy->GetMode (rate).GetDataRateBps () << ") to " << ch.GetDest ());
   m_dequeueLogger (pkt, rate);
   m_phy->SendPacket (pkt, rate);
 }
@@ -579,8 +579,8 @@ UanMacRc::ProcessAck (Ptr<Packet> ack)
     }
   if (ah.GetNoNacks () > 0)
     {
-      const std::list<std::pair <Ptr<Packet>, UanAddress > > l = it->GetPktList ();
-      std::list<std::pair <Ptr<Packet>, UanAddress > >::const_iterator pit;
+      const std::list<std::pair <Ptr<Packet>, Mac8Address > > l = it->GetPktList ();
+      std::list<std::pair <Ptr<Packet>, Mac8Address > >::const_iterator pit;
       pit = l.begin ();
 
       const std::set<uint8_t> &nacks = ah.GetNackedFrames ();
@@ -588,7 +588,9 @@ UanMacRc::ProcessAck (Ptr<Packet> ack)
       uint8_t pnum = 0;
       for (; nit != nacks.end (); nit++)
         {
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " Received NACK for " << (uint32_t) *nit);
+          NS_LOG_DEBUG (Now ().As (Time::S) << " Node " << 
+                        Mac8Address::ConvertFrom (GetAddress ()) << 
+                        " Received NACK for " << (uint32_t) *nit);
           while (pnum < *nit)
             {
               pit++;
@@ -601,7 +603,9 @@ UanMacRc::ProcessAck (Ptr<Packet> ack)
     }
   else
     {
-      NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Node " << m_address << " received ACK for all frames");
+      NS_LOG_DEBUG (Now ().As (Time::S) << " Node " << 
+                    Mac8Address::ConvertFrom (GetAddress ()) << 
+                    " received ACK for all frames");
     }
   m_resList.erase (it);
 }
@@ -611,8 +615,8 @@ UanMacRc::CreateRtsHeader (const Reservation &res)
 {
   UanHeaderRcRts rh = UanHeaderRcRts ();
 
-  rh.SetLength (res.GetLength ());
-  rh.SetNoFrames (res.GetNoFrames ());
+  rh.SetLength (static_cast<uint16_t> (res.GetLength ()));
+  rh.SetNoFrames (static_cast<uint8_t> (res.GetNoFrames ()));
   rh.SetTimeStamp (res.GetTimestamp (res.GetRetryNo ()));
   rh.SetFrameNo (res.GetFrameNo ());
   rh.SetRetryNo (res.GetRetryNo ());
@@ -634,8 +638,8 @@ UanMacRc::Associate (void)
     {
       Ptr<Packet> pkt = Create<Packet> (0);
       pkt->AddHeader (CreateRtsHeader (res));
-      pkt->AddHeader (UanHeaderCommon (m_address, UanAddress::GetBroadcast (), (uint8_t) TYPE_GWPING));
-      NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " Sending first GWPING " << *pkt);
+      pkt->AddHeader (UanHeaderCommon (Mac8Address::ConvertFrom (GetAddress ()), Mac8Address::GetBroadcast (), static_cast<uint8_t>(TYPE_GWPING), 0));
+      NS_LOG_DEBUG (Now ().As (Time::S) << " Sending first GWPING " << *pkt);
       SendPacket (pkt,m_currentRate + m_numRates);
     }
   m_state = GWPSENT;
@@ -665,7 +669,7 @@ UanMacRc::AssociateTimeout ()
       res.IncrementRetry ();
 
       pkt->AddHeader (CreateRtsHeader (res));
-      pkt->AddHeader (UanHeaderCommon (m_address, UanAddress::GetBroadcast (), (uint8_t) TYPE_GWPING));
+      pkt->AddHeader (UanHeaderCommon (Mac8Address::ConvertFrom (GetAddress ()), Mac8Address::GetBroadcast (), static_cast<uint8_t> (TYPE_GWPING), 0));
 
       SendPacket (pkt,m_currentRate + m_numRates);
       m_resList.push_back (res);
@@ -698,7 +702,7 @@ UanMacRc::SendRts (void)
     {
       Ptr<Packet> pkt = Create<Packet> (0);
       pkt->AddHeader (CreateRtsHeader (res));
-      pkt->AddHeader (UanHeaderCommon (m_address, UanAddress::GetBroadcast (), (uint8_t) TYPE_RTS));
+      pkt->AddHeader (UanHeaderCommon (Mac8Address::ConvertFrom (GetAddress ()), Mac8Address::GetBroadcast (), static_cast<uint8_t> (TYPE_RTS), 0));
       SendPacket (pkt,m_currentRate + m_numRates);
     }
   m_state = RTSSENT;
@@ -725,7 +729,7 @@ UanMacRc::IsPhy1Ok ()
         {
           phy1ok = false;
         }
-      else if (ch.GetDest () == m_address)
+      else if (ch.GetDest () == Mac8Address::ConvertFrom (GetAddress ()))
         {
           phy1ok = false;
         }
@@ -750,7 +754,9 @@ UanMacRc::RtsTimeout (void)
 
       if (m_resList.empty ())
         {
-          NS_FATAL_ERROR (Simulator::Now ().GetSeconds () << " Node " << m_address << " tried to retry RTS with empty reservation list");
+          NS_FATAL_ERROR (Now ().As (Time::S) << " Node " << 
+                          Mac8Address::ConvertFrom (GetAddress ()) << 
+                          " tried to retry RTS with empty reservation list");
         }
       Ptr<Packet> pkt = Create<Packet> (0);
 
@@ -761,7 +767,7 @@ UanMacRc::RtsTimeout (void)
       res.IncrementRetry ();
       m_resList.push_back (res);
       pkt->AddHeader (CreateRtsHeader (res));
-      pkt->AddHeader (UanHeaderCommon (m_address, UanAddress::GetBroadcast (), (uint8_t) TYPE_RTS));
+      pkt->AddHeader (UanHeaderCommon (Mac8Address::ConvertFrom (GetAddress ()), Mac8Address::GetBroadcast (), static_cast<uint8_t> (TYPE_RTS), 0));
       SendPacket (pkt,m_currentRate + m_numRates);
 
     }

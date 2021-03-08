@@ -20,7 +20,6 @@
  */
 
 #include "ampdu-tag.h"
-#include "ns3/uinteger.h"
 
 namespace ns3 {
 
@@ -50,10 +49,9 @@ AmpduTag::AmpduTag ()
 }
 
 void
-AmpduTag::SetRemainingNbOfMpdus (uint8_t nbofmpdus)
+AmpduTag::SetRemainingNbOfMpdus (uint8_t nbOfMpdus)
 {
-  NS_ASSERT (nbofmpdus <= 64);
-  m_nbOfMpdus = nbofmpdus;
+  m_nbOfMpdus = nbOfMpdus;
 }
 
 void
@@ -66,7 +64,7 @@ AmpduTag::SetRemainingAmpduDuration (Time duration)
 uint32_t
 AmpduTag::GetSerializedSize (void) const
 {
-  return (2 + sizeof (Time));
+  return (1 + sizeof (Time));
 }
 
 void
@@ -82,7 +80,7 @@ AmpduTag::Deserialize (TagBuffer i)
 {
   m_nbOfMpdus = i.ReadU8 ();
   int64_t duration;
-  i.Read ((uint8_t *)&duration, 8);
+  i.Read ((uint8_t *)&duration, sizeof(int64_t));
   m_duration = Time (duration);
 }
 

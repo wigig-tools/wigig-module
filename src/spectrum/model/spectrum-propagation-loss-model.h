@@ -28,8 +28,7 @@
 
 namespace ns3 {
 
-
-
+class SpectrumSignalParameters;
 
 /**
  * \ingroup spectrum
@@ -78,6 +77,43 @@ public:
                                                  Ptr<const MobilityModel> a,
                                                  Ptr<const MobilityModel> b) const;
 
+  /**
+   * By default this function is set to false to allow backward compatability.
+   * \return Return true if we store we calculate the received power at the receiver side, otherwise false.
+   */
+  virtual bool DoCalculateRxPowerAtReceiverSide (void) const;
+  /**
+   * By default this function is set to false to allow backward compatability.
+   * \return Return true if we support calculating the received power for MIMO system, otherwise false.
+   */
+  virtual bool SupportMimoSystemPowerCalculation (void) const;
+  /**
+   * This method is to be called to calculate PSD at the receiver side.
+   *
+   * \param params the SpectrumSignalParameters of the signal being received.
+   * \param a sender mobility
+   * \param b receiver mobility
+   *
+   * \return set of values Vs frequency representing the received
+   * power in the same units used for the txPower parameter.
+   */
+  virtual Ptr<SpectrumValue> CalcRxPower (Ptr<SpectrumSignalParameters> params,
+                                          Ptr<const MobilityModel> a,
+                                          Ptr<const MobilityModel> b) const;
+  /**
+   * This method is to be called to calculate PSD for MIMO transmission.
+   *
+   * \param params the SpectrumSignalParameters of the signal being received.
+   * \param a sender mobility
+   * \param b receiver mobility
+   *
+   * \return set of values Vs frequency representing the received
+   * power in the same units used for the txPower parameter.
+   */
+  virtual void CalcMimoRxPower (Ptr<SpectrumSignalParameters> params,
+                                Ptr<const MobilityModel> a,
+                                Ptr<const MobilityModel> b) const;
+
 protected:
   virtual void DoDispose ();
 
@@ -98,12 +134,8 @@ private:
                                                            Ptr<const MobilityModel> b) const = 0;
 
   Ptr<SpectrumPropagationLossModel> m_next; //!< SpectrumPropagationLossModel chained to this one.
+
 };
-
-
-
-
-
 
 } // namespace ns3
 

@@ -31,17 +31,13 @@
  */
 
 #include <ctime>
-
 #include <sstream>
-
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/mobility-module.h"
-#include "ns3/wifi-module.h"
 #include "ns3/internet-module.h"
-
 #include "ns3/stats-module.h"
-
+#include "ns3/yans-wifi-helper.h"
 #include "wifi-example-apps.h"
 
 using namespace ns3;
@@ -80,7 +76,7 @@ int main (int argc, char *argv[]) {
   }
 
   // Set up command line parameters used to control the experiment.
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("distance", "Distance apart to place nodes (in meters).",
                 distance);
   cmd.AddValue ("format", "Format to use for data output.",

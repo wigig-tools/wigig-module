@@ -22,9 +22,7 @@
  *
  */
 
-#include <fstream>
 #include "ns3/core-module.h"
-#include "ns3/network-module.h"
 #include "ns3/internet-apps-module.h"
 #include "ns3/csma-module.h"
 #include "ns3/internet-module.h"
@@ -38,7 +36,7 @@ NS_LOG_COMPONENT_DEFINE ("DhcpExample");
 int
 main (int argc, char *argv[])
 {
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
 
   bool verbose = false;
   bool tracing = false;

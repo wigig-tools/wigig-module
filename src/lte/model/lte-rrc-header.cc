@@ -45,6 +45,7 @@ namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("RrcHeader");
 
+
 //////////////////// RrcAsn1Header class ///////////////////////////////
 RrcAsn1Header::RrcAsn1Header ()
 {
@@ -70,6 +71,42 @@ int
 RrcAsn1Header::GetMessageType ()
 {
   return m_messageType;
+}
+
+int
+RrcAsn1Header::BandwidthToEnum (uint16_t bandwidth) const
+{
+  int n;
+  switch (bandwidth)
+    {
+      case 6: n = 0; break;
+      case 15: n = 1; break;
+      case 25: n = 2; break;
+      case 50: n = 3; break;
+      case 75: n = 4; break;
+      case 100: n = 5; break;
+      default:
+        NS_FATAL_ERROR ("Wrong bandwidth: " << bandwidth);
+    }
+  return n;
+}
+
+uint16_t
+RrcAsn1Header::EnumToBandwidth (int n) const
+{
+  uint16_t bw;
+  switch (n)
+    {
+      case 0: bw = 6; break;
+      case 1: bw = 15; break;
+      case 2: bw = 25; break;
+      case 3: bw = 50; break;
+      case 4: bw = 75; break;
+      case 5: bw = 100; break;
+      default:
+        NS_FATAL_ERROR ("Wrong enum value for bandwidth: " << n);
+    }
+  return bw;
 }
 
 void
@@ -565,7 +602,7 @@ RrcAsn1Header::SerializeRadioResourceConfigCommonSib (LteRrcSap::RadioResourceCo
   SerializeSequence (std::bitset<0> (0),false);
   SerializeInteger (0,-126,24); // p0-NominalPUSCH
   SerializeEnum (8,0); // alpha
-  SerializeInteger (-50,-127,-96); // p0-NominalPUCCH
+  SerializeInteger (-110,-127,-96); // p0-NominalPUCCH
   SerializeSequence (std::bitset<0> (0),false); // deltaFList-PUCCH
   SerializeEnum (3,0); // deltaF-PUCCH-Format1
   SerializeEnum (3,0); // deltaF-PUCCH-Format1b
@@ -597,29 +634,7 @@ RrcAsn1Header::SerializeSystemInformationBlockType2 (LteRrcSap::SystemInformatio
   // freqInfo
   SerializeSequence (std::bitset<2> (3),false);
   SerializeInteger ((int) systemInformationBlockType2.freqInfo.ulCarrierFreq, 0, MAX_EARFCN);
-  switch (systemInformationBlockType2.freqInfo.ulBandwidth)
-    {
-    case 6:
-      SerializeEnum (6,0);
-      break;
-    case 15:
-      SerializeEnum (6,1);
-      break;
-    case 25:
-      SerializeEnum (6,2);
-      break;
-    case 50:
-      SerializeEnum (6,3);
-      break;
-    case 75:
-      SerializeEnum (6,4);
-      break;
-    case 100:
-      SerializeEnum (6,5);
-      break;
-    default:
-      SerializeEnum (6,0);
-    }
+  SerializeEnum (6, BandwidthToEnum (systemInformationBlockType2.freqInfo.ulBandwidth));
 
   SerializeInteger (29,1,32); // additionalSpectrumEmission
   // timeAlignmentTimerCommon
@@ -831,7 +846,7 @@ RrcAsn1Header::SerializeRachConfigCommon (LteRrcSap::RachConfigCommon rachConfig
       SerializeEnum (16,15);
       break;
     default:
-      SerializeEnum (16,0);
+      NS_FATAL_ERROR ("Wrong numberOfRA-Preambles value");
     }
 
   SerializeSequence (std::bitset<0> (0),false); // powerRampingParameters
@@ -912,6 +927,25 @@ RrcAsn1Header::SerializeRachConfigCommon (LteRrcSap::RachConfigCommon rachConfig
 
   SerializeEnum (8,0); // mac-ContentionResolutionTimer
   SerializeInteger (1,1,8); // maxHARQ-Msg3Tx
+
+  // connEstFailCount
+  switch (rachConfigCommon.txFailParam.connEstFailCount)
+    {
+    case 1:
+      SerializeEnum (8,1);
+      break;
+    case 2:
+      SerializeEnum (8,2);
+      break;
+    case 3:
+      SerializeEnum (8,3);
+      break;
+    case 4:
+      SerializeEnum (8,4);
+      break;
+    default:
+      SerializeEnum (8,1);
+    }
 }
 
 void
@@ -1083,29 +1117,7 @@ RrcAsn1Header::SerializeMeasConfig (LteRrcSap::MeasConfig measConfig) const
           SerializeInteger (it->measObjectEutra.carrierFreq, 0, MAX_EARFCN);
 
           // Serialize  allowedMeasBandwidth
-          switch (it->measObjectEutra.allowedMeasBandwidth)
-            {
-            case 6:
-              SerializeEnum (6,0);
-              break;
-            case 15:
-              SerializeEnum (6,1);
-              break;
-            case 25:
-              SerializeEnum (6,2);
-              break;
-            case 50:
-              SerializeEnum (6,3);
-              break;
-            case 75:
-              SerializeEnum (6,4);
-              break;
-            case 100:
-              SerializeEnum (6,5);
-              break;
-            default:
-              SerializeEnum (6,0);
-            }
+          SerializeEnum (6, BandwidthToEnum (it->measObjectEutra.allowedMeasBandwidth));
 
           SerializeBoolean (it->measObjectEutra.presenceAntennaPort1);
           SerializeBitstring (std::bitset<2> (it->measObjectEutra.neighCellConfig));
@@ -3100,29 +3112,7 @@ RrcAsn1Header::DeserializeSystemInformationBlockType2 (LteRrcSap::SystemInformat
     {
       // Deserialize ul-Bandwidth
       bIterator = DeserializeEnum (6, &n, bIterator);
-      switch (n)
-        {
-        case 0:
-          systemInformationBlockType2->freqInfo.ulBandwidth = 6;
-          break;
-        case 1:
-          systemInformationBlockType2->freqInfo.ulBandwidth = 15;
-          break;
-        case 2:
-          systemInformationBlockType2->freqInfo.ulBandwidth = 25;
-          break;
-        case 3:
-          systemInformationBlockType2->freqInfo.ulBandwidth = 50;
-          break;
-        case 4:
-          systemInformationBlockType2->freqInfo.ulBandwidth = 75;
-          break;
-        case 5:
-          systemInformationBlockType2->freqInfo.ulBandwidth = 100;
-          break;
-        default:
-          systemInformationBlockType2->freqInfo.ulBandwidth = 6;
-        }
+      systemInformationBlockType2->freqInfo.ulBandwidth = EnumToBandwidth (n);
     }
 
   // additionalSpectrumEmission
@@ -3323,10 +3313,8 @@ RrcAsn1Header::DeserializeRachConfigCommon (LteRrcSap::RachConfigCommon * rachCo
       rachConfigCommon->preambleInfo.numberOfRaPreambles = 64;
       break;
     default:
-      rachConfigCommon->preambleInfo.numberOfRaPreambles = 0;
+      rachConfigCommon->preambleInfo.numberOfRaPreambles = 4;
     }
-
-  rachConfigCommon->preambleInfo.numberOfRaPreambles = n;
 
   if (preamblesGroupAConfigPresent[0])
     {
@@ -3415,6 +3403,26 @@ RrcAsn1Header::DeserializeRachConfigCommon (LteRrcSap::RachConfigCommon * rachCo
 
   bIterator = DeserializeEnum (8,&n,bIterator); // mac-ContentionResolutionTimer
   bIterator = DeserializeInteger (&n,1,8,bIterator); //maxHARQ-Msg3Tx
+
+  // connEstFailCount
+  bIterator = DeserializeEnum (8,&n,bIterator);
+  switch (n)
+    {
+    case 1:
+      rachConfigCommon->txFailParam.connEstFailCount = 1;
+      break;
+    case 2:
+      rachConfigCommon->txFailParam.connEstFailCount = 2;
+      break;
+    case 3:
+      rachConfigCommon->txFailParam.connEstFailCount = 3;
+      break;
+    case 4:
+      rachConfigCommon->txFailParam.connEstFailCount = 4;
+      break;
+    default:
+      rachConfigCommon->txFailParam.connEstFailCount = 1;
+    }
   return bIterator;
 }
 
@@ -3806,28 +3814,7 @@ RrcAsn1Header::DeserializeMeasConfig (LteRrcSap::MeasConfig * measConfig, Buffer
 
               // allowedMeasBandwidth
               bIterator = DeserializeEnum (6, &n, bIterator);
-              switch (n)
-                {
-                case 0:
-                  elem.measObjectEutra.allowedMeasBandwidth = 6;
-                  break;
-                case 1:
-                  elem.measObjectEutra.allowedMeasBandwidth = 15;
-                  break;
-                case 2:
-                  elem.measObjectEutra.allowedMeasBandwidth = 25;
-                  break;
-                case 3:
-                  elem.measObjectEutra.allowedMeasBandwidth = 50;
-                  break;
-                case 4:
-                  elem.measObjectEutra.allowedMeasBandwidth = 75;
-                  break;
-                case 5:
-                default:
-                  elem.measObjectEutra.allowedMeasBandwidth = 100;
-                  break;
-                }
+              elem.measObjectEutra.allowedMeasBandwidth = EnumToBandwidth (n);
 
               // presenceAntennaPort1
               bIterator = DeserializeBoolean (&elem.measObjectEutra.presenceAntennaPort1, bIterator);
@@ -4570,6 +4557,7 @@ RrcAsn1Header::DeserializeMeasConfig (LteRrcSap::MeasConfig * measConfig, Buffer
     }
   return bIterator;
 }
+
 //////////////////// RrcConnectionRequest class ////////////////////////
 
 // Constructor
@@ -5167,54 +5155,10 @@ RrcConnectionReconfigurationHeader::PreSerialize () const
           SerializeSequence (std::bitset<1> (1),false);
 
           // Serialize dl-Bandwidth
-          switch (m_mobilityControlInfo.carrierBandwidth.dlBandwidth)
-            {
-            case 6:
-              SerializeEnum (16,0);
-              break;
-            case 15:
-              SerializeEnum (16,1);
-              break;
-            case 25:
-              SerializeEnum (16,2);
-              break;
-            case 50:
-              SerializeEnum (16,3);
-              break;
-            case 75:
-              SerializeEnum (16,4);
-              break;
-            case 100:
-              SerializeEnum (16,5);
-              break;
-            default:
-              SerializeEnum (16,6);
-            }
+          SerializeEnum (16, BandwidthToEnum (m_mobilityControlInfo.carrierBandwidth.dlBandwidth));
 
           // Serialize ul-Bandwidth
-          switch (m_mobilityControlInfo.carrierBandwidth.ulBandwidth)
-            {
-            case 6:
-              SerializeEnum (16,0);
-              break;
-            case 15:
-              SerializeEnum (16,1);
-              break;
-            case 25:
-              SerializeEnum (16,2);
-              break;
-            case 50:
-              SerializeEnum (16,3);
-              break;
-            case 75:
-              SerializeEnum (16,4);
-              break;
-            case 100:
-              SerializeEnum (16,5);
-              break;
-            default:
-              SerializeEnum (16,6);
-            }
+          SerializeEnum (16, BandwidthToEnum (m_mobilityControlInfo.carrierBandwidth.ulBandwidth));
         }
 
       // Serialize t304
@@ -5346,58 +5290,12 @@ RrcConnectionReconfigurationHeader::Deserialize (Buffer::Iterator bIterator)
                   bIterator = DeserializeSequence (&ulBandwidthPresent,false,bIterator);
 
                   bIterator = DeserializeEnum (16,&n,bIterator);
-                  switch (n)
-                    {
-                    case 0:
-                      m_mobilityControlInfo.carrierBandwidth.dlBandwidth = 6;
-                      break;
-                    case 1:
-                      m_mobilityControlInfo.carrierBandwidth.dlBandwidth = 15;
-                      break;
-                    case 2:
-                      m_mobilityControlInfo.carrierBandwidth.dlBandwidth = 25;
-                      break;
-                    case 3:
-                      m_mobilityControlInfo.carrierBandwidth.dlBandwidth = 50;
-                      break;
-                    case 4:
-                      m_mobilityControlInfo.carrierBandwidth.dlBandwidth = 75;
-                      break;
-                    case 5:
-                      m_mobilityControlInfo.carrierBandwidth.dlBandwidth = 100;
-                      break;
-                    case 6:
-                      m_mobilityControlInfo.carrierBandwidth.dlBandwidth = 0;
-                      break;
-                    }
+                  m_mobilityControlInfo.carrierBandwidth.dlBandwidth = EnumToBandwidth (n);
 
                   if (ulBandwidthPresent[0])
                     {
                       bIterator = DeserializeEnum (16,&n,bIterator);
-                      switch (n)
-                        {
-                        case 0:
-                          m_mobilityControlInfo.carrierBandwidth.ulBandwidth = 6;
-                          break;
-                        case 1:
-                          m_mobilityControlInfo.carrierBandwidth.ulBandwidth = 15;
-                          break;
-                        case 2:
-                          m_mobilityControlInfo.carrierBandwidth.ulBandwidth = 25;
-                          break;
-                        case 3:
-                          m_mobilityControlInfo.carrierBandwidth.ulBandwidth = 50;
-                          break;
-                        case 4:
-                          m_mobilityControlInfo.carrierBandwidth.ulBandwidth = 75;
-                          break;
-                        case 5:
-                          m_mobilityControlInfo.carrierBandwidth.ulBandwidth = 100;
-                          break;
-                        case 6:
-                          m_mobilityControlInfo.carrierBandwidth.ulBandwidth = 0;
-                          break;
-                        }
+                      m_mobilityControlInfo.carrierBandwidth.ulBandwidth = EnumToBandwidth (n);
                     }
                 }
 
@@ -5873,7 +5771,7 @@ HandoverPreparationInfoHeader::PreSerialize () const
 
   // Serialize sourceMasterInformationBlock
   SerializeSequence (std::bitset<0> (),false);
-  SerializeEnum (6,m_asConfig.sourceMasterInformationBlock.dlBandwidth); // dl-Bandwidth
+  SerializeEnum (6, BandwidthToEnum (m_asConfig.sourceMasterInformationBlock.dlBandwidth)); // dl-Bandwidth
   SerializeSequence (std::bitset<0> (),false); // phich-Config sequence
   SerializeEnum (2,0); // phich-Duration
   SerializeEnum (4,0); // phich-Resource
@@ -5963,7 +5861,7 @@ HandoverPreparationInfoHeader::Deserialize (Buffer::Iterator bIterator)
               // Deserialize sourceMasterInformationBlock
               bIterator = DeserializeSequence (&bitset0,false,bIterator);
               bIterator = DeserializeEnum (6,&n,bIterator); // dl-Bandwidth
-              m_asConfig.sourceMasterInformationBlock.dlBandwidth = n;
+              m_asConfig.sourceMasterInformationBlock.dlBandwidth = EnumToBandwidth (n);
 
               // phich-Config
               bIterator = DeserializeSequence (&bitset0,false,bIterator);

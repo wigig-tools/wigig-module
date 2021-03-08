@@ -65,7 +65,7 @@ main (int argc, char *argv[])
   bool tracing = false;
   bool nix = false;
 
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("confFile", "BRITE conf file", confFile);
   cmd.AddValue ("tracing", "Enable or disable ascii tracing", tracing);
   cmd.AddValue ("nix", "Enable or disable nix-vector routing", nix);
@@ -102,7 +102,7 @@ main (int argc, char *argv[])
   NodeContainer client;
   NodeContainer server;
 
-  //For this example will use AS 0 and AS 1 which will be on seperate systems
+  //For this example will use AS 0 and AS 1 which will be on separate systems
   //due to the mod divide used to assign AS to system.
 
   //GetSystemNumberForAs (uint32_t) can be used to determine which system an

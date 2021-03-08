@@ -11,7 +11,7 @@
 #include "ns3/boolean.h"
 
 #include "amsdu-subframe-header.h"
-#include "dcf-manager.h"
+#include "channel-access-manager.h"
 #include "dmg-ap-wifi-mac.h"
 #include "ext-headers.h"
 #include "mac-low.h"
@@ -20,6 +20,7 @@
 #include "msdu-aggregator.h"
 #include "wifi-utils.h"
 #include "wifi-phy.h"
+#include "dmg-wifi-phy.h"
 
 namespace ns3 {
 
@@ -82,14 +83,33 @@ DmgApWifiMac::GetTypeId (void)
                    UintegerValue (aSSFramesPerSlot),
                    MakeUintegerAccessor (&DmgApWifiMac::m_ssFramesPerSlot),
                    MakeUintegerChecker<uint8_t> (1, 16))
-    .AddAttribute ("IsResponderTxss", "Indicates whether the A-BFT period is TxSS or RxSS",
+    .AddAttribute ("IsResponderTXSS", "Indicates whether the A-BFT period is TXSS or RXSS",
                    BooleanValue (true),
                    MakeBooleanAccessor (&DmgApWifiMac::m_isABFTResponderTXSS),
                    MakeBooleanChecker ())
 
+    /* EDMG Beacon Control Interval */
+    .AddAttribute ("IsGroupTrainingInitiated", "Flag that specifies whether the AP will support group beamforming",
+                   BooleanValue(false),
+                   MakeBooleanAccessor(&DmgApWifiMac::m_groupTraining),
+                   MakeBooleanChecker())
+    /* EDMG A-BFT parameters */
+    .AddAttribute ("ABFTMultiplier", "Multiplier for extending the length of the A-BFT.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&DmgApWifiMac::m_abftMultiplier),
+                   MakeUintegerChecker<uint8_t> (0, 3))
+    .AddAttribute ("ABFTInSecondaryChannel", "Whether the A-BFT is also allocated in an adjacent secondary channel.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&DmgApWifiMac::m_abftInSecondaryChannel),
+                   MakeUintegerChecker<uint8_t> (0, 3))
+
     .AddAttribute ("AnnounceCapabilities", "Whether to include DMG Capabilities in DMG Beacons.",
                    BooleanValue (true),
                    MakeBooleanAccessor (&DmgApWifiMac::m_announceDmgCapabilities),
+                   MakeBooleanChecker ())
+    .AddAttribute ("AnnounceEDMGCapabilities", "Whether to include EDMG Capabilities in DMG Beacons.",
+                   BooleanValue (true),
+                   MakeBooleanAccessor (&DmgApWifiMac::m_announceEdmgCapabilities),
                    MakeBooleanChecker ())
     .AddAttribute ("OperationElement", "Whether to include DMG Operation Element in DMG Beacons.",
                    BooleanValue (true),
@@ -107,6 +127,11 @@ DmgApWifiMac::GetTypeId (void)
                    TimeValue (MicroSeconds (0)),
                    MakeTimeAccessor (&DmgApWifiMac::m_atiDuration),
                    MakeTimeChecker ())
+    .AddAttribute ("AnnounceTrainingSchedule", "Whether to include EDMG Training Field Schedule Element in DMG Beacons",
+                   BooleanValue(true),
+                   MakeBooleanAccessor(&DmgApWifiMac::m_announceTrainingSchedule),
+                   MakeBooleanChecker ())
+
 
     /* DMG PCP/AP Clustering */
     .AddAttribute ("EnableDecentralizedClustering", "Enable/Disable decentralized clustering.",
@@ -141,7 +166,6 @@ DmgApWifiMac::GetTypeId (void)
                    BooleanValue (false),
                    MakeBooleanAccessor (&DmgApWifiMac::m_isCbapSource),
                    MakeBooleanChecker ())
-
     /* Association Information */
     .AddTraceSource ("StationAssociated", "A station got associated with the access point.",
                      MakeTraceSourceAccessor (&DmgApWifiMac::m_assocLogger),
@@ -154,6 +178,12 @@ DmgApWifiMac::GetTypeId (void)
     .AddTraceSource ("BIStarted", "A new Beacon Interval has started.",
                      MakeTraceSourceAccessor (&DmgApWifiMac::m_biStarted),
                      "ns3::Mac48Address::TracedCallback")
+    .AddTraceSource ("BTIStarted", "A new BTI has started.",
+                     MakeTraceSourceAccessor (&DmgApWifiMac::m_btiStart),
+                     "ns3::DmgApWifiMac::BTIStartedCallback")
+    .AddTraceSource ("ABFTStarted", "A new A-BFT has started.",
+                     MakeTraceSourceAccessor (&DmgApWifiMac::m_abftStarted),
+                     "ns3::DmgApWifiMac::ABFTStartedCallback")
 
     /* DMG PCP/AP Clustering */
     .AddTraceSource ("JoinedCluster", "The PCP/AP joined a cluster.",
@@ -182,23 +212,25 @@ DmgApWifiMac::GetTypeId (void)
 }
 
 DmgApWifiMac::DmgApWifiMac ()
-  : m_sswFbckEvent ()
+  : m_beaconEvent (),
+    m_sswFbckEvent ()
 {
   NS_LOG_FUNCTION (this);
   /* DMG Beacon DCF Manager */
-  m_beaconDca = CreateObject<DmgBeaconDca> ();
-  m_beaconDca->SetAifsn (0);
-  m_beaconDca->SetMinCw (0);
-  m_beaconDca->SetMaxCw (0);
-  m_beaconDca->SetLow (m_low);
-  m_beaconDca->SetManager (m_dcfManager);
-  m_beaconDca->SetTxOkNoAckCallback (MakeCallback (&DmgApWifiMac::FrameTxOk, this));
-  m_beaconDca->SetAccessGrantedCallback (MakeCallback (&DmgApWifiMac::StartBeaconHeaderInterval, this));
+  m_beaconTxop = CreateObject<DmgBeaconTxop> ();
+  m_beaconTxop->SetAifsn (1);
+  m_beaconTxop->SetMinCw (0);
+  m_beaconTxop->SetMaxCw (0);
+  m_beaconTxop->SetMacLow (m_low);
+  m_beaconTxop->SetChannelAccessManager (m_channelAccessManager);
+  m_beaconTxop->SetTxOkNoAckCallback (MakeCallback (&DmgApWifiMac::FrameTxOk, this));
+  m_beaconTxop->SetAccessGrantedCallback (MakeCallback (&DmgApWifiMac::StartBeaconHeaderInterval, this));
   /* Initialize Variables */
   m_receivedOneSSW = false;
   m_btiPeriodicity = 0;
   m_initiateDynamicAllocation = false;
   m_monitoringChannel = false;
+  m_beaconTrnFieldsDuration = NanoSeconds (0);
   // Let the lower layers know that we are acting as an AP.
   SetTypeOfStation (DMG_AP);
 }
@@ -212,7 +244,7 @@ void
 DmgApWifiMac::DoDispose ()
 {
   NS_LOG_FUNCTION (this);
-  m_beaconDca = 0;
+  m_beaconTxop = 0;
   m_beaconEvent.Cancel ();
   DmgWifiMac::DoDispose ();
 }
@@ -260,7 +292,7 @@ void
 DmgApWifiMac::SetWifiRemoteStationManager (Ptr<WifiRemoteStationManager> stationManager)
 {
   NS_LOG_FUNCTION (this << stationManager);
-  m_beaconDca->SetWifiRemoteStationManager (stationManager);
+  m_beaconTxop->SetWifiRemoteStationManager (stationManager);
   DmgWifiMac::SetWifiRemoteStationManager (stationManager);
 }
 
@@ -288,7 +320,7 @@ DmgApWifiMac::SetBeaconInterval (Time interval)
 }
 
 void
-DmgApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Address to)
+DmgApWifiMac::ForwardDown (Ptr<Packet> packet, Mac48Address from, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << from << to);
   // If we are not a QoS AP then we definitely want to use AC_BE to
@@ -297,7 +329,7 @@ DmgApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Add
   uint8_t tid = 0;
 
    // If we are a QoS AP then we attempt to get a TID for this packet
-  if (m_qosSupported)
+  if (GetQosSupported ())
     {
       tid = QosUtilsGetTidForPacket (packet);
       // Any value greater than 7 is invalid and likely indicates that
@@ -313,8 +345,8 @@ DmgApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Add
 }
 
 void
-DmgApWifiMac::ForwardDown (Ptr<const Packet> packet, Mac48Address from,
-Mac48Address to, uint8_t tid)
+DmgApWifiMac::ForwardDown (Ptr<Packet> packet, Mac48Address from,
+                           Mac48Address to, uint8_t tid)
 {
   NS_LOG_FUNCTION (this << packet << from << to << static_cast<uint16_t> (tid));
   WifiMacHeader hdr;
@@ -340,7 +372,7 @@ Mac48Address to, uint8_t tid)
   m_edca[QosUtilsMapTidToAc (tid)]->Queue (packet, hdr);
 }
 
-void DmgApWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to, Mac48Address from)
+void DmgApWifiMac::Enqueue (Ptr<Packet> packet, Mac48Address to, Mac48Address from)
 {
   NS_LOG_FUNCTION (this << packet << to << from);
   if (to.IsBroadcast () || m_stationManager->IsAssociated (to))
@@ -350,7 +382,7 @@ void DmgApWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to, Mac48Addr
 }
 
 void
-DmgApWifiMac::Enqueue (Ptr<const Packet> packet, Mac48Address to)
+DmgApWifiMac::Enqueue (Ptr<Packet> packet, Mac48Address to)
 {
   NS_LOG_FUNCTION (this << packet << to);
   // We're sending this packet with a from address that is our own. We
@@ -385,12 +417,17 @@ DmgApWifiMac::SendProbeResp (Mac48Address to)
 
   /* Add DMG Capabilities to Probe Response Frame */
   probe.AddWifiInformationElement (GetDmgCapabilities ());
+  /* Add EDMG Capabilities to Probe Response Frame */
+  if (m_isEdmgSupported)
+    {
+      probe.AddWifiInformationElement (GetEdmgCapabilities ());
+    }
 
   // The standard is not clear on the correct queue for management
   // frames if we are a QoS AP. The approach taken here is to always
   // use the DCF for these regardless of whether we have a QoS
   // association or not.
-  m_dca->Queue (packet, hdr);
+  m_txop->Queue (packet, hdr);
 }
 
 uint16_t
@@ -426,11 +463,16 @@ DmgApWifiMac::SendAssocResp (Mac48Address to, bool success)
 
   /* Add DMG Capabilities to Association Response Frame */
   assoc.AddWifiInformationElement (GetDmgCapabilities ());
+  /* Add EDMG Capabilities to Association Response Frame */
+  if (m_isEdmgSupported)
+    {
+      assoc.AddWifiInformationElement (GetEdmgCapabilities ());
+    }
   packet->AddHeader (assoc);
 
   /* For now, we assume one station that talks to the DMG AP */
   SteerAntennaToward (to);
-  m_dca->Queue (packet, hdr);
+  m_txop->Queue (packet, hdr);
 
   return aid;
 }
@@ -447,10 +489,13 @@ DmgApWifiMac::GetDmgCapabilities (void) const
   capabilities->SetHigherLayerTimerSynchronization (false);
   capabilities->SetNumberOfRxDmgAntennas (m_codebook->GetTotalNumberOfAntennas ());
   capabilities->SetNumberOfSectors (m_codebook->GetTotalNumberOfTransmitSectors ());
-  capabilities->SetRxssLength (m_codebook->GetTotalNumberOfReceiveSectors ());
+  capabilities->SetRXSSLength (m_codebook->GetTotalNumberOfReceiveSectors ());
   capabilities->SetAmpduParameters (5, 0);     /* Hardcoded Now (Maximum A-MPDU + No restriction) */
-  capabilities->SetSupportedMCS (m_maxScRxMcs, m_maxOfdmRxMcs, m_maxScTxMcs, m_maxOfdmTxMcs, m_supportLpSc, false); /* LP SC is not supported yet */
+  capabilities->SetSupportedMCS (GetDmgWifiPhy ()->GetMaxScRxMcs (), GetDmgWifiPhy ()->GetMaxOfdmRxMcs (),
+                                 GetDmgWifiPhy ()->GetMaxScTxMcs (), GetDmgWifiPhy ()->GetMaxOfdmTxMcs (),
+                                 GetDmgWifiPhy ()->GetSupportLpScPhy (), false);
   capabilities->SetAppduSupported (false);     /* Currently A-PPDU Agregatio is not supported*/
+  capabilities->SetAntennaPatternReciprocity (m_antennaPatternReciprocity);
 
   /* DMG PCP/AP Capability Information Field */
   capabilities->SetTDDTI (true);
@@ -478,6 +523,19 @@ DmgApWifiMac::GetDmgOperationElement (void) const
   return operation;
 }
 
+Ptr<EdmgOperationElement>
+DmgApWifiMac::GetEdmgOperationElement (void) const
+{
+  Ptr<EdmgOperationElement> operation = Create<EdmgOperationElement> ();
+  operation->SetPrimaryChannel (2);
+  operation->SetBssAid (1);
+  operation->SetRssRetryLimit (3);
+  operation->SetRssBackoff (3);
+  operation->SetBssOperatingChannels (EDMG_CHANNEL_BTIMAP_ALL);
+  operation->SetChannelBWConfiguration (EDMG_BW_864);
+  return operation;
+}
+
 Ptr<NextDmgAti>
 DmgApWifiMac::GetNextDmgAtiElement (void) const
 {
@@ -494,6 +552,15 @@ DmgApWifiMac::GetExtendedScheduleElement (void) const
   Ptr<ExtendedScheduleElement> scheduleElement = Create<ExtendedScheduleElement> ();
   scheduleElement->SetAllocationFieldList (m_allocationList);
   return scheduleElement;
+}
+
+Ptr<EdmgTrainingFieldScheduleElement>
+DmgApWifiMac::GetEdmgTrainingFieldScheduleElement (void) const
+{
+  Ptr<EdmgTrainingFieldScheduleElement> trainingScheduleElement = Create<EdmgTrainingFieldScheduleElement> ();
+  trainingScheduleElement->SetNextBtiWithTrn (m_nextBtiWithTrn);
+  trainingScheduleElement->SetTrnScheduleInterval (m_trnScheduleInterval);
+  return trainingScheduleElement;
 }
 
 void
@@ -599,18 +666,18 @@ DmgApWifiMac::ContinueBeamformingInDTI (void)
 
 uint32_t
 DmgApWifiMac::AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destAid,
-                                                uint32_t allocationStart, bool isTxss)
+                                                uint32_t allocationStart, bool isTXSS)
 {
-  return AllocateBeamformingServicePeriod (sourceAid, destAid, allocationStart, 2000, isTxss, isTxss);
+  return AllocateBeamformingServicePeriod (sourceAid, destAid, allocationStart, 2000, isTXSS, isTXSS);
 }
 
 uint32_t
 DmgApWifiMac::AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destAid,
                                                 uint32_t allocationStart, uint16_t allocationDuration,
-                                                bool isInitiatorTxss, bool isResponderTxss)
+                                                bool isInitiatorTXSS, bool isResponderTXSS)
 {
   NS_LOG_FUNCTION (this << static_cast<uint16_t> (sourceAid) << static_cast<uint16_t> (destAid)
-                   << allocationStart << allocationDuration << isInitiatorTxss << isResponderTxss);
+                   << allocationStart << allocationDuration << isInitiatorTXSS << isResponderTXSS);
   AllocationField field;
   /* Allocation Control Field */
   field.SetAllocationType (SERVICE_PERIOD_ALLOCATION);
@@ -624,8 +691,8 @@ DmgApWifiMac::AllocateBeamformingServicePeriod (uint8_t sourceAid, uint8_t destA
 
   BF_Control_Field bfField;
   bfField.SetBeamformTraining (true);
-  bfField.SetAsInitiatorTxss (isInitiatorTxss);
-  bfField.SetAsResponderTxss (isResponderTxss);
+  bfField.SetAsInitiatorTXSS (isInitiatorTXSS);
+  bfField.SetAsResponderTXSS (isResponderTXSS);
 
   field.SetBfControl (bfField);
   m_allocationList.push_back (field);
@@ -665,6 +732,24 @@ DmgApWifiMac::CalculateBTIVariables (void)
   ExtDMGBeacon beacon;
   WifiMacHeader hdr;
   hdr.SetType (WIFI_MAC_EXTENSION_DMG_BEACON);
+  m_beaconTrnFieldsDuration = NanoSeconds (0);
+  /* Add the duration of the TRN fields appended to the beacons - if there are any */
+  if ((m_isEdmgSupported) && (m_groupTraining) && (m_nextBtiWithTrn == 0))
+    {
+      hdr.SetPacketType (TRN_R);
+      /* Aadd enough TRN fields to cover all sectors and all AWVs within the sectors - assuming
+       * same antenna configuration for AP and STAs, and same number of AWVs in all sectors */
+      double receiveSector = m_codebook->GetTotalNumberOfReceiveSectors ();
+      double numberOfAwv = m_codebook->GetNumberOfAWVs (m_codebook->GetActiveAntennaID (), m_codebook->GetActiveTxSectorID ());
+      if (numberOfAwv == 0)
+        {
+          numberOfAwv = 1;
+        }
+      uint8_t trnUnits = uint8_t (ceil (receiveSector * numberOfAwv / 10));
+      m_trnUnitsBeacon = trnUnits;
+      hdr.SetEdmgTrainingFieldLength (m_trnUnitsBeacon);
+      m_beaconTrnFieldsDuration = NanoSeconds (CalculateEdmgTrnSubfieldDuration () * trnUnits * 10);
+    }
 
   /* Service Set Identifier Information Element */
   beacon.SetSsid (GetSsid ());
@@ -672,6 +757,18 @@ DmgApWifiMac::CalculateBTIVariables (void)
   if (m_announceDmgCapabilities)
     {
       beacon.AddWifiInformationElement (Create<DmgCapabilities> ());
+    }
+  if ((m_announceEdmgCapabilities) && (m_isEdmgSupported))
+    {
+      Ptr<EdmgCapabilities> capabilities = Create<EdmgCapabilities> ();
+      capabilities->AddSubElement (Create<BeamformingCapabilitySubelement> ());
+      capabilities->AddSubElement (Create<PhyCapabilitiesSubelement> ());
+//      capabilities->AddSubElement (Create<SupportedChannelsSubelement> ());
+      beacon.AddWifiInformationElement (capabilities);
+    }
+  if (m_isEdmgSupported)
+    {
+      beacon.AddWifiInformationElement (Create<EdmgOperationElement> ());
     }
   if (m_announceOperationElement)
     {
@@ -693,27 +790,137 @@ DmgApWifiMac::CalculateBTIVariables (void)
     {
       beacon.AddWifiInformationElement (GetExtendedScheduleElement ());
     }
+  if (m_announceTrainingSchedule && (m_isEdmgSupported) && m_groupTraining)
+    {
+      beacon.AddWifiInformationElement (Create<EdmgTrainingFieldScheduleElement>());
+    }
+  if ((m_isEdmgSupported) && GetDmgWifiPhy ()->IsMuMimoSupported () && m_edmgGroupIdSetElement->GetNumberofEDMGGroups ()!= 0)
+    {
+      beacon.AddWifiInformationElement (m_edmgGroupIdSetElement);
+    }
   packet->AddHeader (beacon);
 
   /* Calculate durations */
-  m_dmgBeaconDuration = m_phy->CalculateTxDuration (packet->GetSize () + hdr.GetSize () + WIFI_MAC_FCS_LENGTH,
+  m_dmgBeaconDuration = m_phy->CalculateTxDuration (packet->GetSize () + hdr.GetSize () + 4, // We can change it to WIFI_MAC_FCS_LENGTH
                                                     m_stationManager->GetDmgControlTxVector (), m_phy->GetFrequency ());
+  m_dmgBeaconDuration += m_beaconTrnFieldsDuration;
   m_dmgBeaconDurationUs = MicroSeconds (ceil (static_cast<double> (m_dmgBeaconDuration.GetNanoSeconds ()) / 1000));
-  m_nextDmgBeaconDelay = m_dmgBeaconDurationUs - m_dmgBeaconDuration;
+  m_nextDmgBeaconDelay = m_dmgBeaconDurationUs - m_dmgBeaconDuration + m_beaconTrnFieldsDuration;
   /* Calculate Beacon Transmission Interval Length */
   m_btiDuration = m_dmgBeaconDurationUs * m_codebook->GetNumberOfSectorsInBHI () +
                   GetSbifs () * (m_codebook->GetNumberOfSectorsInBHI () - 1);
+}
+
+double
+DmgApWifiMac::CalculateEdmgTrnSubfieldDuration (void) const
+{
+  double subfieldDuration;
+  uint8_t NntxTrn = 0;
+  uint8_t nTxChains = m_codebook->GetTotalNumberOfAntennas ();
+  uint16_t trn_bl = 0;
+  if (m_chAggregation)
+    {
+      if (nTxChains == 2 || nTxChains == 4 )
+        NntxTrn = 1;
+      else if (nTxChains == 6 || nTxChains == 8)
+        NntxTrn = 2;
+      else
+        NS_LOG_ERROR ("Unvalid combination of Tx Chains and channel Aggregation");
+    }
+  else
+    {
+      if (nTxChains == 1 || nTxChains == 2 )
+        NntxTrn = 1;
+      else if (nTxChains == 3 || nTxChains == 4)
+        NntxTrn = 2;
+      else
+        NntxTrn = 4;
+    }
+
+  if (m_trnSeqLength == TRN_SEQ_LENGTH_SHORT)
+    trn_bl = 64;
+  else if (m_trnSeqLength == TRN_SEQ_LENGTH_NORMAL)
+    trn_bl = 128;
+  else if (m_trnSeqLength == TRN_SEQ_LENGTH_LONG)
+    trn_bl = 256;
+  else
+    NS_LOG_ERROR ("Unvalid TRN Subfield Sequence Length");
+
+  subfieldDuration =  (6 * trn_bl * NntxTrn * double (0.57));
+  return subfieldDuration;
+}
+
+void
+DmgApWifiMac::CreateEdmgMuMimoGroups (void)
+{
+  NS_LOG_FUNCTION (this);
+  m_edmgGroupIdSetElement = Create<EDMGGroupIDSetElement> ();
+  uint8_t numGroups = 0;
+  uint8_t groupId = 1;
+  uint8_t groupSize = 0;
+  AID_LIST list;
+  for (EdmgInformationMapCI it = m_edmgInformationMap.begin (); it != m_edmgInformationMap.end (); it++)
+    {
+      Ptr<BeamformingCapabilitySubelement> beamformingCapability =  StaticCast<BeamformingCapabilitySubelement> (it->second.first->GetSubElement (BEAMFORMING_CAPABILITY_SUBELEMENT));
+      if (beamformingCapability != 0)
+        {
+          if (beamformingCapability->GetMuMimoSupported ())
+            {
+              groupSize ++;
+              list.push_back (GetStationAid (it->first));
+              if (groupSize == m_codebook->GetTotalNumberOfRFChains () || groupSize == 31)
+                {
+                  EDMGGroupTuple tuple;
+                  tuple.groupID = groupId;
+                  tuple.aidList = list;
+                  m_edmgGroupIdSetElement->AddEDMGGroupTuple (tuple);
+                  numGroups++;
+                  groupId++;
+                  groupSize = 0;
+                  list.clear ();
+                  if (numGroups == 255)
+                    break;
+                }
+
+            }
+        }
+
+    }
+  if (!list.empty ())
+    {
+      EDMGGroupTuple tuple;
+      tuple.groupID = groupId;
+      tuple.aidList = list;
+      m_edmgGroupIdSetElement->AddEDMGGroupTuple (tuple);
+      numGroups++;
+    }
+  m_edmgGroupIdSetElement->SetNumberofEDMGGroups (numGroups);
 }
 
 void
 DmgApWifiMac::SendOneDMGBeacon (void)
 {
   NS_LOG_FUNCTION (this);
+  // If we are not sending the first DMG Beacon, switch the sector.
+  if (m_firstBeacon )
+    {
+      m_firstBeacon = false;
+    }
+  else
+    {
+      m_codebook->GetNextSectorInBTI ();
+    }
   WifiMacHeader hdr;
   hdr.SetType (WIFI_MAC_EXTENSION_DMG_BEACON);
   hdr.SetAddr1 (GetBssid ());     /* BSSID */
   hdr.SetNoMoreFragments ();
   hdr.SetNoRetry ();
+
+  if ((m_isEdmgSupported) && (m_groupTraining) && (m_nextBtiWithTrn == 0) )
+    {
+      hdr.SetEdmgTrainingFieldLength (m_trnUnitsBeacon);
+      hdr.SetPacketType (TRN_R);
+    }
 
   ExtDMGBeacon beacon;
 
@@ -755,7 +962,14 @@ DmgApWifiMac::SendOneDMGBeacon (void)
 //    }
   ctrl.SetABFT_Length (m_ssSlotsPerABFT); /* Length of the following A-BFT*/
   ctrl.SetFSS (m_ssFramesPerSlot);
-  ctrl.SetIsResponderTXSS (m_isABFTResponderTXSS);
+  if (m_nextAbft == 0)
+    {
+      ctrl.SetIsResponderTXSS (m_isABFTResponderTXSS);
+    }
+  else
+    {
+      ctrl.SetUnsolicitedRSSEnabled (m_isUnsolicitedRssEnabled);
+    }
   ctrl.SetNextABFT (m_nextAbft);
   ctrl.SetFragmentedTXSS (false);         /* To fragment the initiator TXSS over multiple consecutive BTIs, do not support */
   ctrl.SetTXSS_Span (m_codebook->GetNumberOfBIs ());
@@ -763,6 +977,9 @@ DmgApWifiMac::SendOneDMGBeacon (void)
   ctrl.SetABFT_Count (10);
   ctrl.SetN_ABFT_Ant (0);
   ctrl.SetPCPAssoicationReady (false);
+
+  ctrl.SetABFTMultiplier (m_abftMultiplier);
+  ctrl.SetABFTinSecondaryChannel (m_abftInSecondaryChannel);
   beacon.SetBeaconIntervalControlField (ctrl);
 
   /* DMG Parameters*/
@@ -772,6 +989,7 @@ DmgApWifiMac::SendOneDMGBeacon (void)
   parameters.Set_CBAP_Source (m_isCbapSource);
   parameters.Set_DMG_Privacy (false);
   parameters.Set_ECPAC_Policy_Enforced (false); // Decentralized clustering
+  parameters.Set_EDMG_Supported (m_isEdmgSupported);
   beacon.SetDMGParameters (parameters);
 
   /* Cluster Control Field */
@@ -801,6 +1019,15 @@ DmgApWifiMac::SendOneDMGBeacon (void)
     {
       beacon.AddWifiInformationElement (GetDmgCapabilities ());
     }
+  if (m_isEdmgSupported)
+    {
+      /* EDMG Capabilities Information Element */
+      if (m_announceEdmgCapabilities)
+        {
+          beacon.AddWifiInformationElement (GetEdmgCapabilities ());
+        }
+      beacon.AddWifiInformationElement (GetEdmgOperationElement ());
+    }
   /* DMG Operation Element */
   if (m_announceOperationElement)
     {
@@ -826,13 +1053,23 @@ DmgApWifiMac::SendOneDMGBeacon (void)
     {
       beacon.AddWifiInformationElement (GetExtendedScheduleElement ());
     }
+  /* EDMG Training Field Schedule Element */
+  if ((m_isEdmgSupported) && (m_announceTrainingSchedule) && m_groupTraining)
+    {
+      beacon.AddWifiInformationElement (GetEdmgTrainingFieldScheduleElement ());
+    }
+  /* EDMG Group ID Set element */
+  if ((m_isEdmgSupported) && GetDmgWifiPhy ()->IsMuMimoSupported () && m_edmgGroupIdSetElement->GetNumberofEDMGGroups ()!= 0)
+    {
+      beacon.AddWifiInformationElement (m_edmgGroupIdSetElement);
+    }
 
   Time btiRemaining = GetBTIRemainingTime ();
   NS_LOG_DEBUG ("BTI Remaining Time=" << btiRemaining);
   NS_ASSERT_MSG (btiRemaining.IsStrictlyPositive (), "Remaining BTI Period should not be negative.");
 
   /* The DMG beacon has it's own special queue, so we load it in there */
-  m_beaconDca->TransmitDmgBeacon (beacon, hdr, btiRemaining - m_dmgBeaconDurationUs);
+  m_beaconTxop->TransmitDmgBeacon (beacon, hdr, btiRemaining - m_dmgBeaconDurationUs);
 }
 
 void
@@ -862,7 +1099,7 @@ DmgApWifiMac::SendDmgAddTsResponse (Mac48Address to, StatusCode code, TsDelayEle
   packet->AddHeader (frame);
   packet->AddHeader (actionHdr);
 
-  m_dca->Queue (packet, hdr);
+  m_txop->Queue (packet, hdr);
 }
 
 AllocationDataList
@@ -936,7 +1173,7 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
   if (hdr.IsDMGBeacon ())
     {
       /* Check whether we start a new access phase or schedule a new DMG Beacon */
-      if (m_codebook->GetNextSectorInBTI ())
+      if (m_codebook->GetRemaingSectorCount () != 0)
         {
           /* The DMG PCP/AP shall not change DMG Antennas within a BTI */
           m_beaconEvent = Simulator::Schedule (m_nextDmgBeaconDelay + GetSbifs (), &DmgApWifiMac::SendOneDMGBeacon, this);
@@ -944,6 +1181,21 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
       else
         {
           NS_LOG_DEBUG ("DMG PCP/AP completed the transmission of the last DMG Beacon at " << Simulator::Now ());
+          /* update schedule for sending DMG Beacons with TRN-R fields */
+          if (m_isEdmgSupported && m_groupTraining)
+            {
+              if (m_nextBtiWithTrn == 0)
+                {
+                  if (m_trnScheduleInterval != 0)
+                    {
+                      m_nextBtiWithTrn = m_trnScheduleInterval-1;
+                    }
+                }
+              else
+                {
+                  m_nextBtiWithTrn--;
+                }
+            }
           Time startTime = m_nextDmgBeaconDelay + GetMbifs ();
           /* Schedule A-BFT access period */
           if (m_nextAbft != 0)
@@ -981,7 +1233,7 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
        * The PCP/AP expects an SPR frame in response to each transmitted Poll frame
        * so steer PCP/AP receive antenna towards it
        */
-      Simulator::Schedule (m_responseOffset, &DmgApWifiMac::SteerAntennaToward, this, hdr.GetAddr1 ());
+      Simulator::Schedule (m_responseOffset, &DmgApWifiMac::SteerAntennaToward, this, hdr.GetAddr1 (), false);
 
       /* Schedule next poll frame */
       m_polledStationIndex++;
@@ -1053,14 +1305,21 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
                 }
               else
                 {
-                  /* I-RxSS so initiator switches between different receiving sectors */
-//                  m_phy->GetDirectionalAntenna ()->SetCurrentRxSectorID (1);
-//                  m_phy->GetDirectionalAntenna ()->SetCurrentRxAntennaID (1);
+                  /* I-RXSS so initiator switches between different receiving sectors */
+                  m_codebook->StartSectorSweeping (hdr.GetAddr1 (), ReceiveSectorSweep, 1);
                 }
+              /* Start Timeout value: The initiator may restart the ISS up to dot11BFRetryLimit times if it does not
+               * receive an SSW frame from the responder in dot11BFTXSSTime time following the end of the ISS. */
+              m_restartISSEvent = Simulator::Schedule (MilliSeconds (dot11BFTXSSTime),
+                                                       &DmgApWifiMac::RestartInitiatorSectorSweep, this, hdr.GetAddr1 ());
             }
           else
             {
               SteerAntennaToward (hdr.GetAddr1 ());
+              /* Start Timeout value: The responder goes to Idle state if it does not receive SSW-FBCK from the initiator
+               * in dot11MaxBFTime time following the end of the RSS. */
+              m_sswFbckTimeout = Simulator::Schedule (dot11MaxBFTime * m_beaconInterval,
+                                                      &DmgApWifiMac::Reset_SLS_Responder_Variables, this);
             }
         }
     }
@@ -1070,43 +1329,88 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
         {
           ANTENNA_CONFIGURATION antennaConfig;
           Mac48Address address = hdr.GetAddr1 ();
+          double snrValue = 0.0;
           if (m_receivedOneSSW)
             {
-              antennaConfig = m_bestAntennaConfig[address].first;
+              BEST_ANTENNA_CONFIGURATION info = m_bestAntennaConfig[address];
+              antennaConfig = std::get<0> (info);
+              snrValue = std::get<2> (info);
             }
           else
             {
               antennaConfig.first = NO_ANTENNA_CONFIG;
               antennaConfig.second = NO_ANTENNA_CONFIG;
             }
+
+          /* Inform WifiRemoteStationManager about link SNR value */
+          m_stationManager->RecordLinkSnr (address, snrValue);
+
 	  /* We add the station to the list of the stations we can directly communicate with */
 	  AddForwardingEntry (hdr.GetAddr1 ());
+	  m_slsInitiatorStateMachine = SLS_INITIATOR_TXSS_PHASE_COMPELTED;
+
           /* Raise an event that we selected the best Tx sector to the DMG STA (in BHI only STA chooses) */
-          m_slsCompleted (address, CHANNEL_ACCESS_BHI, BeamformingInitiator, m_isInitiatorTXSS, m_isResponderTXSS,
-                          antennaConfig.first, antennaConfig.second);
+          m_slsCompleted (SlsCompletionAttrbitutes (address, CHANNEL_ACCESS_BHI, BeamformingInitiator,
+                                                    m_isInitiatorTXSS, m_isResponderTXSS,
+                                                    antennaConfig.first, antennaConfig.second, m_maxSnr));
         }
       else
         {
+          Time sswAckTimeout;
+          if (m_isEdmgSupported)
+            {
+              sswAckTimeout = EDMG_SSW_ACK_TIMEOUT;
+            }
+          else
+            {
+              sswAckTimeout = SSW_ACK_TIMEOUT;
+            }
           /* Schedule event for not receiving SSW-ACK, so we restart SSW Feedback process again */
-          NS_LOG_INFO ("Schedule SSW-ACK Timeout at " << Simulator::Now () + SSW_ACK_TIMEOUT);
-          m_sswAckTimeoutEvent = Simulator::Schedule (SSW_ACK_TIMEOUT, &DmgApWifiMac::ResendSswFbckFrame, this);
+          NS_LOG_INFO ("Schedule SSW-ACK Timeout at " << Simulator::Now () + sswAckTimeout);
+          m_slsInitiatorStateMachine = SLS_INITIATOR_SSW_ACK;
+          m_sswAckTimeoutEvent = Simulator::Schedule (sswAckTimeout, &DmgApWifiMac::ResendSswFbckFrame, this);
         }
     }
   else if (hdr.IsSSW_ACK ())
     {
       /* We are SLS Responder, raise callback for SLS phase completion. */
-      ANTENNA_CONFIGURATION antennaConfig;
       Mac48Address address = hdr.GetAddr1 ();
+      BEST_ANTENNA_CONFIGURATION info = m_bestAntennaConfig[address];
+      ANTENNA_CONFIGURATION antennaConfig;
+      double snrValue = std::get<2> (info);;
       if (m_isResponderTXSS)
         {
-          antennaConfig = m_bestAntennaConfig[address].first;
+          antennaConfig = std::get<0> (info);
         }
       else if (!m_isInitiatorTXSS)
         {
-          antennaConfig = m_bestAntennaConfig[address].second;
+          antennaConfig = std::get<1> (info);
         }
-      m_slsCompleted (address, CHANNEL_ACCESS_DTI, BeamformingResponder, m_isInitiatorTXSS, m_isResponderTXSS,
-                      antennaConfig.first, antennaConfig.second);
+
+      /* Inform WifiRemoteStationManager about link SNR value */
+      m_stationManager->RecordLinkSnr (address, snrValue);
+
+      /* Note: According to the standard, the Responder transits to the TXSS Phase Complete when
+         we receive non SSW frame and non-SSW-FBCK frame */
+      m_dmgSlsTxop->SLS_BFT_Completed ();
+      m_performingBFT = false;
+      m_slsResponderStateMachine = SLS_RESPONDER_TXSS_PHASE_COMPELTED;
+      m_slsCompleted (SlsCompletionAttrbitutes (address, CHANNEL_ACCESS_DTI, BeamformingResponder,
+                                                m_isInitiatorTXSS, m_isResponderTXSS,
+                                                antennaConfig.first, antennaConfig.second, m_maxSnr));
+      /* Resume data transmission after SLS operation */
+      if (m_currentAllocation == CBAP_ALLOCATION)
+        {
+          m_txop->ResumeTxopTransmission ();
+          for (EdcaQueues::iterator i = m_edca.begin (); i != m_edca.end (); ++i)
+            {
+              i->second->ResumeTxopTransmission ();
+            }
+        }
+    }
+  else
+    {
+      DmgWifiMac::FrameTxOk (hdr);
     }
 }
 
@@ -1125,6 +1429,10 @@ DmgApWifiMac::StartBeaconInterval (void)
   /* Schedule the end of the Beacon Interval */
   Simulator::Schedule (m_beaconInterval, &DmgApWifiMac::EndBeaconInterval, this);
   NS_LOG_DEBUG ("Next BI will start at " << Simulator::Now () + m_beaconInterval);
+  if (GetDmgWifiPhy ()->IsMuMimoSupported ())
+    {
+        CreateEdmgMuMimoGroups ();
+    }
 
 //  if (m_enableDecentralizedClustering)
 //    {
@@ -1135,7 +1443,7 @@ DmgApWifiMac::StartBeaconInterval (void)
 //    {
       /* Sense the channel if it is OK to transmit */
       NS_LOG_DEBUG ("Performing CCA before starting BHI access period.");
-      m_beaconDca->PerformCCA ();
+      m_beaconTxop->PerformCCA ();
 //    }
 }
 
@@ -1146,8 +1454,42 @@ DmgApWifiMac::EndBeaconInterval (void)
   NS_LOG_INFO ("DMG AP Ending BI at " << Simulator::Now ());
   /* Cleanup non-static allocations */
   CleanupAllocations ();
+  /** Reset SLS state machines **/
+  /* Cancel any ISS Retry event in the BI to avoid performing SLS in case no DMG beacon is received in the next BI */
+  if (m_restartISSEvent.IsRunning ())
+    {
+      m_restartISSEvent.Cancel ();
+    }
+        
+  /* Reset State at MacLow */  
+  m_low->SLS_Phase_Ended ();
+  m_low->MIMO_BFT_Phase_Ended ();
+  
+//  if (m_sswFbckTimeout.IsRunning ())
+//    {
+//      m_sswFbckTimeout.Cancel ();
+//      Reset_SLS_Responder_Variables ();
+//    }
+//  if (m_sswAckTimeoutEvent.IsRunning ())
+//    {
+//      m_sswAckTimeoutEvent.Cancel ();
+//    }
+//  Reset_SLS_State_Machine_Variables ();
   /* Start New Beacon Interval */
-  StartBeaconInterval ();
+  /* If you were in MIMO mode switch to SISO for the next beacon interval */
+  /* Check if there is an ongoing reception */
+  Time endRx = StaticCast<DmgWifiPhy> (m_phy)->GetDelayUntilEndRx ();
+  if (endRx == NanoSeconds (0))
+    {
+      /* If there is not switch to SISO mode */
+      m_codebook->SetCommunicationMode (SISO_MODE);
+    }
+  else
+    {
+      /* If there is wait until the current reception is finished before switching the antenna configuration */
+      Simulator::Schedule(endRx, &Codebook::SetCommunicationMode , m_codebook, SISO_MODE);
+    }
+  Simulator::ScheduleNow (&DmgApWifiMac::StartBeaconInterval, this);
 }
 
 void
@@ -1196,9 +1538,11 @@ DmgApWifiMac::StartBeaconTransmissionInterval (void)
 
   /* Start DMG Beaconing */
   m_codebook->StartBTIAccessPeriod ();
+  m_firstBeacon = true;
 
   /* Timing variables */
   CalculateBTIVariables ();
+  m_btiStart (GetAddress (), m_btiDuration);
   m_btiStarted = Simulator::Now ();
   m_beaconEvent = Simulator::ScheduleNow (&DmgApWifiMac::SendOneDMGBeacon, this);
 }
@@ -1208,6 +1552,7 @@ DmgApWifiMac::StartAssociationBeamformTraining (void)
 {
   NS_LOG_FUNCTION (this);
   NS_LOG_INFO ("DMG AP Starting A-BFT at " << Simulator::Now ());
+  m_abftStarted (GetAddress (), m_abftDuration);
   m_accessPeriod = CHANNEL_ACCESS_ABFT;
   /* Schedule next period */
   if (m_atiPresent)
@@ -1220,19 +1565,39 @@ DmgApWifiMac::StartAssociationBeamformTraining (void)
     }
   /* Reinitialize variables */
   m_isBeamformingInitiator = true;
-  m_isInitiatorTXSS = true; /* DMG-AP always performs TxSS in BTI */
+  m_isInitiatorTXSS = true; /* DMG-AP always performs TXSS in BTI */
   m_isResponderTXSS = m_isABFTResponderTXSS;
-  m_codebook->SetReceivingInQuasiOmniMode ();
+
+  //m_codebook->SetReceivingInQuasiOmniMode ();
+  /* Check if there is an ongoing reception */
+  Time endRx = StaticCast<DmgWifiPhy> (m_phy)->GetDelayUntilEndRx ();
   /* Check the type of the RSS in A-BFT */
   if (m_isResponderTXSS)
     {
-      /* Set the antenna in Quasi-omni receiving mode */
-      m_codebook->SetReceivingInQuasiOmniMode ();
+      if (endRx == NanoSeconds (0))
+        {
+          /* If there is not an ongoing reception switch to quasi-omni mode */
+          m_codebook->SetReceivingInQuasiOmniMode ();
+        }
+      else
+        {
+          /* If there is an ongoing reception wait until the current reception is finished before switching the antenna configuration */
+          void (Codebook::*sn) () = &Codebook::SetReceivingInQuasiOmniMode;
+          Simulator::Schedule(endRx, sn, m_codebook);
+        }
     }
   else
     {
-      /* Set the antenna in directional receiving mode */
-      m_codebook->SetReceivingInDirectionalMode ();
+      if (endRx == NanoSeconds (0))
+        {
+          /* If there is not an ongoing reception set the antenna to directional receiving mode  */
+          m_codebook->SetReceivingInDirectionalMode ();
+        }
+      else
+        {
+          /* If there is wait until the current reception is finished before switching the antenna configuration */
+          Simulator::Schedule(endRx, &Codebook::SetReceivingInDirectionalMode , m_codebook);
+        }
     }
   /* Schedule the beginning of the first A-BFT Slot */
   m_remainingSlots = m_ssSlotsPerABFT;
@@ -1272,8 +1637,19 @@ DmgApWifiMac::StartAnnouncementTransmissionInterval (void)
   /* Schedule DTI Period Starting Time */
   Simulator::Schedule (m_atiDuration, &DmgApWifiMac::StartDataTransmissionInterval, this);
   /* Initiate BRP Setup Subphase, currently ATI is used for BRP Setup + Training */
-  m_dmgAtiDca->InitiateTransmission (m_atiDuration);
-  DoBrpSetupSubphase ();
+  m_dmgAtiTxop->InitiateTransmission (m_atiDuration);
+  /* Check if there is currently an ongoing reception at the PHY layer. */
+  Time endRx = StaticCast<DmgWifiPhy> (m_phy)->GetDelayUntilEndRx ();
+  if (endRx == NanoSeconds (0))
+    {
+      /* If there is not start BRP setup subphase  */
+      DoBrpSetupSubphase ();
+    }
+  else
+    {
+      /* If there is wait until the current reception is finished before starting BRP setup subphase */
+      Simulator::Schedule(endRx, &DmgApWifiMac::DoBrpSetupSubphase, this);
+    }
 }
 
 void
@@ -1318,12 +1694,24 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
   /* Schedule the beginning of next BHI interval */
   m_dtiStartTime = Simulator::Now ();
   m_dtiDuration = m_beaconInterval - (Simulator::Now () - m_biStartTime);
-  m_dtiStarted (GetAddress (), m_dtiDuration);
 
   /* Start CBAPs and SPs */
   if (m_isCbapOnly)
     {
-      m_codebook->SetReceivingInQuasiOmniMode ();
+      /* Check if there is currently an ongoing reception at the PHY layer. */
+      Time endRx = StaticCast<DmgWifiPhy> (m_phy)->GetDelayUntilEndRx ();
+      if (endRx == NanoSeconds (0))
+        {
+          /* If there is not set the antenna in quasi-omni mode.  */
+         m_codebook->SetReceivingInQuasiOmniMode ();
+        }
+      else
+        {
+          /* If there is wait until the current reception is finished before setting the quasi-omni mode. */
+          void (Codebook::*sn) () = &Codebook::SetReceivingInQuasiOmniMode;
+          Simulator::Schedule(endRx, sn, m_codebook);
+        }
+
 //      if (m_enableDecentralizedClustering)
 //        {
 //          NS_LOG_INFO ("CBAP allocation only in DTI and we mute transmission during BeaconSP.");
@@ -1343,16 +1731,51 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
 //      else
 //        {
           NS_LOG_INFO ("CBAP allocation only in DTI");
-          Simulator::ScheduleNow (&DmgApWifiMac::StartContentionPeriod, this, BROADCAST_CBAP, m_dtiDuration);
+          if (endRx == NanoSeconds (0))
+            {
+              /* If there is not start the contention period.  */
+              Simulator::ScheduleNow (&DmgApWifiMac::StartContentionPeriod, this, BROADCAST_CBAP, m_dtiDuration);            }
+          else
+            {
+              /* If there is wait until the current reception is finished before starting the contention period. */
+              Simulator::Schedule(endRx, &DmgApWifiMac::StartContentionPeriod, this, BROADCAST_CBAP, m_dtiDuration - endRx);
+            }
+
 //        }
     }
   else
     {
+      /* Check if there is currently a reception on the PHY layer */
+      Time endRx = StaticCast<DmgWifiPhy> (m_phy)->GetDelayUntilEndRx ();
       AllocationField field;
       for (AllocationFieldList::iterator iter = m_allocationList.begin (); iter != m_allocationList.end (); iter++)
         {
           (*iter).SetAllocationAnnounced ();
           field = (*iter);
+          Time spStartNew = MicroSeconds (field.GetAllocationStart ());
+          Time spLengthNew = MicroSeconds (field.GetAllocationBlockDuration ());
+          /* Check if there is an ongoing reception when the allocation period will start - based on information
+           * from the PHY abut current receptions. if the PHY will still be receiving when the allocation
+           * starts, delay the start until the reception is finished and shorten the duration so that the end time
+           * remains the same */
+          /**
+            * Note NINA: Temporary solution for when we are in the middle of receiving a packet from a station
+            * from another BSS when a service period is supposed to start. The standard is not clear about whether
+            * we end the reception or finish it. For now, the reception is completed and the service period will start
+            * after the end of the reception (it will still finish at the same time and have a reduced duration).
+            */
+          if (spStartNew < endRx)
+            {
+              if (spStartNew + spLengthNew < endRx)
+                {
+                  spLengthNew = NanoSeconds (0);
+                }
+              else
+                {
+                  spLengthNew = spLengthNew - (endRx - spStartNew);
+                }
+              spStartNew = endRx;
+            }
           if (field.GetAllocationType () == SERVICE_PERIOD_ALLOCATION)
             {
               Time spStart = MicroSeconds (field.GetAllocationStart ());
@@ -1364,8 +1787,8 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
                   Mac48Address destAddress = m_aidMap[destAid];
                   if (field.GetBfControl ().IsBeamformTraining ())
                     {
-                      Simulator::Schedule (spStart, &DmgApWifiMac::StartBeamformingTraining, this, destAid, destAddress, true,
-                                           field.GetBfControl ().IsInitiatorTxss (), field.GetBfControl ().IsResponderTxss (), spLength);
+                      Simulator::Schedule (spStartNew, &DmgApWifiMac::StartBeamformingTraining, this, destAid, destAddress, true,
+                                           field.GetBfControl ().IsInitiatorTXSS (), field.GetBfControl ().IsResponderTXSS (), spLengthNew);
                     }
                   else
                     {
@@ -1393,7 +1816,7 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
                    * of service periods (Polling) */
                   if (m_initiateDynamicAllocation)
                     {
-                      Simulator::Schedule (spStart, &DmgApWifiMac::InitiatePollingPeriod, this, spLength);
+                      Simulator::Schedule (spStartNew, &DmgApWifiMac::InitiatePollingPeriod, this, spLengthNew);
                     }
                   else
                     {
@@ -1407,8 +1830,8 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
                   Mac48Address sourceAddress = m_aidMap[sourceAid];
                   if (field.GetBfControl ().IsBeamformTraining ())
                     {
-                      Simulator::Schedule (spStart, &DmgWifiMac::StartBeamformingTraining, this, sourceAid, sourceAddress, false,
-                                           field.GetBfControl ().IsInitiatorTxss (), field.GetBfControl ().IsResponderTxss (), spLength);
+                      Simulator::Schedule (spStartNew, &DmgWifiMac::StartBeamformingTraining, this, sourceAid, sourceAddress, false,
+                                           field.GetBfControl ().IsInitiatorTXSS (), field.GetBfControl ().IsResponderTXSS (), spLengthNew);
                     }
                   else
                     {
@@ -1421,11 +1844,14 @@ DmgApWifiMac::StartDataTransmissionInterval (void)
                   ((field.GetSourceAid () == AID_BROADCAST) || (field.GetSourceAid () == AID_AP) || (field.GetDestinationAid () == AID_AP)))
 
             {
-              Simulator::Schedule (MicroSeconds (field.GetAllocationStart ()), &DmgApWifiMac::StartContentionPeriod, this,
-                                   field.GetAllocationID (), MicroSeconds (field.GetAllocationBlockDuration ()));
+              Simulator::Schedule (spStartNew, &DmgApWifiMac::StartContentionPeriod, this,
+                                   field.GetAllocationID (), spLengthNew);
             }
         }
     }
+
+  /* Raise a callback that we have started DTI */
+  m_dtiStarted (GetAddress (), m_dtiDuration);
 }
 
 /**
@@ -1692,7 +2118,7 @@ DmgApWifiMac::SendAnnounceFrame (Mac48Address to)
   packet->AddHeader (announceHdr);
   packet->AddHeader (actionHdr);
 
-  m_dmgAtiDca->Queue (packet, hdr);
+  m_dmgAtiTxop->Queue (packet, hdr);
 }
 
 /* Spatial Sharing and interference assessment Functions */
@@ -1724,23 +2150,25 @@ DmgApWifiMac::SendDirectionalChannelQualityRequest (Mac48Address to, uint16_t nu
   packet->AddHeader (requestHdr);
   packet->AddHeader (actionHdr);
 
-  m_dca->Queue (packet, hdr);
+  m_txop->Queue (packet, hdr);
 }
 
 void
 DmgApWifiMac::TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr)
 {
   NS_LOG_FUNCTION (this);
+  /* For receive beam steering */
   if (m_currentAllocation == CBAP_ALLOCATION)
     {
-      /* After transmitting a packet successfully, the PCP/AP returns to the quasi-omni receive mode */
+      /* After transmitting a packet successfully, the DMG PCP/AP returns to the quasi-omni receive mode */
       m_codebook->SetReceivingInQuasiOmniMode ();
     }
   /* For association */
   if (hdr.IsAssocResp () && m_stationManager->IsWaitAssocTxOk (hdr.GetAddr1 ()))
     {
-      NS_LOG_DEBUG ("associated with sta=" << hdr.GetAddr1 ());
-      m_stationManager->RecordGotAssocTxOk (hdr.GetAddr1 ());
+      NS_LOG_DEBUG ("Associated with DMG STA=" << hdr.GetAddr1 ());
+      uint8_t aid = m_stationManager->RecordGotAssocTxOk (hdr.GetAddr1 ());
+      m_assocLogger (hdr.GetAddr1 (), aid);
     }
   DmgWifiMac::TxOk (packet, hdr);
 }
@@ -1853,9 +2281,12 @@ DmgApWifiMac::StartSynBeaconInterval (void)
 }
 
 void
-DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
+DmgApWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
 {
-  NS_LOG_FUNCTION (this << packet << hdr);
+  NS_LOG_FUNCTION (this << *mpdu);
+
+  const WifiMacHeader* hdr = &mpdu->GetHeader ();
+  Ptr<Packet> packet = mpdu->GetPacket ()->Copy ();
   Mac48Address from = hdr->GetAddr2 ();
 
   if (hdr->IsData ())
@@ -1869,25 +2300,25 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
           Mac48Address to = hdr->GetAddr3 ();
           if (to == GetAddress ())
             {
-              if (hdr->IsQosData())
+              if (hdr->IsQosData ())
                 {
-                  if (hdr->IsQosAmsdu())
+                  if (hdr->IsQosAmsdu ())
                     {
                       NS_LOG_DEBUG ("Received A-MSDU from=" << from << ", size=" << packet->GetSize ());
-                      DeaggregateAmsduAndForward (packet, hdr);
+                      DeaggregateAmsduAndForward (mpdu);
                       packet = 0;
                     }
                   else
                     {
-                      ForwardUp(packet, from, bssid);
+                      ForwardUp (packet, from, bssid);
                     }
                 }
               else
                 {
-                  ForwardUp(packet, from, bssid);
+                  ForwardUp (packet, from, bssid);
                 }
             }
-          else if (to.IsGroup() || m_stationManager->IsAssociated(to))
+          else if (to.IsGroup () || m_stationManager->IsAssociated (to))
             {
               NS_LOG_DEBUG ("forwarding frame from=" << from << ", to=" << to);
               Ptr<Packet> copy = packet->Copy ();
@@ -1910,11 +2341,11 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
               ForwardUp (packet, from, to);
             }
         }
-      else if (hdr->IsFromDs() && hdr->IsToDs())
+      else if (hdr->IsFromDs () && hdr->IsToDs ())
         {
           // this is an AP-to-AP frame
           // we ignore for now.
-          NotifyRxDrop(packet);
+          NotifyRxDrop (packet);
         }
       else
         {
@@ -1964,7 +2395,7 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 
                   DMG_SSW_Field ssw = sswFrame.GetSswField ();
                   /* Map the antenna Tx configuration for the frame received by SLS of the DMG-STA */
-                  MapTxSnr (from, ssw.GetSectorID (), ssw.GetDMGAntennaID (), m_stationManager->GetRxSnr ());
+                  MapTxSnr (from, ssw.GetDMGAntennaID (), ssw.GetSectorID (), m_stationManager->GetRxSnr ());
 
                   /* If we receive one SSW Frame at least, then we schedule SSW-FBCK frame */
                   if (!m_sectorFeedbackSchedulled)
@@ -1976,13 +2407,14 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                       sswFeedback.IsPartOfISS (false);
 
                       /* The Sector Sweep Frame contains feedback about the the best Tx Sector in the DMG-AP with the sending DMG-STA */
-                      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (sswFeedback.GetSector (), sswFeedback.GetDMGAntenna ());
+                      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (sswFeedback.GetDMGAntenna (), sswFeedback.GetSector ());
                       ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (NO_ANTENNA_CONFIG, NO_ANTENNA_CONFIG);
-                      m_bestAntennaConfig[hdr->GetAddr2 ()] = std::make_pair (antennaConfigTx, antennaConfigRx);
+                      m_bestAntennaConfig[hdr->GetAddr2 ()] =
+                          std::make_tuple (antennaConfigTx, antennaConfigRx, sswFeedback.GetSNRReport ());
 
                       NS_LOG_INFO ("Best TX Antenna Sector Config by this DMG AP to DMG STA=" << from
-                                   << ": SectorID=" << static_cast<uint16_t> (antennaConfigTx.first)
-                                   << ", AntennaID=" << static_cast<uint16_t> (antennaConfigTx.second));
+                                   << ": AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
+                                   << ", SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
 
                       /* Indicate this DMG-STA as waiting for Beam Refinement Phase */
                       m_stationBrpMap[from] = true;
@@ -2007,6 +2439,16 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
     {
       NS_LOG_LOGIC ("Responder: Received SSW-FBCK frame from=" << hdr->GetAddr2 ());
 
+      if (m_performingBFT && (m_peerStationAddress != hdr->GetAddr2 ()))
+        {
+          NS_LOG_LOGIC ("Responder: Received SSW-FBCK frame from different initiator, so ignore it");
+          return;
+        }
+
+      /* As this might be a retry SSW-FBCK frame, we need to infrom the MacLow that we are serving SLS
+       * Need to check why MacLow receive eventhough we set the NAV duration correctly */
+      m_low->SLS_Phase_Started ();
+
       /* We are the SLS Respodner */
       CtrlDMG_SSW_FBCK fbck;
       packet->RemoveHeader (fbck);
@@ -2019,18 +2461,24 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
       sswFeedback.IsPartOfISS (false);
 
       /* Record best antenna configuration */
-      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (sswFeedback.GetSector (), sswFeedback.GetDMGAntenna ());
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::make_pair (sswFeedback.GetDMGAntenna (), sswFeedback.GetSector ());
       ANTENNA_CONFIGURATION_RX antennaConfigRx = std::make_pair (NO_ANTENNA_CONFIG, NO_ANTENNA_CONFIG);
-      m_bestAntennaConfig[hdr->GetAddr2 ()] = std::make_pair (antennaConfigTx, antennaConfigRx);
+      m_bestAntennaConfig[hdr->GetAddr2 ()] = std::make_tuple (antennaConfigTx, antennaConfigRx, sswFeedback.GetSNRReport ());
 
       /* We add the station to the list of the stations we can directly communicate with */
       AddForwardingEntry (hdr->GetAddr2 ());
 
+      /* Cancel SSW-FBCK timeout */
+      m_sswFbckTimeout.Cancel ();
+
       NS_LOG_LOGIC ("Best TX Antenna Config by this DMG STA to DMG STA=" << hdr->GetAddr2 ()
-                    << ": SectorID=" << static_cast<uint16_t> (antennaConfigTx.first)
-                    << ", AntennaID=" << static_cast<uint16_t> (antennaConfigTx.second));
-      NS_LOG_LOGIC ("Scheduled SSW-ACK Frame to " << hdr->GetAddr2 () << " at " << Simulator::Now () + m_mbifs);
+                    << ": AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
+                    << ", SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
+      NS_LOG_LOGIC ("Scheduled SSW-ACK Frame to " << hdr->GetAddr2 () << " at " << Simulator::Now () + GetMbifs ());
       Simulator::Schedule (GetMbifs (), &DmgApWifiMac::SendSswAckFrame, this, hdr->GetAddr2 (), hdr->GetDuration ());
+
+      /* Change State as we received SSW-FBCK within DTI for DMG PCP/AP */
+      m_slsResponderStateMachine = SLS_RESPONDER_TXSS_PHASE_PRECOMPLETE;
 
       return;
     }
@@ -2081,7 +2529,7 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 //                      = StaticCast<DmgOperationElement> (beacon.GetInformationElement (IE_DMG_OPERATION));
 
                   /* Next DMG ATI Element */
-                  Ptr<NextDmgAti> atiElement = StaticCast<NextDmgAti> (beacon.GetInformationElement (IE_NEXT_DMG_ATI));
+                  Ptr<NextDmgAti> atiElement = StaticCast<NextDmgAti> (beacon.GetInformationElement (std::make_pair(IE_NEXT_DMG_ATI,0)));
                   Time atiDuration (0);
                   if (atiElement != 0)
                     {
@@ -2133,7 +2581,7 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
     {
       if (hdr->IsProbeReq ())
         {
-          NS_ASSERT(hdr->GetAddr1 ().IsBroadcast ());
+          NS_ASSERT (hdr->GetAddr1 ().IsBroadcast ());
           SendProbeResp (from);
           return;
         }
@@ -2163,38 +2611,64 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                   uint16_t aid = SendAssocResp (hdr->GetAddr2 (), true);
 
                   /* Inform the Remote Station Manager that assoication is OK */
-                  m_stationManager->RecordWaitAssocTxOk (from);
-                  m_assocLogger (hdr->GetAddr2 (), aid);
+                  m_stationManager->RecordWaitAssocTxOk (from, aid);
 
                   /* Record DMG STA Information */
                   WifiInformationElementMap infoMap = assocReq.GetListOfInformationElement ();
 
                   /** Record DMG STA Capabilities **/
                   /* Set AID of the station */
-                  Ptr<DmgCapabilities> capabilities = StaticCast<DmgCapabilities> (infoMap[IE_DMG_CAPABILITIES]);
+                  Ptr<DmgCapabilities> capabilities = StaticCast<DmgCapabilities> (infoMap[std::make_pair(IE_DMG_CAPABILITIES,0)]);
                   capabilities->SetAID (aid & 0xFF);
                   m_associatedStationsInfoByAddress[from] = infoMap;
                   m_associatedStationsInfoByAid[aid] = infoMap;
                   MapAidToMacAddress (aid, hdr->GetAddr2 ());
 
-                  /* Record MCS1-4 as mandatory modes for data communication */
+                  /* Record DMG SC MCSs (1-4) as mandatory modes for data communication */
                   AddMcsSupport (from, 1, 4);
-                  /* Record SC MCS range */
+                  /* Record SC MCSs range */
                   AddMcsSupport (from, 5, capabilities->GetMaximumScTxMcs ());
-                  /* Record OFDM MCS range */
-                  if (capabilities->GetMaximumOfdmTxMcs () != 0)
+                  /* Record OFDM MCSs range */
+                  if ((GetDmgWifiPhy ()->GetSupportOfdmPhy ()) && (capabilities->GetMaximumOfdmTxMcs () != 0))
                     {
                       AddMcsSupport (from, 13, capabilities->GetMaximumOfdmTxMcs ());
                     }
+
                   /* Record DMG Capabilities */
                   StationInformation information;
                   information.first = capabilities;
                   m_informationMap[hdr->GetAddr2 ()] = information;
                   m_stationManager->AddStationDmgCapabilities (hdr->GetAddr2 (), capabilities);
 
+                  /** Record EDMG Capabilities if 802.11ay is supported **/
+                  if (m_isEdmgSupported)
+                    {
+                      Ptr<EdmgCapabilities> edmgCapabilities =
+                          StaticCast<EdmgCapabilities> (infoMap[std::make_pair (IE_EXTENSION, IE_EXTENSION_EDMG_CAPABILITIES)]);
+                      if (edmgCapabilities != 0)
+                        {
+                          /* Record Modes for data Communication according to the EDMG capabilities field */
+                          // record
+                          m_stationManager->RemoveAllSupportedModes (from);
+                          /* Record MCS1-4 as mandatory modes for data communication */
+                          AddMcsSupport (from, 1, 4);
+                          /* Record SC MCS range */
+                          AddMcsSupport (from, 5, edmgCapabilities->GetMaximumScMcs ());
+                          /* Record OFDM MCS range */
+                          if ((GetDmgWifiPhy ()->GetSupportOfdmPhy ()) && (edmgCapabilities->GetMaximumOfdmMcs () != 0))
+                            {
+                              AddMcsSupport (from, 22, edmgCapabilities->GetMaximumOfdmMcs () + 21);
+                            }
+                          EdmgStationInformation information;
+                          information.first = edmgCapabilities;
+                          m_edmgInformationMap[hdr->GetAddr2 ()] = information;
+                          m_stationManager->AddStationEdmgCapabilities (hdr->GetAddr2 (), edmgCapabilities);
+                        }
+                    }
+
                   /** Check Relay Capabilities **/
                   Ptr<RelayCapabilitiesElement> relayElement =
-                      DynamicCast<RelayCapabilitiesElement> (assocReq.GetInformationElement (IE_RELAY_CAPABILITIES));
+                      DynamicCast<RelayCapabilitiesElement> (assocReq.GetInformationElement (std::make_pair(IE_RELAY_CAPABILITIES,0)));
 
                   /* Check if the DMG STA supports RDS */
                   if ((relayElement != 0) && (relayElement->GetRelayCapabilitiesInfo ().GetRelaySupportability ()))
@@ -2205,7 +2679,7 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 
                   /* Check if the DMG STA can participate in polling phase */
                   Ptr<StaAvailabilityElement> availabilityElement =
-                      DynamicCast<StaAvailabilityElement> (assocReq.GetInformationElement (IE_STA_AVAILABILITY));
+                      DynamicCast<StaAvailabilityElement> (assocReq.GetInformationElement (std::make_pair(IE_STA_AVAILABILITY,0)));
                   if (availabilityElement)
                     {
                       StaInfoField field = availabilityElement->GetStaInfoField ();
@@ -2295,7 +2769,7 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                       }
                     default:
                       packet->AddHeader (actionHdr);
-                      DmgWifiMac::Receive (packet, hdr);
+                      DmgWifiMac::Receive (mpdu);
                       return;
                     }
 
@@ -2312,12 +2786,12 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
 
                         /* Send Unsolicited Relay Search Response to the destination */
                         Ptr<DmgCapabilities> dmgCapabilities = StaticCast<DmgCapabilities>
-                            (m_associatedStationsInfoByAid[requestHdr.GetDestinationRedsAid ()][IE_DMG_CAPABILITIES]);
+                            (m_associatedStationsInfoByAid[requestHdr.GetDestinationRedsAid ()][std::make_pair(IE_DMG_CAPABILITIES,0)]);
                         SendRelaySearchResponse (dmgCapabilities->GetStaAddress (), requestHdr.GetDialogToken ());
 
-                         /* Get Source REDS DMG Capabilities */
+                        /* Get Source REDS DMG Capabilities */
                         Ptr<DmgCapabilities> srcDmgCapabilities = StaticCast<DmgCapabilities>
-                            (m_associatedStationsInfoByAddress[hdr->GetAddr2 ()][IE_DMG_CAPABILITIES]);
+                            (m_associatedStationsInfoByAddress[hdr->GetAddr2 ()][std::make_pair(IE_DMG_CAPABILITIES,0)]);
 
                         /* The PCP/AP should schedule two SPs for each RDS in the response */
                         uint32_t allocationStart = 0;
@@ -2371,7 +2845,7 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                           {
                             if ((iter->first != from) && (iter->first != subjectAddress))
                               {
-                                responseHdr.AddDmgCapabilitiesElement (StaticCast<DmgCapabilities> (iter->second[IE_DMG_CAPABILITIES]));
+                                responseHdr.AddDmgCapabilitiesElement (StaticCast<DmgCapabilities> (iter->second[std::make_pair(IE_DMG_CAPABILITIES,0)]));
                               }
                           }
 
@@ -2403,50 +2877,127 @@ DmgApWifiMac::Receive (Ptr<Packet> packet, const WifiMacHeader *hdr)
                         SendInformationResponse (from, responseHdr);
                         return;
                       }
+                    case WifiActionHeader::DMG_INFORMATION_RESPONSE:
+                      {
+                        ExtInformationResponse responseHdr;
+                        packet->RemoveHeader (responseHdr);
+
+                        /* Record the Information Obtained */
+                        Mac48Address stationAddress = responseHdr.GetSubjectAddress ();
+
+                        /* If this field is set to the broadcast address, then the STA is providing
+                         * information regarding all associated STAs.*/
+                        if (stationAddress.IsBroadcast ())
+                          {
+                            NS_LOG_LOGIC ("Received DMG Information Response frame regarding all DMG STAs in the DMG BSS.");
+                          }
+                        else if (stationAddress == GetAddress ())
+                          {
+                            NS_LOG_LOGIC ("Received Unsolicited Information Response with update on Best TX Configuration");
+                          }
+                        else
+                          {
+                            NS_LOG_LOGIC ("Received DMG Information Response frame regarding DMG STA: " << stationAddress);
+                          }
+
+
+                        /* Store all the DMG Capabilities */
+                        DmgCapabilitiesList dmgCapabilitiesList = responseHdr.GetDmgCapabilitiesList ();
+                        for (DmgCapabilitiesListI iter = dmgCapabilitiesList.begin (); iter != dmgCapabilitiesList.end (); iter++)
+                          {
+                            InformationMapIterator infoIter = m_informationMap.find ((*iter)->GetStaAddress ());
+                            if (infoIter != m_informationMap.end ())
+                              {
+                                StationInformation *information = &(infoIter->second);
+                                information->first = *iter;
+                              }
+                            else
+                              {
+                                StationInformation information;
+                                information.first = *iter;
+                                m_informationMap[(*iter)->GetStaAddress ()] = information;
+                                MapAidToMacAddress ((*iter)->GetAID (), (*iter)->GetStaAddress ());
+                              }
+                          }
+
+                        /* Get the Beam Refinement, Channel Measurement Feedback and EDMG Channel Measurement Feedback elements from the response. */
+
+                        Ptr<BeamRefinementElement> beamElement = responseHdr.GetBeamRefinementElement ();
+                        Ptr<ChannelMeasurementFeedbackElement> channelElement = responseHdr.GetChannelMeasurementElement ();
+                        Ptr<EDMGChannelMeasurementFeedbackElement> edmgChannelElement = responseHdr.GetEDMGChannelMeasurementElement ();
+                        if (beamElement->GetExtendedNumberOfMeasurements () != 0 )
+                          {
+                            /* Find the best SNR sent */
+                            SNR_INT_LIST list = channelElement->GetSnrList ();
+                            SNR_INT snr = list.front ();
+                            int highIndex = 0;
+                            for (uint8_t i=0; i < list.size(); i++ )
+                              {
+                                if (snr < list[i])
+                                  {
+                                    snr = list[i];
+                                    highIndex = i;
+                                  }
+                              }
+                            /* Find the Antenna Configuration associated with the highest SNR */
+                            EDMGSectorIDOrder_List sectorList = edmgChannelElement->Get_EDMG_SectorIDOrder_List ();
+                            EDMGSectorIDOrder bestOrder = sectorList[highIndex];
+                            /* Update the best Tx Configuration for that STA */
+                            ANTENNA_CONFIGURATION_TX newConfig = std::make_pair(bestOrder.TXAntennaID, bestOrder.SectorID);
+                            UpdateBestTxAntennaConfiguration (from, newConfig, MapIntToSnr (snr));
+                            if (m_antennaPatternReciprocity)
+                              {
+                                UpdateBestRxAntennaConfiguration (from, newConfig, MapIntToSnr(snr));
+                              }
+                          }
+                        return;
+                      }
                     default:
                       packet->AddHeader (actionHdr);
-                      DmgWifiMac::Receive (packet, hdr);
+                      DmgWifiMac::Receive (mpdu);
                       return;
                     }
-
                 default:
                   packet->AddHeader (actionHdr);
-                  DmgWifiMac::Receive (packet, hdr);
+                  DmgWifiMac::Receive (mpdu);
                   return;
                 }
             }
           else if (hdr->IsActionNoAck ())
             {
-              DmgWifiMac::Receive (packet, hdr);
+              DmgWifiMac::Receive (mpdu);
               return;
             }
         }
+      // During MU MIMO BFT, in the MIMO phase, BRP packets are send with both the TA and RA addresses set to the initiator address
+      else if (GetDmgWifiPhy ()->GetMuMimoBeamformingTraining () && (hdr->GetAddr1 () == hdr->GetAddr2 ()))
+        {
+          DmgWifiMac::Receive (mpdu);
+        }
       return;
     }
-  DmgWifiMac::Receive (packet, hdr);
+  DmgWifiMac::Receive (mpdu);
 }
 
 void
-DmgApWifiMac::DeaggregateAmsduAndForward (Ptr<Packet> aggregatedPacket, const WifiMacHeader *hdr)
+DmgApWifiMac::DeaggregateAmsduAndForward (Ptr<WifiMacQueueItem> mpdu)
 {
-  NS_LOG_FUNCTION (this << aggregatedPacket << hdr);
-  MsduAggregator::DeaggregatedMsdus packets =
-  MsduAggregator::Deaggregate (aggregatedPacket);
-
-  for (MsduAggregator::DeaggregatedMsdusCI i = packets.begin (); i != packets.end (); ++i)
-  {
-    if ((*i).second.GetDestinationAddr () == GetAddress ())
-      {
-        ForwardUp ((*i).first, (*i).second.GetSourceAddr (), (*i).second.GetDestinationAddr ());
-      }
-    else
-      {
-        Mac48Address from = (*i).second.GetSourceAddr ();
-        Mac48Address to = (*i).second.GetDestinationAddr ();
-        NS_LOG_DEBUG ("forwarding QoS frame from=" << from << ", to=" << to);
-        ForwardDown ((*i).first, from, to, hdr->GetQosTid ());
-      }
-  }
+  NS_LOG_FUNCTION (this << *mpdu);
+  for (auto& i : *PeekPointer (mpdu))
+    {
+      if (i.second.GetDestinationAddr () == GetAddress ())
+        {
+          ForwardUp (i.first, i.second.GetSourceAddr (),
+                     i.second.GetDestinationAddr ());
+        }
+      else
+        {
+          Mac48Address from = i.second.GetSourceAddr ();
+          Mac48Address to = i.second.GetDestinationAddr ();
+          NS_LOG_DEBUG ("forwarding QoS frame from=" << from << ", to=" << to);
+          ForwardDown (i.first->Copy (), from, to, mpdu->GetHeader ().GetQosTid ());
+        }
+    }
 }
 
 void
@@ -2470,16 +3021,22 @@ DmgApWifiMac::DoInitialize (void)
 {
   NS_LOG_FUNCTION (this);
   m_beaconEvent.Cancel ();
-  m_beaconDca->Initialize ();
+  m_beaconTxop->Initialize ();
 
   /* Calculate A-BFT Duration (Constant during the entire simulation) */
   m_abftDuration = m_ssSlotsPerABFT * GetSectorSweepSlotTime (m_ssFramesPerSlot);
 
+  /* Initialize schedule for TRN-R subfields in PPDUs with DMG Beacons */
+  if (m_isEdmgSupported && m_groupTraining)
+    {
+      m_nextBtiWithTrn = m_trnScheduleInterval - 1;
+    }
+
+  /* Set Beacon randomization flag*/
+  m_codebook->RandomizeBeacon (m_beaconRandomization);
+
   /* Initialize Upper layers */
   DmgWifiMac::DoInitialize ();
-
-  /* Initialzie Codebook */
-  m_codebook->InitializeCodebook ();
 
   /* Decentralzied Clustering */
   if (m_enableDecentralizedClustering)
@@ -2502,6 +3059,7 @@ DmgApWifiMac::DoInitialize (void)
           Simulator::ScheduleNow (&DmgApWifiMac::StartBeaconInterval, this);
         }
     }
+  StaticCast<DmgWifiPhy> (m_phy)->SetIsAP (true);
 }
 
 uint16_t

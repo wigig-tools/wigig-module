@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -9,13 +9,13 @@
 #include "ns3/network-module.h"
 #include "ns3/wifi-module.h"
 #include "common-functions.h"
-#include <string>
-#include <complex>
+#include <iomanip>
 
 /**
  * Simulation Objective:
- * This script is used to compare the performance of the channel access schemes in IEEE 802.11ad.
+ * Compare the performance of the channel access schemes in IEEE 802.11ad/ay standards.
  * Basically, the simulation compares the achievable throughput between CSMA/CA and SP allocations.
+ * Thw two devices support DMG/EDMG SC and OFDM PHY layers.
  *
  * Network Topology:
  * The scenario consists of signle DMG STA and single PCP/AP.
@@ -23,12 +23,12 @@
  *          DMG PCP/AP (0,0)                       DMG STA (+1,0)
  *
  * Simulation Description:
- * In thet case of CSMA/CA access period, the whole DTI access period is allocated as CBAP. Whereas in
- * SP applocations, once the DMG STA has assoicated successfully with the PCP/AP. The PCP/AP allocates the
+ * In the case of CSMA/CA access period, the whole DTI access period is allocated as CBAP. Whereas in the
+ * of SP allocation, once the DMG STA has assoicated successfully with the PCP/AP. The PCP/AP allocates the
  * whole DTI as SP allocation.
  *
  * Running Simulation:
- * To evaluate CSMA/CA channel access scheme:
+ * To evaluate CSMA/CA channel access scheme using the IEEE 802.11ad standard:
  * ./waf --run "compare_access_schemes --scheme=1 --simulationTime=10 --pcap=true"
  *
  * To evaluate Service Period (SP) channel access scheme:
@@ -37,6 +37,7 @@
  * Simulation Output:
  * The simulation generates the following traces:
  * 1. PCAP traces for each station.
+ * 2. The achieved throughput during a window of 100 ms.
  */
 
 NS_LOG_COMPONENT_DEFINE ("CompareAccessSchemes");
@@ -52,30 +53,20 @@ Ptr<PacketSink> packetSink;
 /* Network Nodes */
 Ptr<Node> apWifiNode;
 Ptr<Node> staWifiNode;
-
 Ptr<WifiNetDevice> apWifiNetDevice;
 Ptr<WifiNetDevice> staWifiNetDevice;
-
 Ptr<DmgApWifiMac> apWifiMac;
 Ptr<DmgStaWifiMac> staWifiMac;
 
 /* Access Period Parameters */
-uint32_t allocationType = 1;               /* The type of channel access scheme during DTI (CBAP is the default) */
-
-double
-CalculateSingleStreamThroughput (Ptr<PacketSink> sink, uint64_t &lastTotalRx, double &averageThroughput)
-{
-  double thr = (sink->GetTotalRx() - lastTotalRx) * (double) 8/1e5;     /* Convert Application RX Packets to MBits. */
-  lastTotalRx = sink->GetTotalRx ();
-  averageThroughput += thr;
-  return thr;
-}
+uint32_t allocationType = CBAP_ALLOCATION;      /* The type of channel access scheme during DTI (CBAP is the default). */
 
 void
 CalculateThroughput (void)
 {
   double thr = CalculateSingleStreamThroughput (packetSink, totalRx, throughput);
-  std::cout << Simulator::Now ().GetSeconds () << '\t' << thr << std::endl;
+  std::cout << std::left << std::setw (12) << Simulator::Now ().GetSeconds ()
+            << std::left << std::setw (12) << thr << std::endl;
   Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
 }
 
@@ -92,39 +83,64 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t
 }
 
 int
-main(int argc, char *argv[])
+main (int argc, char *argv[])
 {
   uint32_t payloadSize = 1472;                  /* Application payload size in bytes. */
   string dataRate = "300Mbps";                  /* Application data rate. */
-  uint32_t msduAggregationSize = 7935;          /* The maximum aggregation size for A-MSDU in Bytes. */
-  uint32_t mpduAggregationSize = 262143;        /* The maximum aggregation size for A-MSPU in Bytes. */
-  uint32_t queueSize = 1000;                    /* Wifi MAC Queue Size. */
+  string msduAggSize = "max";                   /* The maximum aggregation size for A-MSDU in Bytes. */
+  string mpduAggSize = "max";                   /* The maximum aggregation size for A-MPDU in Bytes. */
+  bool enableRts = false;                       /* Flag to indicate if RTS/CTS handskahre is enabled or disabled. */
+  uint32_t rtsThreshold = 0;                    /* RTS/CTS handshare threshold. */
+  string queueSize = "4000p";                   /* Wifi MAC Queue Size. */
   string phyMode = "DMG_MCS12";                 /* Type of the Physical Layer. */
+  string standard = "ad";                       /* The WiGig standard being utilized (ad/ay). */
   bool verbose = false;                         /* Print Logging Information. */
   double simulationTime = 10;                   /* Simulation time in seconds. */
   bool pcapTracing = false;                     /* PCAP Tracing is enabled. */
+  uint32_t snapshotLength = std::numeric_limits<uint32_t>::max (); /* The maximum PCAP Snapshot Length. */
 
   /* Command line argument parser setup. */
   CommandLine cmd;
   cmd.AddValue ("payloadSize", "Application payload size in bytes", payloadSize);
   cmd.AddValue ("dataRate", "Application data rate", dataRate);
-  cmd.AddValue ("msduAggregation", "The maximum aggregation size for A-MSDU in Bytes", msduAggregationSize);
-  cmd.AddValue ("mpduAggregation", "The maximum aggregation size for A-MPDU in Bytes", mpduAggregationSize);
+  cmd.AddValue ("msduAggSize", "The maximum aggregation size for A-MSDU in Bytes", msduAggSize);
+  cmd.AddValue ("mpduAggSize", "The maximum aggregation size for A-MPDU in Bytes", mpduAggSize);
+  cmd.AddValue ("scheme", "The access scheme used for channel access (0: SP allocation, 1: CBAP allocation)", allocationType);
+  cmd.AddValue ("enableRts", "Enable or disable RTS/CTS handshake", enableRts);
+  cmd.AddValue ("rtsThreshold", "The RTS/CTS threshold value", rtsThreshold);
   cmd.AddValue ("queueSize", "The maximum size of the Wifi MAC Queue", queueSize);
-  cmd.AddValue ("scheme", "The access scheme used for channel access (0=SP,1=CBAP)", allocationType);
-  cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
+  cmd.AddValue ("phyMode", "The WiGig PHY Mode", phyMode);
+  cmd.AddValue ("standard", "The WiGig standard being utilized (ad/ay)", standard);
   cmd.AddValue ("verbose", "Turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
+  cmd.AddValue ("snapshotLength", "The maximum PCAP snapshot length", snapshotLength);
   cmd.Parse (argc, argv);
 
-  /* Global params: no fragmentation, no RTS/CTS, fixed rate for all packets */
-  Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("999999"));
-  Config::SetDefault ("ns3::QueueBase::MaxPackets", UintegerValue (queueSize));
+  /* Validate WiGig standard value */
+  WifiPhyStandard wifiStandard = WIFI_PHY_STANDARD_80211ad;
+  if (standard == "ad")
+    {
+      wifiStandard = WIFI_PHY_STANDARD_80211ad;
+    }
+  else if (standard == "ay")
+    {
+      wifiStandard = WIFI_PHY_STANDARD_80211ay;
+    }
+  else
+    {
+      NS_FATAL_ERROR ("Wrong WiGig standard");
+    }
+  /* Validate A-MSDU and A-MPDU values */
+  ValidateFrameAggregationAttributes (msduAggSize, mpduAggSize, wifiStandard);
+  /* Configure RTS/CTS and Fragmentation */
+  ConfigureRtsCtsAndFragmenatation (enableRts, rtsThreshold);
+  /* Wifi MAC Queue Parameters */
+  ChangeQueueSize (queueSize);
 
   /**** WifiHelper is a meta-helper: it helps creates helpers ****/
   DmgWifiHelper wifi;
+  wifi.SetStandard (wifiStandard);
 
   /* Turn on logging */
   if (verbose)
@@ -150,9 +166,14 @@ main(int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
+  /* Add support for the OFDM PHY */
+  wifiPhy.Set ("SupportOfdmPhy", BooleanValue (true));
+  if (standard == "ay")
+    {
+      /* Set the correct error model */
+      wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
+                                 "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458_ay.txt"));
+    }
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));
 
@@ -168,11 +189,11 @@ main(int argc, char *argv[])
   Ssid ssid = Ssid ("Compare");
   wifiMac.SetType ("ns3::DmgApWifiMac",
                    "Ssid", SsidValue(ssid),
-                   "BE_MaxAmpduSize", UintegerValue (mpduAggregationSize),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize),
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize),
                    "SSSlotsPerABFT", UintegerValue (8), "SSFramesPerSlot", UintegerValue (8),
                    "BeaconInterval", TimeValue (MicroSeconds (102400)),
-                   "ATIPresent", BooleanValue (false));
+                   "EDMGSupported", BooleanValue ((standard == "ay")));
 
   /* Set Analytical Codebook for the DMG Devices */
   wifi.SetCodebook ("ns3::CodebookAnalytical",
@@ -186,8 +207,9 @@ main(int argc, char *argv[])
 
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),
-                   "BE_MaxAmpduSize", UintegerValue (mpduAggregationSize),
-                   "BE_MaxAmsduSize", UintegerValue (msduAggregationSize));
+                   "BE_MaxAmpduSize", StringValue (mpduAggSize),
+                   "BE_MaxAmsduSize", StringValue (msduAggSize),
+                   "EDMGSupported", BooleanValue ((standard == "ay")));
 
   NetDeviceContainer staDevice;
   staDevice = wifi.Install (wifiPhy, wifiMac, staWifiNode);
@@ -228,7 +250,7 @@ main(int argc, char *argv[])
   /* Install UDP Transmitter on the DMG STA */
   ApplicationContainer srcApp;
   OnOffHelper src ("ns3::UdpSocketFactory", InetSocketAddress (apInterface.GetAddress (0), 9999));
-  src.SetAttribute ("MaxBytes", UintegerValue (0));
+  src.SetAttribute ("MaxPackets", UintegerValue (0));
   src.SetAttribute ("PacketSize", UintegerValue (payloadSize));
   src.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1e6]"));
   src.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
@@ -241,6 +263,7 @@ main(int argc, char *argv[])
   if (pcapTracing)
     {
       wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+
       wifiPhy.EnablePcap ("Traces/AccessPoint", apDevice, false);
       wifiPhy.EnablePcap ("Traces/Station", staDevice, false);
     }
@@ -255,18 +278,27 @@ main(int argc, char *argv[])
   staWifiMac->TraceConnectWithoutContext ("Assoc", MakeBoundCallback (&StationAssoicated, staWifiMac));
 
   /* Print Output*/
-  std::cout << "Time [s]" << '\t' << "Throughput [Mbps]" << std::endl;
+  std::cout << std::left << std::setw (12) << "Time [s]"
+            << std::left << std::setw (12) << "Throughput [Mbps]" << std::endl;
 
   /* Schedule Throughput Calulcations */
   Simulator::Schedule (Seconds (1.1), &CalculateThroughput);
 
-  Simulator::Stop (Seconds (simulationTime + 1));
+  /* Install FlowMonitor on all nodes */
+  FlowMonitorHelper flowmon;
+  Ptr<FlowMonitor> monitor;
+  monitor = flowmon.InstallAll ();
+
+  Simulator::Stop (Seconds (simulationTime + 0.101));
   Simulator::Run ();
   Simulator::Destroy ();
 
+  /* Print Flow-Monitor Statistics */
+  PrintFlowMonitorStatistics (flowmon, monitor, simulationTime - 1);
+
   /* Print Results Summary */
-  std::cout << "Total number of received packets = " << packetSink->GetTotalReceivedPackets () << std::endl;
-  std::cout << "Total throughput [Mbps] = " << throughput/((simulationTime - 1) * 10) << std::endl;
+  std::cout << "Total #Received Packets = " << packetSink->GetTotalReceivedPackets () << std::endl;
+  std::cout << "Total Throughput [Mbps] = " << throughput/((simulationTime - 1) * 10) << std::endl;
 
   return 0;
 }

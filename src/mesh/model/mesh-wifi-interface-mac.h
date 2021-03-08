@@ -29,16 +29,12 @@
 #include "ns3/callback.h"
 #include "ns3/packet.h"
 #include "ns3/nstime.h"
-#include "ns3/wifi-remote-station-manager.h"
 #include "ns3/regular-wifi-mac.h"
 #include "ns3/mesh-wifi-interface-mac-plugin.h"
 #include "ns3/event-id.h"
-#include "qos-utils.h"
 
 namespace ns3 {
 
-class WifiMacHeader;
-class DcaTxop;
 class UniformRandomVariable;
 /**
  * \ingroup mesh
@@ -65,8 +61,8 @@ public:
   virtual ~MeshWifiInterfaceMac ();
 
   // Inherited from WifiMac
-  virtual void  Enqueue (Ptr<const Packet> packet, Mac48Address to, Mac48Address from);
-  virtual void  Enqueue (Ptr<const Packet> packet, Mac48Address to);
+  virtual void  Enqueue (Ptr<Packet> packet, Mac48Address to, Mac48Address from);
+  virtual void  Enqueue (Ptr<Packet> packet, Mac48Address to);
   virtual bool  SupportsSendFrom () const;
   virtual void  SetLinkUpCallback (Callback<void> linkUp);
   ///\name Each mesh point interface must know the mesh point address
@@ -184,10 +180,9 @@ private:
   /**
    * Frame receive handler
    *
-   * \param packet the received packet
-   * \param hdr the wifi MAC header
+   * \param mpdu the received MPDU
    */
-  void Receive (Ptr<Packet> packet, WifiMacHeader const *hdr);
+  void Receive (Ptr<WifiMacQueueItem> mpdu);
   /**
    * Send frame. Frame is supposed to be tagged by routing information.
    *
@@ -195,7 +190,7 @@ private:
    * \param from the from address
    * \param to the to address
    */
-  void ForwardDown (Ptr<const Packet> packet, Mac48Address from, Mac48Address to);
+  void ForwardDown (Ptr<Packet> packet, Mac48Address from, Mac48Address to);
   /// Send beacon
   void SendBeacon ();
   /// Schedule next beacon

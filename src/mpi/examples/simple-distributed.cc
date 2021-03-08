@@ -70,7 +70,7 @@ main (int argc, char *argv[])
   bool tracing = false;
 
   // Parse command line
-  CommandLine cmd;
+  CommandLine cmd (__FILE__);
   cmd.AddValue ("nix", "Enable the use of nix-vector or global routing", nix);
   cmd.AddValue ("nullmsg", "Enable the use of null-message synchronization", nullmsg);
   cmd.AddValue ("tracing", "Enable pcap tracing", tracing);
@@ -122,7 +122,7 @@ main (int argc, char *argv[])
   routerNodes.Add (routerNode1);
   routerNodes.Add (routerNode2);
 
-  // Create leaf nodes on left with system id 1
+  // Create leaf nodes on right with system id 1
   NodeContainer rightLeafNodes;
   rightLeafNodes.Create (4, 1);
 

@@ -106,7 +106,7 @@ LrWpanAckTestCase::LrWpanAckTestCase ()
 void
 LrWpanAckTestCase::DataIndication (LrWpanAckTestCase *testCase, Ptr<LrWpanNetDevice> dev, McpsDataIndicationParams params, Ptr<Packet> p)
 {
-  if (dev->GetAddress () == Mac16Address ("00:02"))
+  if (dev->GetMac ()->GetShortAddress () == Mac16Address ("00:02"))
     {
       Ptr<Packet> p = Create<Packet> (10);  // 10 bytes of dummy data
       McpsDataRequestParams params;
@@ -129,7 +129,7 @@ LrWpanAckTestCase::DataIndication (LrWpanAckTestCase *testCase, Ptr<LrWpanNetDev
 void
 LrWpanAckTestCase::DataConfirm (LrWpanAckTestCase *testCase, Ptr<LrWpanNetDevice> dev, McpsDataConfirmParams params)
 {
-  if (dev->GetAddress () == Mac16Address ("00:01"))
+  if (dev->GetMac ()->GetShortAddress () == Mac16Address ("00:01"))
     {
       testCase->m_requestAckTime = Simulator::Now ();
     }
@@ -184,7 +184,7 @@ LrWpanAckTestCase::DoRun (void)
   // immediately answers with a reply packet on reception of the request.
   // We expect the ACK of the request packet to always arrive at node 1 before
   // the reply packet sent by node 2.
-  // The same is repeated for extened addressing mode.
+  // The same is repeated for extended addressing mode.
 
   // Enable calculation of FCS in the trailers. Only necessary when interacting with real devices or wireshark.
   // GlobalValue::Bind ("ChecksumEnabled", BooleanValue (true));

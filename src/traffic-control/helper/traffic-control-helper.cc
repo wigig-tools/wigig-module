@@ -53,7 +53,7 @@ uint16_t
 QueueDiscFactory::AddQueueDiscClass (ObjectFactory factory)
 {
   m_queueDiscClassesFactory.push_back (factory);
-  return m_queueDiscClassesFactory.size () - 1;
+  return static_cast<uint16_t>(m_queueDiscClassesFactory.size () - 1);
 }
 
 void
@@ -85,7 +85,7 @@ QueueDiscFactory::CreateQueueDisc (const std::vector<Ptr<QueueDisc> > & queueDis
     }
 
   // create and add the queue disc classes
-  for (uint32_t i = 0; i < m_queueDiscClassesFactory.size (); i++)
+  for (uint16_t i = 0; i < m_queueDiscClassesFactory.size (); i++)
     {
       // the class ID is given by the index i of the vector
       NS_ABORT_MSG_IF (m_classIdChildHandleMap.find (i) == m_classIdChildHandleMap.end (),
@@ -108,10 +108,22 @@ TrafficControlHelper::TrafficControlHelper ()
 }
 
 TrafficControlHelper
-TrafficControlHelper::Default (void)
+TrafficControlHelper::Default (std::size_t nTxQueues)
 {
+  NS_LOG_FUNCTION (nTxQueues);
+  NS_ABORT_MSG_IF (nTxQueues == 0, "The device must have at least one queue");
   TrafficControlHelper helper;
-  helper.SetRootQueueDisc ("ns3::PfifoFastQueueDisc");
+
+  if (nTxQueues == 1)
+    {
+      helper.SetRootQueueDisc ("ns3::FqCoDelQueueDisc");
+    }
+  else
+    {
+      uint16_t handle = helper.SetRootQueueDisc ("ns3::MqQueueDisc");
+      ClassIdList cls = helper.AddQueueDiscClasses (handle, nTxQueues, "ns3::QueueDiscClass");
+      helper.AddChildQueueDiscs (handle, cls, "ns3::FqCoDelQueueDisc");
+    }
   return helper;
 }
 
@@ -293,7 +305,7 @@ TrafficControlHelper::AddChildQueueDisc (uint16_t handle, uint16_t classId, std:
   factory.Set (n14, v14);
   factory.Set (n15, v15);
 
-  uint16_t childHandle = m_queueDiscFactory.size ();
+  uint16_t childHandle = static_cast<uint16_t>(m_queueDiscFactory.size ());
   m_queueDiscFactory.push_back (QueueDiscFactory (factory));
   m_queueDiscFactory[handle].SetChildQueueDisc (classId, childHandle);
 
@@ -367,30 +379,26 @@ TrafficControlHelper::Install (Ptr<NetDevice> d)
   m_queueDiscs.resize (m_queueDiscFactory.size ());
 
   // Create queue discs (from leaves to root)
-  for (int i = m_queueDiscFactory.size () - 1; i >= 0; i--)
+  for (auto i = m_queueDiscFactory.size (); i-- > 0; )
     {
-      Ptr<QueueDisc> q = m_queueDiscFactory[i].CreateQueueDisc (m_queueDiscs);
-      q->SetNetDevice (d);
-      m_queueDiscs[i] = q;
-      container.Add (q);
+      m_queueDiscs[i] = m_queueDiscFactory[i].CreateQueueDisc (m_queueDiscs);
     }
 
   // Set the root queue disc (if any has been created) on the device
   if (!m_queueDiscs.empty () && m_queueDiscs[0])
     {
       tc->SetRootQueueDiscOnDevice (d, m_queueDiscs[0]);
+      container.Add (m_queueDiscs[0]);
     }
 
-  // SetRootQueueDiscOnDevice calls SetupDevice (if it has not been called yet),
-  // which aggregates a netdevice queue interface to the device and creates the
-  // device transmission queues. Hence, we can install a queue limits object (if
-  // required) on all the device transmission queues
+  // Queue limits objects can only be installed if a netdevice queue interface
+  // has been aggregated to the netdevice. This is normally the case if the
+  // netdevice has been created via helpers. Abort the simulation if not.
   if (m_queueLimitsFactory.GetTypeId ().GetUid ())
     {
       Ptr<NetDeviceQueueInterface> ndqi = d->GetObject<NetDeviceQueueInterface> ();
-      NS_ASSERT (ndqi);
-      NS_ABORT_MSG_IF (ndqi->GetNTxQueues () == 0, "Could not install QueueLimits"
-                       << "because the TX queues have not been created yet");
+      NS_ABORT_MSG_IF (!ndqi, "A NetDeviceQueueInterface object has not been"
+                              "aggregated to the NetDevice");
       for (uint8_t i = 0; i < ndqi->GetNTxQueues (); i++)
         {
           Ptr<QueueLimits> ql = m_queueLimitsFactory.Create<QueueLimits> ();

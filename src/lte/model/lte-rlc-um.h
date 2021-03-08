@@ -54,16 +54,11 @@ public:
   /**
    * MAC SAP
    *
-   * \param bytes the number of bytes
-   * \param layer the layer
-   * \param harqId the HARQ ID
-   * \param componentCarrierId component carrier ID
-   * \param rnti the RNTI
-   * \param lcid the LCID
+   * \param txOpParams the LteMacSapUser::TxOpportunityParameters
    */
-  virtual void DoNotifyTxOpportunity (uint32_t bytes, uint8_t layer, uint8_t harqId, uint8_t componentCarrierId, uint16_t rnti, uint8_t lcid);
+  virtual void DoNotifyTxOpportunity (LteMacSapUser::TxOpportunityParameters txOpParams);
   virtual void DoNotifyHarqDeliveryFailure ();
-  virtual void DoReceivePdu (Ptr<Packet> p, uint16_t rnti, uint8_t lcid);
+  virtual void DoReceivePdu (LteMacSapUser::ReceivePduParameters rxPduParams);
 
 private:
   /// Expire reordering timer
@@ -102,7 +97,28 @@ private:
 private:
   uint32_t m_maxTxBufferSize; ///< maximum transmit buffer status
   uint32_t m_txBufferSize; ///< transmit buffer size
-  std::vector < Ptr<Packet> > m_txBuffer;       ///< Transmission buffer
+  /**
+   * \brief Store an incoming (from layer above us) PDU, waiting to transmit it
+   */
+  struct TxPdu
+  {
+    /**
+     * \brief TxPdu default constructor
+     * \param pdu the PDU
+     * \param time the arrival time
+     */
+    TxPdu (const Ptr<Packet> &pdu, const Time &time) :
+      m_pdu (pdu),
+      m_waitingSince (time)
+    { }
+
+    TxPdu () = delete;
+
+    Ptr<Packet> m_pdu;           ///< PDU
+    Time        m_waitingSince;  ///< Layer arrival time
+  };
+
+  std::vector < TxPdu > m_txBuffer; ///< Transmission buffer
   std::map <uint16_t, Ptr<Packet> > m_rxBuffer; ///< Reception buffer
   std::vector < Ptr<Packet> > m_reasBuffer;     ///< Reassembling buffer
 
@@ -125,6 +141,7 @@ private:
   /**
    * Timers. See section 7.3 in TS 36.322
    */
+  Time    m_reorderingTimerValue; ///< reordering timer value
   EventId m_reorderingTimer; ///< reordering timer
   EventId m_rbsTimer; ///< RBS timer
 

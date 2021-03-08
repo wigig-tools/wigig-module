@@ -19,6 +19,7 @@
 
 #include "ns3/callback.h"
 #include "ns3/assert.h"
+#include "ns3/command-line.h"
 #include <iostream>
 
 /**
@@ -33,7 +34,7 @@
 using namespace ns3;
 
 namespace {
-  
+
 /**
  * Example Callback function.
  *
@@ -49,7 +50,8 @@ CbOne (double a, double b)
 }
 
 /** Example Callback class. */
-class MyCb {
+class MyCb
+{
 public:
   /**
    * Example Callback class method.
@@ -57,7 +59,8 @@ public:
    * \param [in] a The argument.
    * \returns -5
    */
-  int CbTwo (double a) {
+  int CbTwo (double a)
+  {
     std::cout << "invoke cbTwo a=" << a << std::endl;
     return -5;
   }
@@ -68,6 +71,9 @@ public:
 
 int main (int argc, char *argv[])
 {
+  CommandLine cmd (__FILE__);
+  cmd.Parse (argc, argv);
+
   // return type: double
   // first arg type: double
   // second arg type: double
@@ -104,14 +110,14 @@ int main (int argc, char *argv[])
   NS_ASSERT (two.IsNull ());
 
 #if 0
-  // The below type mismatch between CbOne() and callback two will fail to 
+  // The below type mismatch between CbOne() and callback two will fail to
   // compile if enabled in this program.
   two = MakeCallback (&CbOne);
 #endif
 
 #if 0
   // This is a slightly different example, in which the code will compile
-  // but because callbacks are type-safe, will cause a fatal error at runtime 
+  // but because callbacks are type-safe, will cause a fatal error at runtime
   // (the difference here is that Assign() is called instead of operator=)
   Callback<void, float> three;
   three.Assign (MakeCallback (&CbOne));

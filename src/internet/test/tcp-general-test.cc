@@ -28,6 +28,11 @@
 #include "ns3/tcp-l4-protocol.h"
 #include "../model/ipv4-end-point.h"
 #include "../model/ipv6-end-point.h"
+#include "ns3/tcp-header.h"
+#include "ns3/tcp-tx-buffer.h"
+#include "ns3/tcp-rx-buffer.h"
+#include "ns3/rtt-estimator.h"
+
 #include "tcp-general-test.h"
 
 using namespace ns3;
@@ -37,6 +42,7 @@ NS_LOG_COMPONENT_DEFINE ("TcpGeneralTest");
 TcpGeneralTest::TcpGeneralTest (const std::string &desc)
   : TestCase (desc),
     m_congControlTypeId (TcpNewReno::GetTypeId ()),
+    m_recoveryTypeId (TcpClassicRecovery::GetTypeId ()),
     m_remoteAddr (Ipv4Address::GetAny (), 4477)
 {
   NS_LOG_FUNCTION (this << desc);
@@ -96,6 +102,7 @@ TcpGeneralTest::ConfigureEnvironment ()
   NS_LOG_FUNCTION (this);
 
   SetCongestionControl (m_congControlTypeId);
+  SetRecoveryAlgorithm (m_recoveryTypeId);
   SetPropagationDelay (MilliSeconds (500));
   SetTransmitStart (Seconds (10));
   SetAppPktSize (500);
@@ -197,6 +204,8 @@ TcpGeneralTest::DoRun (void)
   m_senderSocket->SetUpdateRttHistoryCb (MakeCallback (&TcpGeneralTest::UpdateRttHistoryCb, this));
   m_senderSocket->TraceConnectWithoutContext ("CongestionWindow",
                                               MakeCallback (&TcpGeneralTest::CWndTrace, this));
+  m_senderSocket->TraceConnectWithoutContext ("CongestionWindowInflated",
+                                              MakeCallback (&TcpGeneralTest::CWndInflTrace, this));
   m_senderSocket->TraceConnectWithoutContext ("SlowStartThreshold",
                                               MakeCallback (&TcpGeneralTest::SsThreshTrace, this));
   m_senderSocket->TraceConnectWithoutContext ("CongState",
@@ -209,6 +218,17 @@ TcpGeneralTest::DoRun (void)
                                               MakeCallback (&TcpGeneralTest::RttTrace, this));
   m_senderSocket->TraceConnectWithoutContext ("BytesInFlight",
                                               MakeCallback (&TcpGeneralTest::BytesInFlightTrace, this));
+  m_senderSocket->TraceConnectWithoutContext ("RTO",
+                                              MakeCallback (&TcpGeneralTest::RtoTrace, this));
+  m_senderSocket->TraceConnectWithoutContext ("NextTxSequence",
+                                              MakeCallback (&TcpGeneralTest::NextTxSeqTrace, this));
+  m_senderSocket->TraceConnectWithoutContext ("HighestSequence",
+                                              MakeCallback (&TcpGeneralTest::HighestTxSeqTrace, this));
+  m_senderSocket->m_rateOps->TraceConnectWithoutContext ("TcpRateUpdated",
+                                              MakeCallback (&TcpGeneralTest::RateUpdatedTrace, this));
+  m_senderSocket->m_rateOps->TraceConnectWithoutContext ("TcpRateSampleUpdated",
+                                              MakeCallback (&TcpGeneralTest::RateSampleUpdatedTrace, this));
+
 
   m_remoteAddr = InetSocketAddress (serverAddress, 4477);
 
@@ -258,48 +278,58 @@ Ptr<TcpSocketMsgBase>
 TcpGeneralTest::CreateSocket (Ptr<Node> node, TypeId socketType,
                               TypeId congControl)
 {
+  return CreateSocket (node, socketType, congControl, m_recoveryTypeId);
+}
+
+Ptr<TcpSocketMsgBase>
+TcpGeneralTest::CreateSocket (Ptr<Node> node, TypeId socketType,
+                              TypeId congControl, TypeId recoveryAlgorithm)
+{
   ObjectFactory rttFactory;
   ObjectFactory congestionAlgorithmFactory;
+  ObjectFactory recoveryAlgorithmFactory;
   ObjectFactory socketFactory;
 
   rttFactory.SetTypeId (RttMeanDeviation::GetTypeId ());
   congestionAlgorithmFactory.SetTypeId (congControl);
+  recoveryAlgorithmFactory.SetTypeId (recoveryAlgorithm);
   socketFactory.SetTypeId (socketType);
 
   Ptr<RttEstimator> rtt = rttFactory.Create<RttEstimator> ();
   Ptr<TcpSocketMsgBase> socket = DynamicCast<TcpSocketMsgBase> (socketFactory.Create ());
   Ptr<TcpCongestionOps> algo = congestionAlgorithmFactory.Create<TcpCongestionOps> ();
+  Ptr<TcpRecoveryOps> recovery = recoveryAlgorithmFactory.Create<TcpRecoveryOps> ();
 
   socket->SetNode (node);
   socket->SetTcp (node->GetObject<TcpL4Protocol> ());
   socket->SetRtt (rtt);
   socket->SetCongestionControlAlgorithm (algo);
-
+  socket->SetRecoveryAlgorithm (recovery);
   return socket;
 }
 
 Ptr<ErrorModel>
 TcpGeneralTest::CreateSenderErrorModel ()
 {
-  return 0;
+  return nullptr;
 }
 
 Ptr<ErrorModel>
 TcpGeneralTest::CreateReceiverErrorModel ()
 {
-  return 0;
+  return nullptr;
 }
 
 Ptr<TcpSocketMsgBase>
 TcpGeneralTest::CreateSenderSocket (Ptr<Node> node)
 {
-  return CreateSocket (node, TcpSocketMsgBase::GetTypeId (), m_congControlTypeId);
+  return CreateSocket (node, TcpSocketMsgBase::GetTypeId (), m_congControlTypeId, m_recoveryTypeId);
 }
 
 Ptr<TcpSocketMsgBase>
 TcpGeneralTest::CreateReceiverSocket (Ptr<Node> node)
 {
-  return CreateSocket (node, TcpSocketMsgBase::GetTypeId (), m_congControlTypeId);
+  return CreateSocket (node, TcpSocketMsgBase::GetTypeId (), m_congControlTypeId, m_recoveryTypeId);
 }
 
 void
@@ -322,6 +352,7 @@ TcpGeneralTest::QueueDropCb ( std::string context, Ptr<const Packet> p)
 void
 TcpGeneralTest::PhyDropCb (std::string context, Ptr<const Packet> p)
 {
+  NS_UNUSED (p);
   if (context.compare ("SENDER") == 0)
     {
       PhyDrop (SENDER);
@@ -839,18 +870,36 @@ TcpGeneralTest::GetRxBuffer (SocketWho who)
 {
   if (who == SENDER)
     {
-      return DynamicCast<TcpSocketMsgBase> (m_senderSocket)->m_rxBuffer;
+      return DynamicCast<TcpSocketMsgBase> (m_senderSocket)->m_tcb->m_rxBuffer;
     }
   else if (who == RECEIVER)
     {
 
-      return DynamicCast<TcpSocketMsgBase> (m_receiverSocket)->m_rxBuffer;
+      return DynamicCast<TcpSocketMsgBase> (m_receiverSocket)->m_tcb->m_rxBuffer;
     }
   else
     {
       NS_FATAL_ERROR ("Not defined");
     }
 }
+
+ Ptr<TcpTxBuffer>
+ TcpGeneralTest::GetTxBuffer (SocketWho who)
+ {
+  if (who == SENDER)
+    {
+      return DynamicCast<TcpSocketMsgBase> (m_senderSocket)->m_txBuffer;
+    }
+  else if (who == RECEIVER)
+    {
+      return DynamicCast<TcpSocketMsgBase> (m_receiverSocket)->m_txBuffer;
+    }
+  else
+    {
+      NS_FATAL_ERROR ("Not defined");
+    }
+ }
+
 
 void
 TcpGeneralTest::SetRcvBufSize (SocketWho who, uint32_t size)
@@ -896,6 +945,22 @@ TcpGeneralTest::SetInitialCwnd (SocketWho who, uint32_t initialCwnd)
   else if (who == RECEIVER)
     {
       m_receiverSocket->SetInitialCwnd (initialCwnd);
+    }
+  else
+    {
+      NS_FATAL_ERROR ("Not defined");
+    }
+}
+void
+TcpGeneralTest::SetUseEcn (SocketWho who, TcpSocketState::UseEcn_t useEcn)
+{
+  if (who == SENDER)
+    {
+      m_senderSocket->SetUseEcn (useEcn);
+    }
+   else if (who == RECEIVER)
+    {
+      m_receiverSocket->SetUseEcn (useEcn);
     }
   else
     {
@@ -1084,7 +1149,7 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
       p->AddPacketTag (ipHopLimitTag);
     }
 
-  if (m_endPoint == 0 && m_endPoint6 == 0)
+  if (m_endPoint == nullptr && m_endPoint6 == nullptr)
     {
       NS_LOG_WARN ("Failed to send empty packet due to null endpoint");
       return;
@@ -1108,7 +1173,7 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
   // Actual division in small acks.
   if (hasSyn || hasFin)
     {
-      header.SetAckNumber (m_rxBuffer->NextRxSequence ());
+      header.SetAckNumber (m_tcb->m_rxBuffer->NextRxSequence ());
     }
   else
     {
@@ -1116,11 +1181,11 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
 
       ackSeq = m_lastAckedSeq + m_bytesToAck;
 
-      if (m_bytesLeftToBeAcked == 0 && m_rxBuffer->NextRxSequence () > m_lastAckedSeq)
+      if (m_bytesLeftToBeAcked == 0 && m_tcb->m_rxBuffer->NextRxSequence () > m_lastAckedSeq)
         {
-          m_bytesLeftToBeAcked = m_rxBuffer->NextRxSequence ().GetValue () - 1 - m_bytesToAck;
+          m_bytesLeftToBeAcked = m_tcb->m_rxBuffer->NextRxSequence ().GetValue () - 1 - m_bytesToAck;
         }
-      else if (m_bytesLeftToBeAcked > 0 && m_rxBuffer->NextRxSequence () > m_lastAckedSeq)
+      else if (m_bytesLeftToBeAcked > 0 && m_tcb->m_rxBuffer->NextRxSequence () > m_lastAckedSeq)
         {
           m_bytesLeftToBeAcked -= m_bytesToAck;
         }
@@ -1133,7 +1198,7 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
 
   // end of division in small acks
 
-  if (m_endPoint != 0)
+  if (m_endPoint != nullptr)
     {
       header.SetSourcePort (m_endPoint->GetLocalPort ());
       header.SetDestinationPort (m_endPoint->GetPeerPort ());
@@ -1165,7 +1230,7 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
           m_synCount--;
         }
     }
-  if (m_endPoint != 0)
+  if (m_endPoint != nullptr)
     {
       m_tcp->SendPacket (p, header, m_endPoint->GetLocalAddress (),
                          m_endPoint->GetPeerAddress (), m_boundnetdevice);
@@ -1192,7 +1257,7 @@ TcpSocketSmallAcks::SendEmptyPacket (uint8_t flags)
     }
 
   // send another ACK if bytes remain
-  if (m_bytesLeftToBeAcked > 0 && m_rxBuffer->NextRxSequence () > m_lastAckedSeq)
+  if (m_bytesLeftToBeAcked > 0 && m_tcb->m_rxBuffer->NextRxSequence () > m_lastAckedSeq)
     {
       SendEmptyPacket (flags);
     }

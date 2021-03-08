@@ -38,9 +38,9 @@ struct AparfWifiRemoteStation;
  * Networks, Springer, 2005, 12, 123-145.
  * http://www.cs.mun.ca/~yzchen/papers/papers/rate_adaptation/80211_dynamic_rate_power_adjustment_chevillat_j2005.pdf
  *
- * This RAA does not support HT, VHT nor HE modes and will error
+ * This RAA does not support HT modes and will error
  * exit if the user tries to configure this RAA with a Wi-Fi MAC
- * that has VhtSupported, HtSupported or HeSupported set.
+ * that supports 802.11n or higher.
  */
 class AparfWifiManager : public WifiRemoteStationManager
 {
@@ -55,9 +55,6 @@ public:
 
   // Inherited from WifiRemoteStationManager
   void SetupPhy (const Ptr<WifiPhy> phy);
-  void SetHtSupported (bool enable);
-  void SetVhtSupported (bool enable);
-  void SetHeSupported (bool enable);
 
   /**
    * Enumeration of the possible states of the channel.
@@ -71,7 +68,8 @@ public:
 
 
 private:
-  //overriden from base class
+  // Overridden from base class.
+  void DoInitialize (void);
   WifiRemoteStation * DoCreateStation (void) const;
   void DoReportRxOk (WifiRemoteStation *station,
                      double rxSnr, WifiMode txMode);
@@ -79,13 +77,12 @@ private:
   void DoReportDataFailed (WifiRemoteStation *station);
   void DoReportRtsOk (WifiRemoteStation *station,
                       double ctsSnr, WifiMode ctsMode, double rtsSnr);
-  void DoReportDataOk (WifiRemoteStation *station,
-                       double ackSnr, WifiMode ackMode, double dataSnr);
+  void DoReportDataOk (WifiRemoteStation *station, double ackSnr, WifiMode ackMode,
+                       double dataSnr, uint16_t dataChannelWidth, uint8_t dataNss);
   void DoReportFinalRtsFailed (WifiRemoteStation *station);
   void DoReportFinalDataFailed (WifiRemoteStation *station);
   WifiTxVector DoGetDataTxVector (WifiRemoteStation *station);
   WifiTxVector DoGetRtsTxVector (WifiRemoteStation *station);
-  bool IsLowLatency (void) const;
 
   /** Check for initializations.
    *
@@ -99,8 +96,8 @@ private:
   uint32_t m_powerMax;   //!< The maximum number of power changes.
   uint8_t m_powerInc;    //!< Step size for increment the power.
   uint8_t m_powerDec;    //!< Step size for decrement the power.
-  uint8_t m_rateInc;    //!< Step size for increment the rate.
-  uint8_t m_rateDec;    //!< Step size for decrement the rate.
+  uint8_t m_rateInc;     //!< Step size for increment the rate.
+  uint8_t m_rateDec;     //!< Step size for decrement the rate.
 
   /**
    * Minimal power level.

@@ -46,10 +46,10 @@
  *
  * Once all the stations have assoicated successfully with the PCP/AP, the DMG West STA send Information Request Element
  * frame to the DMG AP to request the capabilities of the DMG East STA. One this information become available, DMG West STA
- * send a request to the PCP/AP to allocate two SPs to perform Beamforming Training (TxSS & RxSS) as following:
+ * send a request to the PCP/AP to allocate two SPs to perform Beamforming Training (TXSS & RXSS) as following:
  *
- * SP1: West DMG STA (TxSS) -------> East DMG STA (TxSS)
- * SP2: West DMG STA (RxSS) -------> East DMG STA (RxSS)
+ * SP1: West DMG STA (TXSS) -------> East DMG STA (TXSS)
+ * SP2: West DMG STA (RXSS) -------> East DMG STA (RXSS)
  *
  * Running the Simulation:
  * To run the script with the default parameters:
@@ -99,7 +99,7 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t
       std::cout << "All stations got associated with " << address << std::endl;
       /* Create list of Information Element ID to request */
       WifiInformationElementIdList list;
-      list.push_back (IE_DMG_CAPABILITIES);
+      list.push_back (std::make_pair(IE_DMG_CAPABILITIES,0));
       /* West DMG STA Request information about East STA */
       westWifiMac->RequestInformation (eastWifiMac->GetAddress (), list);
       /* East DMG STA Request information about West STA */
@@ -128,8 +128,8 @@ CreateBeamformingAllocationRequest (AllocationFormat format, uint8_t destAid,
 
   BF_Control_Field bfField;
   bfField.SetBeamformTraining (true);
-  bfField.SetAsInitiatorTxss (isInitiatorTxss);
-  bfField.SetAsResponderTxss (isResponderTxss);
+  bfField.SetAsInitiatorTXSS (isInitiatorTxss);
+  bfField.SetAsResponderTXSS (isResponderTxss);
   element.SetBfControl (bfField);
 
   /* For more deetails on the meaning of this field refer to IEEE 802.11-2012ad 10.4.13*/
@@ -161,16 +161,15 @@ InformationResponseReceived (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address
 }
 
 void
-SLSCompleted (Ptr<DmgWifiMac> staWifiMac, Mac48Address address, ChannelAccessPeriod accessPeriod,
-              BeamformingDirection beamformingDirection, bool isInitiatorTxss, bool isResponderTxss,
-              SECTOR_ID sectorId, ANTENNA_ID antennaId)
+SLSCompleted (Ptr<DmgWifiMac> staWifiMac, SlsCompletionAttrbitutes attributes)
 {
-  if (accessPeriod == CHANNEL_ACCESS_DTI)
+  if (attributes.accessPeriod == CHANNEL_ACCESS_DTI)
     {
       beamformedLinks++;
-      std::cout << "DMG STA " << staWifiMac->GetAddress () << " completed SLS phase with DMG STA " << address << std::endl;
-      std::cout << "The best antenna configuration is SectorID=" << uint32_t (sectorId)
-                << ", AntennaID=" << uint32_t (antennaId) << std::endl;
+      std::cout << "DMG STA " << staWifiMac->GetAddress ()
+                << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
+      std::cout << "The best antenna configuration is AntennaID=" << uint16_t (attributes.antennaID)
+                << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
       if (beamformedLinks == 6)
         {
           apWifiMac->PrintSnrTable ();
@@ -191,7 +190,7 @@ ADDTSReceived (Ptr<DmgApWifiMac> apWifiMac, Mac48Address address, DmgTspecElemen
   beamformingStartTime = apWifiMac->AllocateBeamformingServicePeriod (srcAid, info.GetDestinationAid (),
                                                                       beamformingStartTime,
                                                                       element.GetMinimumDuration (),
-                                                                      bfControl.IsInitiatorTxss (), bfControl.IsResponderTxss ());
+                                                                      bfControl.IsInitiatorTXSS (), bfControl.IsResponderTXSS ());
 
   /* Set status code */
   StatusCode code;
@@ -253,9 +252,17 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Sensitivity model includes implementation loss and noise figure */
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-79));
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-79 + 3));
+  /* Set the correct error model */
+  wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
+                             "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
+  // The value correspond to DMG MCS-0.
+  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
+  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
+  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
+  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
+  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
+  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue ("DMG_MCS12"),
                                                                 "DataMode", StringValue ("DMG_MCS12"));

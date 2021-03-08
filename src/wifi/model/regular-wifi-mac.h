@@ -22,46 +22,37 @@
 #define REGULAR_WIFI_MAC_H
 
 #include "wifi-mac.h"
-#include "dca-txop.h"
-#include "edca-txop-n.h"
+#include "qos-txop.h"
+#include "ssid.h"
+#include "wifi-mac-header.h"
+#include "ctrl-headers.h"
+#include "mgt-headers.h"
+#include "edmg-short-ssw.h"
 
 namespace ns3 {
 
 class MacLow;
 class MacRxMiddle;
 class MacTxMiddle;
-class DcfManager;
+class ChannelAccessManager;
+class ExtendedCapabilities;
 
-typedef enum {
+//// WIGIG ////
+enum FST_STATES {
   FST_INITIAL_STATE = 0,
   FST_SETUP_COMPLETION_STATE,
   FST_TRANSITION_DONE_STATE,
   FST_TRANSITION_CONFIRMED_STATE
-} FST_STATES;
+};
 
-typedef struct {
-  uint32_t ID;                      //!< A unique ID that corresponds to RA and TA.
+struct FstSession {
+  uint32_t ID;                      //!< A unique ID that corresponds to a pair of receiver and transmitter.
   FST_STATES CurrentState;          //!< Current state of the FST State Machine.
-  Time STT;                         //!< State Transition Timer.
-  bool IsInitiator;                 //!< Is FST Session Initiator.
+  Time STT;                         //!< State transition timer.
+  bool IsInitiator;                 //!< Flag to indicate if we are the FST session initiator.
   BandID NewBandId;                 //!< The new band the station is transferring to.
-  uint32_t LLT;                     //!< Link Loss Time for this FST Session.
+  uint32_t LLT;                     //!< Link Loss Time (LLT) for this FST Session.
   EventId LinkLossCountDownEvent;   //!< Event for Link Loss Timeout.
-} FstSession;
-
-/**
- * The current MAC state of the STA.
- */
-enum MacState
-{
-  ASSOCIATED,
-  WAIT_PROBE_RESP,
-  WAIT_ASSOC_RESP,
-  BEACON_MISSED,
-  WAIT_BEACON,
-  UNASSOCIATED,
-  SCANNING,
-  REFUSED
 };
 
 /**
@@ -70,17 +61,31 @@ enum MacState
  */
 typedef std::map<Mac48Address, FstSession> FstSessionMap;
 
+//// WIGIG ////
+
+/**
+ * The current MAC state of the STA.
+ */
+enum MacState
+{
+  ASSOCIATED,
+  WAIT_BEACON,
+  WAIT_PROBE_RESP,
+  WAIT_ASSOC_RESP,
+  UNASSOCIATED,
+  REFUSED
+};
+
 /** This type defines a mapping between an Access Category index,
 and a pointer to the corresponding channel access function */
-typedef std::map<AcIndex, Ptr<EdcaTxopN> > EdcaQueues;
+typedef std::map<AcIndex, Ptr<QosTxop> > EdcaQueues;
 
 /**
  * \brief base class for all MAC-level wifi objects.
  * \ingroup wifi
  *
- * This class encapsulates all the low-level MAC functionality
- * DCA, EDCA, etc) and all the high-level MAC functionality
- * (association/disassociation state machines).
+ * This class encapsulates all the low-level MAC functionality and all the
+ * high-level MAC functionality (association/disassociation state machines).
  *
  */
 class RegularWifiMac : public WifiMac
@@ -95,63 +100,58 @@ public:
   RegularWifiMac ();
   virtual ~RegularWifiMac ();
 
-  /**
-   * \param slotTime the slot duration
-   */
+  // Implementations of pure virtual methods.
   void SetSlot (Time slotTime);
-  /**
-   * \param sifs the sifs duration
-   */
   void SetSifs (Time sifs);
-  /**
-   * \param eifsNoDifs the duration of an EIFS minus DIFS.
-   *
-   * This value is used to calculate the EIFS depending
-   * on AIFSN.
-   */
   void SetEifsNoDifs (Time eifsNoDifs);
-  /**
-   * \param pifs the pifs duration.
-   */
   void SetPifs (Time pifs);
-  /**
-   * \param rifs the rifs duration.
-   */
   void SetRifs (Time rifs);
-  /**
-   * \param ctsTimeout the duration of a CTS timeout.
-   */
-  void SetCtsTimeout (Time ctsTimeout);
-  /**
-   * \param ackTimeout the duration of an ACK timeout.
-   */
   void SetAckTimeout (Time ackTimeout);
-
+  void SetShortSlotTimeSupported (bool enable);
+  void SetSsid (Ssid ssid);
+  void SetAddress (Mac48Address address);
+  void SetPromisc (void);
   Time GetRifs (void) const;
-  /**
-   * \return the current PIFS duration.
-   */
   Time GetPifs (void) const;
-  /**
-   * \return the current SIFS duration.
-   */
   Time GetSifs (void) const;
-  /**
-   * \return the current slot duration.
-   */
   Time GetSlot (void) const;
-  /**
-   * \return the current EIFS minus DIFS duration
-   */
   Time GetEifsNoDifs (void) const;
-  /**
-   * \return the current CTS timeout duration.
-   */
-  Time GetCtsTimeout (void) const;
-  /**
-   * \return the current ACK timeout duration.
-   */
   Time GetAckTimeout (void) const;
+  bool GetShortSlotTimeSupported (void) const;
+  Ssid GetSsid (void) const;
+  Mac48Address GetAddress (void) const;
+  Mac48Address GetBssid (void) const;
+  virtual void Enqueue (Ptr<Packet> packet, Mac48Address to, Mac48Address from);
+  virtual bool SupportsSendFrom (void) const;
+  virtual void SetWifiPhy (const Ptr<WifiPhy> phy);
+  Ptr<WifiPhy> GetWifiPhy (void) const;
+  void ResetWifiPhy (void);
+  virtual void SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> stationManager);
+
+  /**
+   * This type defines the callback of a higher layer that a
+   * WifiMac(-derived) object invokes to pass a packet up the stack.
+   *
+   * \param packet the packet that has been received.
+   * \param from the MAC address of the device that sent the packet.
+   * \param to the MAC address of the device that the packet is destined for.
+   */
+  typedef Callback<void, Ptr<const Packet>, Mac48Address, Mac48Address> ForwardUpCallback;
+
+  void SetForwardUpCallback (ForwardUpCallback upCallback);
+  void SetLinkUpCallback (Callback<void> linkUp);
+  void SetLinkDownCallback (Callback<void> linkDown);
+
+  /* Next functions are not pure virtual so non-QoS WifiMacs are not
+   * forced to implement them.
+   */
+  void SetBasicBlockAckTimeout (Time blockAckTimeout);
+  Time GetBasicBlockAckTimeout (void) const;
+  void SetCompressedBlockAckTimeout (Time blockAckTimeout);
+  Time GetCompressedBlockAckTimeout (void) const;
+
+  // Should be implemented by child classes
+  virtual void Enqueue (Ptr<Packet> packet, Mac48Address to) = 0;
 
   /**
    * Enable or disable CTS-to-self feature.
@@ -161,33 +161,11 @@ public:
    */
   void SetCtsToSelfSupported (bool enable);
   /**
-   * Return whether the device supports CTS-to-self
-   * capability.
-   *
-   * \return true if CTS-to-self is supported,
-   *         false otherwise.
-   */
-  bool GetCtsToSelfSupported () const;
-
-  /**
-   * Enable or disable short slot time feature.
-   *
-   * \param enable true if short slot time is to be supported,
-   *               false otherwise
-   */
-  void SetShortSlotTimeSupported (bool enable);
-  /**
-   * \return whether the device supports short slot time capability.
-   *
-   * \return true if short slot time is supported,
-   *         false otherwise.
-   */
-  bool GetShortSlotTimeSupported (void) const;
-  /**
    * Enable or disable RIFS feature.
    *
    * \param enable true if RIFS is to be supported,
    *               false otherwise
+   * \deprecated
    */
   void SetRifsSupported (bool enable);
   /**
@@ -195,152 +173,80 @@ public:
    *
    * \return true if short RIFS is supported,
    *         false otherwise.
+   * \deprecated
    */
   bool GetRifsSupported (void) const;
-
-  /**
-   * \return the MAC address associated to this MAC layer.
-   */
-  Mac48Address GetAddress (void) const;
-  /**
-   * \return the ssid which this MAC layer is going to try to stay in.
-   */
-  Ssid GetSsid (void) const;
-  /**
-   * \param address the current address of this MAC layer.
-   */
-  void SetAddress (Mac48Address address);
-  /**
-   * \param ssid the current ssid of this MAC layer.
-   */
-  void SetSsid (Ssid ssid);
   /**
    * \param bssid the BSSID of the network that this device belongs to.
    */
   void SetBssid (Mac48Address bssid);
-  /**
-   * \return the bssid of the network this device belongs to.
-   */
-  Mac48Address GetBssid (void) const;
-  /**
-   * \return Get the state of the MAC layer (Associated/MissedBeacon...)
-   */
-  virtual enum MacState GetMacState (void) const;
-  /**
-   * \brief Sets the interface in promiscuous mode.
-   *
-   * Enables promiscuous mode on the interface. Note that any further
-   * filtering on the incoming frame path may affect the overall
-   * behavior.
-   */
-  void SetPromisc (void);
 
-  /**
-   * \param packet the packet to send.
-   * \param to the address to which the packet should be sent.
-   * \param from the address from which the packet should be sent.
-   *
-   * The packet should be enqueued in a tx queue, and should be
-   * dequeued as soon as the channel access function determines that
-   * access is granted to this MAC.  The extra parameter "from" allows
-   * this device to operate in a bridged mode, forwarding received
-   * frames without altering the source address.
-   */
-  virtual void Enqueue (Ptr<const Packet> packet, Mac48Address to, Mac48Address from);
-
-  virtual bool SupportsSendFrom (void) const;
-
-  /**
-   * \param packet the packet to send.
-   * \param to the address to which the packet should be sent.
-   *
-   * The packet should be enqueued in a tx queue, and should be
-   * dequeued as soon as the channel access function determines that
-   * access is granted to this MAC.
-   */
-  void Enqueue (Ptr<const Packet> packet, Mac48Address to) = 0;
-  /**
-   * \param phy the physical layer attached to this MAC.
-   */
-  void SetWifiPhy (const Ptr<WifiPhy> phy);
-  /**
-   * \return the physical layer attached to this MAC.
-   */
-  Ptr<WifiPhy> GetWifiPhy (void) const;
-  /**
-   * removes attached WifiPhy device from this MAC.
-   */
-  void ResetWifiPhy (void);
-  /**
-   * \param stationManager the station manager attached to this MAC.
-   */
-  virtual void SetWifiRemoteStationManager (const Ptr<WifiRemoteStationManager> stationManager);
   /**
    * \return the station manager attached to this MAC.
    */
   Ptr<WifiRemoteStationManager> GetWifiRemoteStationManager (void) const;
   /**
-   * This type defines the callback of a higher layer that a
-   * WifiMac(-derived) object invokes to pass a packet up the stack.
+   * Return the extended capabilities of the device.
    *
-   * \param packet the packet that has been received.
-   * \param from the MAC address of the device that sent the packet.
-   * \param to the MAC address ot the device that the packet is destined for.
+   * \return the extended capabilities that we support
    */
-  typedef Callback<void, Ptr<Packet>, Mac48Address, Mac48Address> ForwardUpCallback;
+  Ptr<ExtendedCapabilities> GetExtendedCapabilities (void) const;
   /**
-   * \param upCallback the callback to invoke when a packet must be
-   * forwarded up the stack.
+   * Return the HT capabilities of the device.
+   *
+   * \return the HT capabilities that we support
    */
-  void SetForwardUpCallback (ForwardUpCallback upCallback);
+  Ptr<HtCapabilities> GetHtCapabilities (void) const;
   /**
-   * \param linkUp the callback to invoke when the link becomes up.
+   * Return the VHT capabilities of the device.
+   *
+   * \return the VHT capabilities that we support
    */
-  void SetLinkUpCallback (Callback<void> linkUp);
+  Ptr<VhtCapabilities> GetVhtCapabilities (void) const;
   /**
-   * \param linkDown the callback to invoke when the link becomes down.
+   * Return the HE capabilities of the device.
+   *
+   * \return the HE capabilities that we support
    */
-  void SetLinkDownCallback (Callback<void> linkDown);
+  Ptr<HeCapabilities> GetHeCapabilities (void) const;
 
-  /* Next functions are not pure virtual so non Qos WifiMacs are not
-   * forced to implement them.
+  /**
+   * \return Get the state of the MAC layer (Associated/MissedBeacon...)
    */
-  void SetBasicBlockAckTimeout (Time blockAckTimeout);
-  Time GetBasicBlockAckTimeout (void) const;
-  void SetCompressedBlockAckTimeout (Time blockAckTimeout);
-  Time GetCompressedBlockAckTimeout (void) const;
+  virtual MacState GetMacState (void) const;
+
 
   /**
    * Accessor for the DCF object
    *
-   * \return a smart pointer to DcaTxop
+   * \return a smart pointer to Txop
    */
-  Ptr<DcaTxop> GetDcaTxop (void) const;
+  Ptr<Txop> GetTxop (void) const;
 
   /**
    * Accessor for the AC_VO channel access function
    *
-   * \return a smart pointer to EdcaTxopN
+   * \return a smart pointer to QosTxop
    */
-  Ptr<EdcaTxopN> GetVOQueue (void) const;
+  Ptr<QosTxop> GetVOQueue (void) const;
   /**
    * Accessor for the AC_VI channel access function
    *
-   * \return a smart pointer to EdcaTxopN
+   * \return a smart pointer to QosTxop
    */
-  Ptr<EdcaTxopN> GetVIQueue (void) const;
+  Ptr<QosTxop> GetVIQueue (void) const;
   /**
    * Accessor for the AC_BE channel access function
    *
-   * \return a smart pointer to EdcaTxopN
+   * \return a smart pointer to QosTxop
    */
-  Ptr<EdcaTxopN> GetBEQueue (void) const;
+  Ptr<QosTxop> GetBEQueue (void) const;
   /**
    * Accessor for the AC_BK channel access function
    *
-   * \return a smart pointer to EdcaTxopN
+   * \return a smart pointer to QosTxop
    */
-  Ptr<EdcaTxopN> GetBKQueue (void) const;
+  Ptr<QosTxop> GetBKQueue (void) const;
   /**
    * Accessor for all EDCA Queues.
    */
@@ -360,20 +266,22 @@ protected:
   virtual void DoInitialize ();
   virtual void DoDispose ();
 
-  Ptr<MacRxMiddle> m_rxMiddle;  //!< RX middle (de-fragmentation etc.)
+  Ptr<MacRxMiddle> m_rxMiddle;  //!< RX middle (defragmentation etc.)
   Ptr<MacTxMiddle> m_txMiddle;  //!< TX middle (aggregation etc.)
-  Ptr<MacLow> m_low;        //!< MacLow (RTS, CTS, DATA, ACK etc.)
-  Ptr<DcfManager> m_dcfManager; //!< DCF manager (access to channel)
-  Ptr<WifiPhy> m_phy;       //!< Wifi PHY
+  Ptr<MacLow> m_low;            //!< MacLow (RTS, CTS, Data, Ack etc.)
+  Ptr<ChannelAccessManager> m_channelAccessManager; //!< channel access manager
+  Ptr<WifiPhy> m_phy;           //!< Wifi PHY
 
   Ptr<WifiRemoteStationManager> m_stationManager; //!< Remote station manager (rate control, RTS/CTS/fragmentation thresholds etc.)
 
   ForwardUpCallback m_forwardUp; //!< Callback to forward packet up the stack
   Callback<void> m_linkUp;       //!< Callback when a link is up
   Callback<void> m_linkDown;     //!< Callback when a link is down
-  Callback<void> m_sessionTransfer; //!< Callback when a session transfer takes place
-  bool m_supportMultiBand;       //!< Flag to indicate whether we support multiband operation.
-  uint8_t m_fstTimeout;          //!< FST Session TimeOut duration in TUs.
+
+  //// WIGIG ////
+  Callback<void> m_sessionTransfer; //!< Callback when a session transfer takes place.
+  bool m_supportMultiBand;          //!< Flag to indicate whether we support multiband operation.
+  uint8_t m_fstTimeout;             //!< FST Session Timeout duration in TUs.
 
   /** Fast Session Transfer Functions **/
 
@@ -382,58 +290,82 @@ protected:
    * \param to The Mac address of the initiator.
    * \param token The token dialog.
    * \param status The status of the setup operation.
-   * \param sessionTransition
+   * \param sessionTransition The session transition element.
    */
   void SendFstSetupResponse (Mac48Address to, uint8_t token, uint16_t status, SessionTransitionElement sessionTransition);
-  void SendFstAckRequest (Mac48Address to, uint8_t dialog, uint32_t fstsID);
-  void SendFstAckResponse (Mac48Address to, uint8_t dialog, uint32_t fstsID);
+  /**
+   * Send FST ACK Request frame to the responder.
+   * \param to The MAC address of the responder station.
+   * \param token The token dialog.
+   * \param fstsID The ID of FST session.
+   */
+  void SendFstAckRequest (Mac48Address to, uint8_t token, uint32_t fstsID);
+  /**
+   * Send FST ACk Response frame to the initiator.
+   * \param to The MAC address of the initiator station.
+   * \param token The token dialog.
+   * \param fstsID The ID of FST session.
+   */
+  void SendFstAckResponse (Mac48Address to, uint8_t token, uint32_t fstsID);
+  /**
+   * Send FST TearDown frame to a station.
+   * \param to The MAC address of the peer station.
+   */
   void SendFstTearDownFrame (Mac48Address to);
   /**
-   * Get MultiBand Element associated to this STA device.
-   * \return The MultiBand Information Element correspodning to this WifiMac.
+   * Get the multiband information element associated with this STA device.
+   * \return The MultiBand information element correspodning to this WifiMac.
    */
   virtual Ptr<MultiBandElement> GetMultiBandElement (void) const = 0;
   /**
-   * Notify Band Changed
-   * \param standard
+   * Notify that the frequency band has changed
+   * \param standard The WiFi standard to use in the new band.
    * \param address The address of the peer station.
    * \param isInitiator flag to indicate whether we are the initiator of the FST or not.
    */
-  void NotifyBandChanged (enum WifiPhyStandard standard, Mac48Address address, bool isInitiator);
-
-  /* Fast Session Transfer */
+  void NotifyBandChanged (WifiPhyStandard standard, Mac48Address address, bool isInitiator);
   /**
-   * ChangeBand
-   * \param peerStation
-   * \param bandId
-   * \param isInitiator
+   * Change the current operational frequency band.
+   * \param peerStation The MAC address of the peer station.
+   * \param bandId The ID of the new band.
+   * \param isInitiator True is we are the initiator of the FST, otherwise false.
    */
   void ChangeBand (Mac48Address peerStation, BandID bandId, bool isInitiator);
+  /**
+   * MacTxOk
+   * \param address
+   */
   void MacTxOk (Mac48Address address);
+  /**
+   * MacRxOk
+   * \param address
+   */
   void MacRxOk (Mac48Address address);
 
-  uint32_t m_llt;                 //!< Link Loss Timeout.
-  uint32_t m_fstId;               //!< Fast session transfer ID.
-  FstSessionMap m_fstSessionMap;
+  uint32_t m_llt;                   //!< Link Loss Timeout.
+  uint32_t m_fstId;                 //!< Fast session transfer ID.
+  FstSessionMap m_fstSessionMap;    //!< Maps for active FST sessions.
+
+  //// WIGIG ////
 
   Ssid m_ssid;      //!< Service Set ID (SSID)
   MacState m_state; //!< The state of the MAC layer.
 
   /** This holds a pointer to the DCF instance for this WifiMac - used
   for transmission of frames to non-QoS peers. */
-  Ptr<DcaTxop> m_dca;
+  Ptr<Txop> m_txop;
 
   /** This is a map from Access Category index to the corresponding
   channel access function */
   EdcaQueues m_edca;
 
   /**
-   * \param standard the phy standard to be used
+   * \param standard the PHY standard to be used
    *
    * This method is called by ns3::WifiMac::ConfigureStandard to
-   * complete the configuration process for a requested phy standard.
+   * complete the configuration process for a requested PHY standard.
    *
-   * This method may be overriden by a derived class (e.g., in order
+   * This method may be overridden by a derived class (e.g., in order
    * to apply DCF or EDCA parameters specific to the usage model it is
    * dealing with), in which case the reimplementation may choose to
    * deal with certain values in the WifiPhyStandard enumeration, and
@@ -442,8 +374,8 @@ protected:
   void FinishConfigureStandard (WifiPhyStandard standard);
 
   /**
-   * \param cwMin the minimum congestion window size
-   * \param cwMax the maximum congestion window size
+   * \param cwMin the minimum contention window size
+   * \param cwMax the maximum contention window size
    *
    * This method is called to set the minimum and the maximum
    * contention window size.
@@ -453,7 +385,7 @@ protected:
   /**
    * This method is invoked by a subclass to specify what type of
    * station it is implementing. This is something that the channel
-   * access functions (instantiated within this class as EdcaTxopN's)
+   * access functions (instantiated within this class as QosTxop's)
    * need to know.
    *
    * \param type the type of station.
@@ -465,19 +397,18 @@ protected:
    * invoked to notify us that a frame has been received. The
    * implementation is intended to capture logic that is going to be
    * common to all (or most) derived classes. Specifically, handling
-   * of Block Ack managment frames is dealt with here.
+   * of Block Ack management frames is dealt with here.
    *
-   * This method will need, however, to be overriden by derived
+   * This method will need, however, to be overridden by derived
    * classes so that they can perform their data handling before
    * invoking the base version.
    *
-   * \param packet the packet that has been received.
-   * \param hdr a pointer to the MAC header of the received frame.
+   * \param mpdu the MPDU that has been received.
    */
-  virtual void Receive (Ptr<Packet> packet, const WifiMacHeader *hdr);
+  virtual void Receive (Ptr<WifiMacQueueItem> mpdu);
   /**
    * The packet we sent was successfully received by the receiver
-   * (i.e. we received an ACK from the receiver).
+   * (i.e. we received an Ack from the receiver).
    *
    * \param packet the packet that has been transmitted.
    * \param hdr the header of the packet that we successfully sent.
@@ -485,7 +416,7 @@ protected:
   virtual void TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr);
   /**
    * The packet we sent was successfully received by the receiver
-   * (i.e. we did not receive an ACK from the receiver).
+   * (i.e. we did not receive an Ack from the receiver).
    *
    * \param hdr the header of the packet that we failed to sent
    */
@@ -498,17 +429,15 @@ protected:
    * \param from the address of the source
    * \param to the address of the destination
    */
-  void ForwardUp (Ptr<Packet> packet, Mac48Address from, Mac48Address to);
+  void ForwardUp (Ptr<const Packet> packet, Mac48Address from, Mac48Address to);
 
   /**
    * This method can be called to de-aggregate an A-MSDU and forward
    * the constituent packets up the stack.
    *
-   * \param aggregatedPacket the Packet containing the A-MSDU.
-   * \param hdr a pointer to the MAC header for \c aggregatedPacket.
+   * \param mpdu the MPDU containing the A-MSDU.
    */
-  virtual void DeaggregateAmsduAndForward (Ptr<Packet> aggregatedPacket,
-                                           const WifiMacHeader *hdr);
+  virtual void DeaggregateAmsduAndForward (Ptr<WifiMacQueueItem> mpdu);
 
   /**
    * This method can be called to accept a received ADDBA Request. An
@@ -521,46 +450,17 @@ protected:
                           Mac48Address originator);
 
   /**
-   * This Boolean is set \c true iff this WifiMac is to model
-   * 802.11e/WMM style Quality of Service. It is exposed through the
-   * attribute system.
-   *
-   * At the moment, this flag is the sole selection between QoS and
-   * non-QoS operation for the STA (whether IBSS, AP, or
-   * non-AP). Ultimately, we will want a QoS-enabled STA to be able to
-   * fall back to non-QoS operation with a non-QoS peer. This'll
-   * require further intelligence - i.e., per-association QoS
-   * state. Having a big switch seems like a good intermediate stage,
-   * however.
-   */
-  bool m_qosSupported;
-
-  /**
    * Enable or disable QoS support for the device.
    *
    * \param enable whether QoS is supported
    */
-  void SetQosSupported (bool enable);
+  virtual void SetQosSupported (bool enable);
   /**
    * Return whether the device supports QoS.
    *
    * \return true if QoS is supported, false otherwise
    */
   bool GetQosSupported () const;
-
-  /**
-    * This Boolean is set \c true iff this WifiMac is to model
-    * 802.11n. It is exposed through the attribute system.
-    *
-    * At the moment, this flag is the sole selection between HT and
-    * non-HT operation for the STA (whether IBSS, AP, or
-    * non-AP). Ultimately, we will want a HT-enabled STA to be able to
-    * fall back to non-HT operation with a non-HT peer. This'll
-    * require further intelligence - i.e., per-association HT
-    * state. Having a big switch seems like a good intermediate stage,
-    * however.
-    */
-  bool m_htSupported;
 
   /**
    * Enable or disable HT support for the device.
@@ -576,11 +476,6 @@ protected:
   bool GetHtSupported () const;
 
   /**
-   * This Boolean is set \c true iff this WifiMac is to model
-   * 802.11ac. It is exposed through the attribute system.
-   */
-  bool m_vhtSupported;
-  /**
    * Enable or disable VHT support for the device.
    *
    * \param enable whether VHT is supported
@@ -593,11 +488,6 @@ protected:
    */
   bool GetVhtSupported () const;
 
-  /**
-   * This Boolean is set \c true iff this WifiMac is to model
-   * 802.11g. It is exposed through the attribute system.
-   */
-  bool m_erpSupported;
   /**
    * Enable or disable ERP support for the device.
    *
@@ -612,11 +502,6 @@ protected:
   bool GetErpSupported () const;
 
   /**
-   * This Boolean is set \c true iff this WifiMac is to model
-   * 802.11b. It is exposed through the attribute system.
-   */
-  bool m_dsssSupported;
-  /**
    * Enable or disable DSSS support for the device.
    *
    * \param enable whether DSSS is supported
@@ -629,6 +514,7 @@ protected:
    */
   bool GetDsssSupported () const;
 
+  //// WIGIG ////
   /**
    * This Boolean is set \c true if this WifiMac is to model
    * 802.11ad. It is exposed through the attribute system.
@@ -641,16 +527,29 @@ protected:
    */
   void SetDmgSupported (bool enable);
   /**
-   * Return whether the device supports QoS.
+   * Return whether the device supports DMG.
    *
    * \return true if DMG is supported, false otherwise
    */
-  bool GetDmgSupported () const;
- /**
-   * This Boolean is set \c true iff this WifiMac is to model
-   * 802.11ax. It is exposed through the attribute system.
+  bool GetDmgSupported (void) const;
+  /**
+   * This Boolean is set \c true if this WifiMac is to model
+   * 802.11ay. It is exposed through the attribute system.
    */
-  bool m_heSupported;
+  bool m_edmgSupported;
+  /**
+   * Enable or disable EDMG support for the device.
+   *
+   * \param enable whether EDMG is supported
+   */
+  void SetEdmgSupported (bool enable);
+  /**
+   * Return whether the device supports EDMG.
+   *
+   * \return true if EDMG is supported, false otherwise
+   */
+  bool GetEdmgSupported (void) const;
+  //// WIGIG ////
   /**
    * Enable or disable HE support for the device.
    *
@@ -663,23 +562,6 @@ protected:
    * \return true if HE is supported, false otherwise
    */
   bool GetHeSupported () const;
-
-  /// Configure aggregation function
-  virtual void ConfigureAggregation (void);
-  /// Enable aggregation function
-  virtual void EnableAggregation (void);
-  /// Disable aggregation function
-  virtual void DisableAggregation (void);
-
-  uint32_t m_voMaxAmsduSize; ///< maximum A-MSDU size for AC_VO
-  uint32_t m_viMaxAmsduSize; ///< maximum A-MSDU size for AC_VI
-  uint32_t m_beMaxAmsduSize; ///< maximum A-MSDU size for AC_BE
-  uint32_t m_bkMaxAmsduSize; ///< maximum A-MSDU size for AC_BK
-
-  uint32_t m_voMaxAmpduSize; ///< maximum A-MPDU size for AC_VO
-  uint32_t m_viMaxAmpduSize; ///< maximum A-MPDU size for AC_VI
-  uint32_t m_beMaxAmpduSize; ///< maximum A-MPDU size for AC_BE
-  uint32_t m_bkMaxAmpduSize; ///< maximum A-MPDU size for AC_BK
 
 private:
   /// type conversion operator
@@ -701,77 +583,27 @@ private:
   void SetupEdcaQueue (AcIndex ac);
 
   /**
-   * Set the maximum A-MSDU size for AC_VO.
+   * Set the block ack threshold for AC_VO.
    *
-   * \param size the maximum A-MSDU size for AC_VO.
-   */
-  void SetVoMaxAmsduSize (uint32_t size);
-  /**
-   * Set the maximum A-MSDU size for AC_VI.
-   *
-   * \param size the maximum A-MSDU size for AC_VI.
-   */
-  void SetViMaxAmsduSize (uint32_t size);
-  /**
-   * Set the maximum A-MSDU size for AC_BE.
-   *
-   * \param size the maximum A-MSDU size for AC_BE.
-   */
-  void SetBeMaxAmsduSize (uint32_t size);
-  /**
-   * Set the maximum A-MSDU size for AC_BK.
-   *
-   * \param size the maximum A-MSDU size for AC_BK.
-   */
-  void SetBkMaxAmsduSize (uint32_t size);
-
-  /**
-   * Set the maximum A-MPDU size for AC_VO.
-   *
-   * \param size the maximum A-MPDU size for AC_VO.
-   */
-  void SetVoMaxAmpduSize (uint32_t size);
-  /**
-   * Set the maximum A-MPDU size for AC_VI.
-   *
-   * \param size the maximum A-MPDU size for AC_VI.
-   */
-  void SetViMaxAmpduSize (uint32_t size);
-  /**
-   * Set the maximum A-MPDU size for AC_BE.
-   *
-   * \param size the maximum A-MPDU size for AC_BE.
-   */
-  void SetBeMaxAmpduSize (uint32_t size);
-  /**
-   * Set the maximum A-MPDU size for AC_BK.
-   *
-   * \param size the maximum A-MPDU size for AC_BK.
-   */
-  void SetBkMaxAmpduSize (uint32_t size);
-
-  /**
-   * Set the Block ACK threshold for AC_VO.
-   *
-   * \param threshold the Block ACK threshold for AC_VO.
+   * \param threshold the block ack threshold for AC_VO.
    */
   void SetVoBlockAckThreshold (uint8_t threshold);
   /**
-   * Set the Block ACK threshold for AC_VI.
+   * Set the block ack threshold for AC_VI.
    *
-   * \param threshold the Block ACK threshold for AC_VI.
+   * \param threshold the block ack threshold for AC_VI.
    */
   void SetViBlockAckThreshold (uint8_t threshold);
   /**
-   * Set the Block ACK threshold for AC_BE.
+   * Set the block ack threshold for AC_BE.
    *
-   * \param threshold the Block ACK threshold for AC_BE.
+   * \param threshold the block ack threshold for AC_BE.
    */
   void SetBeBlockAckThreshold (uint8_t threshold);
   /**
-   * Set the Block ACK threshold for AC_BK.
+   * Set the block ack threshold for AC_BK.
    *
-   * \param threshold the Block ACK threshold for AC_BK.
+   * \param threshold the block ack threshold for AC_BK.
    */
   void SetBkBlockAckThreshold (uint8_t threshold);
 
@@ -800,12 +632,52 @@ private:
    */
   void SetBkBlockAckInactivityTimeout (uint16_t timeout);
 
+  /**
+   * This Boolean is set \c true iff this WifiMac is to model
+   * 802.11e/WMM style Quality of Service. It is exposed through the
+   * attribute system.
+   *
+   * At the moment, this flag is the sole selection between QoS and
+   * non-QoS operation for the STA (whether IBSS, AP, or
+   * non-AP). Ultimately, we will want a QoS-enabled STA to be able to
+   * fall back to non-QoS operation with a non-QoS peer. This'll
+   * require further intelligence - i.e., per-association QoS
+   * state. Having a big switch seems like a good intermediate stage,
+   * however.
+   */
+  bool m_qosSupported;
+  /**
+   * This Boolean is set \c true iff this WifiMac is to model
+   * 802.11g. It is exposed through the attribute system.
+   */
+  bool m_erpSupported;
+  /**
+   * This Boolean is set \c true iff this WifiMac is to model
+   * 802.11b. It is exposed through the attribute system.
+   */
+  bool m_dsssSupported;
+
+  /// Enable aggregation function
+  void EnableAggregation (void);
+  /// Disable aggregation function
+  void DisableAggregation (void);
+
+  uint16_t m_voMaxAmsduSize; ///< maximum A-MSDU size for AC_VO (in bytes)
+  uint16_t m_viMaxAmsduSize; ///< maximum A-MSDU size for AC_VI (in bytes)
+  uint16_t m_beMaxAmsduSize; ///< maximum A-MSDU size for AC_BE (in bytes)
+  uint16_t m_bkMaxAmsduSize; ///< maximum A-MSDU size for AC_BK (in bytes)
+
+  uint32_t m_voMaxAmpduSize; ///< maximum A-MPDU size for AC_VO (in bytes)
+  uint32_t m_viMaxAmpduSize; ///< maximum A-MPDU size for AC_VI (in bytes)
+  uint32_t m_beMaxAmpduSize; ///< maximum A-MPDU size for AC_BE (in bytes)
+  uint32_t m_bkMaxAmpduSize; ///< maximum A-MPDU size for AC_BK (in bytes)
+
   TracedCallback<const WifiMacHeader &> m_txOkCallback; ///< transmit OK callback
   TracedCallback<const WifiMacHeader &> m_txErrCallback; ///< transmit error callback
 
   TypeOfStation m_type;  ///< type of the station
   bool m_shortSlotTimeSupported; ///< flag whether short slot time is supported
-  bool m_rifsSupported; ///< flag whether RIFS is supported
+  bool m_rifsSupported; ///< flag whether RIFS is supported (deprecated)
 };
 
 } //namespace ns3
