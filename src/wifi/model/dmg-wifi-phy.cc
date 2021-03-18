@@ -1716,13 +1716,13 @@ DmgWifiPhy::StartReceivePreamble (Ptr<WifiPpdu> ppdu, std::vector<double> rxPowe
        * based on the maximum Rx power */
       NS_LOG_INFO ("Receiving packet in MIMO mode");
       rxPowerW = *(std::max_element (rxPowerList.begin (), rxPowerList.end ()));
-      /* During MU-MIMO BFT we transmit packets using multiple transmit chains and applying a spatial
+      /* During MIMO BFT we transmit packets using multiple transmit chains and applying a spatial
        * expansion with cyclic shift diversity - for now we model this by assuming the transmission is
        * equal to a SISO transmission using the
        * maximum Rx Power, since we are able decode the strongest path and remove the interference from
        * the other Tx antennas
        */
-      if (m_muMimoBeamformingTraining)
+      if (txVector.Get_NUM_STS () == 1)
         event = m_interference.Add (ppdu, txVector, rxDuration, rxPowerW);
       else
         event = m_interference.Add (ppdu, txVector, rxDuration, rxPowerW, rxPowerList);

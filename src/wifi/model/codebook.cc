@@ -1256,8 +1256,8 @@ Codebook::GetSMBT_Subfields (Mac48Address from, std::vector<AntennaID> antennaCa
     }
   m_mimoCombinations.push_back (newCombination);
   // Set the list of sectors that we want to train for each antenna
-  SetBeamformingSectorList (ReceiveSectorSweep, from, rxSectorCandidates);
   SetBeamformingSectorList (TransmitSectorSweep, from, txSectorCandidates);
+  SetBeamformingSectorList (ReceiveSectorSweep, from, rxSectorCandidates);
   // Count the number of subfields that we want to train
   uint16_t numberOfSubfields = CountMimoNumberOfSectors (rxSectorCandidates, m_useAWVsMimoBft);
   return numberOfSubfields;
@@ -1503,6 +1503,12 @@ Codebook::GetTotalNumberOfReceiveSectorsOrAWVs (void)
     return GetTotalNumberOfReceiveSectors ();
   else
     return CountMimoNumberOfSectors (m_rxBeamformingSectors, m_useAWVsMimoBft);
+}
+
+Antenna2SectorList
+Codebook::GetRxSectorsList (void)
+{
+  return m_rxBeamformingSectors;
 }
 
 }

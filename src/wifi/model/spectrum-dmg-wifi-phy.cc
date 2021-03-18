@@ -34,6 +34,7 @@
 #include "wifi-utils.h"
 #include "wifi-ppdu.h"
 #include "wifi-psdu.h"
+#include <algorithm>
 
 namespace ns3 {
 
@@ -251,7 +252,21 @@ SpectrumDmgWifiPhy::StartRx (Ptr<SpectrumSignalParameters> rxParams)
   uint16_t channelWidth = GetChannelWidth ();
   Ptr<SpectrumValue> filter = WifiSpectrumValueHelper::CreateRfFilter (GetFrequency (), channelWidth,
                                                                        WIGIG_OFDM_SUBCARRIER_SPACING, GetGuardBandwidth ());
-  double rxPowerW = FilterSignal (filter, receivedSignalPsd);
+  double rxPowerW;
+  std::vector<double> rxPowerList;
+  if (rxParams->psdList.size () > 0)
+    {
+      for (auto &psd : rxParams->psdList)
+        {
+         rxPowerList.push_back (FilterSignal (filter, psd));
+        }
+      rxPowerW = *std::max_element(rxPowerList.begin (), rxPowerList.end ());
+    }
+  else
+    {
+      rxPowerW = FilterSignal (filter, receivedSignalPsd);
+      rxPowerList.push_back (rxPowerW);
+    }
 
   /* MIMO calculation */
 //  std::cout << "SISO: " << WToDbm (rxPowerW) << std::endl;
@@ -294,18 +309,11 @@ SpectrumDmgWifiPhy::StartRx (Ptr<SpectrumSignalParameters> rxParams)
       if (rxParams->psdList.size () > 0)
         {
           NS_LOG_INFO ("Received EDMG WiFi signal in MIMO mode");
-          std::vector<double> rxPowerList;
-          for (auto &psd : rxParams->psdList)
-            {
-             rxPowerList.push_back (FilterSignal (filter, psd));
-            }
           StartReceivePreamble (ppdu, rxPowerList);
          }
       else
         {
           NS_LOG_INFO ("Received EDMG WiFi signal in SISO mode");
-          std::vector<double> rxPowerList;
-          rxPowerList.push_back (rxPowerW);
           StartReceivePreamble (ppdu, rxPowerList);
         }
     }
@@ -329,12 +337,12 @@ SpectrumDmgWifiPhy::StartRx (Ptr<SpectrumSignalParameters> rxParams)
       if (rxParams->psdList.size () > 0)
         {
           NS_LOG_INFO ("Received EDMG WiFi TRN-SF signal in MIMO mode");
-          std::vector<double> rxPowerList;
-          for (auto &psd : rxParams->psdList)
+          std::vector<double> rxPowerListDbm;
+          for (auto &rxPower : rxPowerList)
             {
-             rxPowerList.push_back (WToDbm (FilterSignal (filter, psd)));
+             rxPowerListDbm.push_back (WToDbm (rxPower));
             }
-          StartReceiveEdmgTrnSubfield (wifiRxParams->txVector, rxPowerList);
+          StartReceiveEdmgTrnSubfield (wifiRxParams->txVector, rxPowerListDbm);
         }
       else
         {

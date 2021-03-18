@@ -651,6 +651,11 @@ protected:
    * \param useAwvs
    */
   void SetUseAWVsMimoBft (bool useAwvs);
+  /**
+   * Returns the list of the general receive sectors of the antenna.
+   * \return the list of general receive sectors
+   */
+  Antenna2SectorList GetRxSectorsList (void);
   //// NINA ////
 
 private:

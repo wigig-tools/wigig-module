@@ -2255,30 +2255,20 @@ DmgWifiMac::SendMimoBrpFrame (Mac48Address receiver, BRP_Request_Field &requestF
 
 
   /* Set the best sector for transmission with this station */
-  if (receiver != GetAddress ())
+  /* MIMO BRP packets are send with spatial expansion and mapping a single stream across all transmit chains */
+  m_codebook->SetCommunicationMode (MIMO_MODE);
+  for (auto const &txConfig : m_mimoConfigTraining)
     {
-      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[receiver]);
-      m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
-      NS_LOG_INFO ("Sending MIMO BRP Frame to " << receiver << " at " << Simulator::Now ()
-                   << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-                   << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
-    }
-  else
-    {
-      /* During the MIMO phase training for MU-MIMO we send frames with spatial expansion in order to be able to reach all responders */
-      m_codebook->SetCommunicationMode (MIMO_MODE);
-      for (auto const &txConfig : m_mimoConfigTraining)
+      NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (txConfig.first.first)
+                        << ", to SectorID=" << static_cast<uint16_t> (txConfig.first.second)
+                        << ", AwvID=" << static_cast<uint16_t> (txConfig.second));
+      m_codebook->SetActiveTxSectorID (txConfig.first.first, txConfig.first.second);
+      if (txConfig.second != NO_AWV_ID)
         {
-          NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (txConfig.first.first)
-                            << ", to SectorID=" << static_cast<uint16_t> (txConfig.first.second)
-                            << ", AwvID=" << static_cast<uint16_t> (txConfig.second));
-          m_codebook->SetActiveTxSectorID (txConfig.first.first, txConfig.first.second);
-          if (txConfig.second != NO_AWV_ID)
-            {
-              m_codebook->SetActiveTxAwvID (txConfig.second);
-            }
+          m_codebook->SetActiveTxAwvID (txConfig.second);
         }
     }
+  NS_LOG_INFO ("Sending MIMO BRP Frame to " << receiver << " at " << Simulator::Now ());
   /* Transmit control frames directly without DCA + DCF Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
 }
@@ -2320,12 +2310,29 @@ DmgWifiMac::SendFeedbackMimoBrpFrame (Mac48Address receiver, BRP_Request_Field &
   packet->AddHeader (actionHdr);
 
   /* Set the best sector for transmission with this station */
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[receiver]);
-  m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+  if (m_muMimoBfPhase != MU_SISO_FBCK)
+    {
+      /* MIMO BRP packets are send with spatial expansion and mapping a single stream across all transmit chains */
+      m_codebook->SetCommunicationMode (MIMO_MODE);
+      for (auto const &txConfig : m_mimoConfigTraining)
+        {
+          NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (txConfig.first.first)
+                            << ", to SectorID=" << static_cast<uint16_t> (txConfig.first.second)
+                            << ", AwvID=" << static_cast<uint16_t> (txConfig.second));
+          m_codebook->SetActiveTxSectorID (txConfig.first.first, txConfig.first.second);
+          if (txConfig.second != NO_AWV_ID)
+            {
+              m_codebook->SetActiveTxAwvID (txConfig.second);
+            }
+        }
+    }
+  else
+    {
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[receiver]);
+      m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+    }
 
-  NS_LOG_INFO ("Sending MIMO BRP Frame with Feedback to " << receiver << " at " << Simulator::Now ()
-               << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-               << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
+  NS_LOG_INFO ("Sending MIMO BRP Frame with Feedback to " << receiver << " at " << Simulator::Now ());
 
   /* Transmit control frames directly without DCA + DCF Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
@@ -2607,6 +2614,14 @@ DmgWifiMac::StartSuMimoBeamforming (Mac48Address responder, bool isBrpTxssNeeded
       m_codebook->SetUseAWVsMimoBft (useAwvs);
     }
   m_low->MIMO_BFT_Phase_Started ();
+  // Set the antenna configuration to be used for transmitting BRP frames with spatial expansion - we use the optimal configuration for the user with all antennas
+  for (auto & antenna: antennaIds)
+    {
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[responder]);
+      ANTENNA_CONFIGURATION config = std::make_pair (antenna, antennaConfigTx.second);
+      AWV_CONFIGURATION pattern = std::make_pair (config, NO_AWV_ID);
+      m_mimoConfigTraining.push_back (pattern);
+    }
   if (isBrpTxssNeeded)
     StartMimoBrpTxssSetup (responder, antennaIds);
   else
@@ -2874,10 +2889,18 @@ DmgWifiMac::StartSuMimoMimoPhase (Mac48Address from, MIMO_ANTENNA_COMBINATIONS_L
    * each other, on the Rx side the measurements done at an Rx antenna are completely independent of the antenna configuration of the second
    * antenna, allowing us to reduce the training time by only testing each combination once and determing all possible combinations in postprocessing
    * by combining the measurements */
+  bool trainAllRxSectors = true;
   Antenna2SectorList rxCandidateSectors;
-  for (auto antenna : candidateAntennas)
+  if (trainAllRxSectors)
     {
-      rxCandidateSectors[antenna] = rxSectors;
+      rxCandidateSectors = m_codebook->GetRxSectorsList ();
+    }
+  else
+    {
+      for (auto antenna : candidateAntennas)
+        {
+          rxCandidateSectors[antenna] = rxSectors;
+        }
     }
   m_suMimomMimoCandidatesSelected (from, candidateSectors, rxCandidateSectors);
   double numberOfSubfields = m_codebook->GetSMBT_Subfields (from, candidateAntennas, candidateSectors, rxCandidateSectors);
@@ -2937,12 +2960,21 @@ DmgWifiMac::SendSuMimoSetupFrame (void)
   packet->AddHeader (actionHdr);
 
   /* Set the best sector for transmission with this station */
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[m_peerStation]);
-  m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+  /* MIMO BF setup packets are send with spatial expansion and mapping a single stream across all transmit chains */
+  m_codebook->SetCommunicationMode (MIMO_MODE);
+  for (auto const &txConfig : m_mimoConfigTraining)
+    {
+      NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (txConfig.first.first)
+                        << ", to SectorID=" << static_cast<uint16_t> (txConfig.first.second)
+                        << ", AwvID=" << static_cast<uint16_t> (txConfig.second));
+      m_codebook->SetActiveTxSectorID (txConfig.first.first, txConfig.first.second);
+      if (txConfig.second != NO_AWV_ID)
+        {
+          m_codebook->SetActiveTxAwvID (txConfig.second);
+        }
+    }
 
-  NS_LOG_INFO ("Sending MIMO BF Setup frame to " << m_peerStation << " at " << Simulator::Now ()
-               << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-               << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
+  NS_LOG_INFO ("Sending MIMO BF Setup frame to " << m_peerStation << " at " << Simulator::Now ());
 
   /* Transmit control frames directly without TXOP + Channel Access Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
@@ -3143,12 +3175,21 @@ DmgWifiMac::SendSuMimoBfFeedbackFrame (void)
   packet->AddHeader (actionHdr);
 
   /* Set the best sector for transmission with this station */
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[m_peerStation]);
-  m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+  /* MIMO BF Feedback packets are send with spatial expansion and mapping a single stream across all transmit chains */
+  m_codebook->SetCommunicationMode (MIMO_MODE);
+  for (auto const &txConfig : m_mimoConfigTraining)
+    {
+      NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (txConfig.first.first)
+                        << ", to SectorID=" << static_cast<uint16_t> (txConfig.first.second)
+                        << ", AwvID=" << static_cast<uint16_t> (txConfig.second));
+      m_codebook->SetActiveTxSectorID (txConfig.first.first, txConfig.first.second);
+      if (txConfig.second != NO_AWV_ID)
+        {
+          m_codebook->SetActiveTxAwvID (txConfig.second);
+        }
+    }
 
-  NS_LOG_INFO ("Sending MIMO BF Feedback frame to " << m_peerStation
-               << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-               << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
+  NS_LOG_INFO ("Sending MIMO BF Feedback frame to " << m_peerStation);
 
   /* Transmit control frames directly without DCA + DCF Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
@@ -3349,150 +3390,6 @@ DmgWifiMac::FindKBestCombinations (uint16_t k, uint8_t numberOfStreams, uint8_t 
         break;
     }
   return kBestCombinations;
-}
-
-MIMO_ANTENNA_COMBINATIONS_LIST
-DmgWifiMac::FindKBestCombinations2x2MIMO (uint8_t k, MIMO_FEEDBACK_MAP &feedback)
-{
-  // Make a multi map with the SNR as key and sort it in descending order.
-//  SU_MIMO_FEEDBACK_SORTED_MAP sortedFeedback;
-//  for (SU_MIMO_FEEDBACK_MAP::iterator it = feedback.begin (); it != feedback.end (); it++)
-//    {
-//      sortedFeedback.insert (std::make_pair (it->second, it->first));
-//    }
-
-  MIMO_FEEDBACK_SORTED_MAPS combinations;
-  // Split the map into different maps according to the TX-RX Combinations.
-  for (int i = 0; i < 4; i++)
-    {
-      MIMO_FEEDBACK_SORTED_MAP TxRxCombination;
-      TX_ANTENNA_ID txId = std::get<0> (feedback.begin ()->first);
-      RX_ANTENNA_ID rxId = std::get<1> (feedback.begin ()->first);
-      for (MIMO_FEEDBACK_MAP::iterator it = feedback.begin (); it != feedback.end ();)
-        {
-          if ((std::get<0> (it->first) == txId) && (std::get<1> (it->first) == rxId))
-            {
-              TxRxCombination.insert (std::make_pair (it->second, it->first));
-              feedback.erase (it++);
-            }
-          else
-            {
-              ++it;
-            }
-        }
-      combinations.push_back (TxRxCombination);
-    }
-
-  // Keep only the top K measurements for each tx-rx combination in order to reduce the number of calculations.
-  for (MIMO_FEEDBACK_SORTED_MAPS_I it = combinations.begin (); it!= combinations.end (); it++)
-    {
-      if ((*it).size () > k)
-        {
-          MIMO_FEEDBACK_SORTED_MAP_I iter = it->begin ();
-          std::advance (iter, k);
-          (*it).erase (iter, it->end ());
-        }
-    }
-
-  // Find all candidates of different Tx-Rx combinations and place them in a multimap sorted in desceding joint SNR order.
-  MIMO_CANDIDATE_MAP candidateCombinations;
-  for (MIMO_FEEDBACK_SORTED_MAPS_I it = combinations.begin (); it!= combinations.end (); it++)
-    {   
-      bool foundNewConfig = false;
-      MIMO_FEEDBACK_SORTED_MAPS_I insideIt = it;
-      insideIt++;
-      while (!foundNewConfig)
-        {
-          if ((std::get<0> (insideIt->begin ()->second) != std::get<0> (it->begin ()->second))
-              && (std::get<1> (insideIt->begin ()->second) != std::get<1> (it->begin ()->second)))
-            foundNewConfig = true;
-          else
-            insideIt++;
-        }
-      for (MIMO_FEEDBACK_SORTED_MAP_I MapIt = it->begin (); MapIt != it->end (); MapIt++)
-        {
-          MIMO_FEEDBACK_CONFIGURATION candidate1 = MapIt->second;
-          SNR combinationSnr = 0;
-          for (MIMO_FEEDBACK_SORTED_MAP_I insideMapIt = insideIt->begin ();
-               insideMapIt != insideIt->end (); insideMapIt++)
-            {
-              MIMO_FEEDBACK_COMBINATION combination;
-              combination.push_back (candidate1);
-              combination.push_back (insideMapIt->second);
-              combinationSnr = MapIt->first + insideMapIt->first;
-              candidateCombinations.insert (std::make_pair (combinationSnr, combination));
-            }
-        }
-      combinations.erase (insideIt);
-    }
-
-  // Create a list of the K best combinations according to the highest joint SNR, making sure to not have any duplicate combinations.
-  MIMO_ANTENNA_COMBINATIONS_LIST kBestCombinations;
-  for (MIMO_CANDIDATE_MAP_I it = candidateCombinations.begin (); it != candidateCombinations.end (); it++)
-    {
-      MIMO_ANTENNA_COMBINATION combinaton1;
-      MIMO_ANTENNA_COMBINATION combinaton2;
-
-      ANTENNA_CONFIGURATION config1 = std::make_pair (std::get<0> (it->second.at (0)), std::get<2> (it->second.at (0)));
-      ANTENNA_CONFIGURATION config2 = std::make_pair (std::get<0> (it->second.at (1)), std::get<2> (it->second.at (1)));
-
-      combinaton1.push_back (config1);
-      combinaton1.push_back (config2);
-      combinaton2.push_back (config2);
-      combinaton2.push_back (config1);
-
-      MIMO_ANTENNA_COMBINATIONS_LIST::iterator sameConfig1 = std::find (kBestCombinations.begin (), kBestCombinations.end (), combinaton1);
-      MIMO_ANTENNA_COMBINATIONS_LIST::iterator sameConfig2 = std::find (kBestCombinations.begin (), kBestCombinations.end (), combinaton2);
-
-      if ((sameConfig1 == kBestCombinations.end ()) && (sameConfig2 == kBestCombinations.end ()))
-        {
-          std::sort (combinaton1.begin (), combinaton1. end ());
-          kBestCombinations.push_back (combinaton1);
-        }
-      if (kBestCombinations.size () == k)
-        break;
-    }
-
-  return kBestCombinations;
-}
-
-std::vector<uint32_t>
-DmgWifiMac::FindBestTxCombinations2x2MIMO (uint8_t numberOfTxCombinations, uint16_t rxCombinationsTested, MIMO_SNR_LIST measurements)
-{
-  std::vector<double> minSnr;
-  std::vector<uint32_t> bestCombinations;
-  uint16_t txCombinationsTested = measurements.size () / (rxCombinationsTested);
-  MIMO_SNR_LIST_I it = measurements.begin ();
-  MIMO_SNR_LIST_I insideIt = measurements.begin ();
-  MIMO_SNR_LIST_I txStartIt = measurements.begin ();
-  for (uint16_t i = 0; i < txCombinationsTested; i++)
-    {
-      txStartIt = it;
-      for (uint16_t j = 0; j < (rxCombinationsTested); j++)
-        {
-          insideIt = txStartIt;
-          for (uint16_t k = 0; k < (rxCombinationsTested); k++)
-            {
-              double min1 = std::min (it->second.at (0), insideIt->second.at (3));
-              double min2 = std::min (insideIt->second.at (1), it->second.at (2));
-              minSnr.push_back (std::max (min1, min2));
-              insideIt++;
-            }
-          it++;
-        }
-    }
-  for (uint8_t i = 0; i < numberOfTxCombinations; i++)
-    {
-      uint32_t maxElement = std::distance (minSnr.begin (), std::max_element (minSnr.begin (), minSnr.end ())) + 1;
-      for (auto &combinations : bestCombinations)
-        {
-          if (maxElement >= combinations)
-            maxElement++;
-        }
-      bestCombinations.push_back (maxElement);
-      minSnr.erase (minSnr.begin () + std::distance (minSnr.begin (), std::max_element (minSnr.begin (), minSnr.end ())));
-    }
-  return bestCombinations;
 }
 
 BEST_TX_COMBINATIONS_AWV_IDS
@@ -4120,12 +4017,24 @@ DmgWifiMac::SendMuMimoSetupFrame (void)
 
   /* For now we transmit as many setup frames as there are users in the MIMO group using the optimal sectors for each user.
    * Should be optimized in the future if multiple STAs can receive frames send with the same Tx sector. */
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[m_aidMap[*m_currentMuGroupMember]]);
-  m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+  /* MIMO BF setup packets are send with spatial expansion and mapping a single stream across all transmit chains */
+  m_codebook->SetCommunicationMode (MIMO_MODE);
+  for (auto const &antenna : m_codebook->GetTotalAntennaIdList ())
+    {
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[m_aidMap[*m_currentMuGroupMember]]);
+      ANTENNA_CONFIGURATION config = std::make_pair (antenna, antennaConfigTx.second);
+      AWV_CONFIGURATION pattern = std::make_pair (config, NO_AWV_ID);
+      NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (pattern.first.first)
+                        << ", to SectorID=" << static_cast<uint16_t> (pattern.first.second)
+                        << ", AwvID=" << static_cast<uint16_t> (pattern.second));
+      m_codebook->SetActiveTxSectorID (pattern.first.first, pattern.first.second);
+      if (pattern.second != NO_AWV_ID)
+        {
+          m_codebook->SetActiveTxAwvID (pattern.second);
+        }
+    }
 
-  NS_LOG_INFO ("Sending broadcast MIMO BF Setup frame at " << Simulator::Now ()
-               << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-               << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
+  NS_LOG_INFO ("Sending broadcast MIMO BF Setup frame at " << Simulator::Now ());
 
   /* Transmit control frames directly without DCA + DCF Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
@@ -4271,12 +4180,21 @@ DmgWifiMac::SendMimoBfPollFrame (void)
   packet->AddHeader (actionHdr);
 
   /* Set the best sector for transmission with this station */
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[receiver]);
-  m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+  /* MIMO BF poll packets are send with spatial expansion and mapping a single stream across all transmit chains */
+  m_codebook->SetCommunicationMode (MIMO_MODE);
+  for (auto const &txConfig : m_mimoConfigTraining)
+    {
+      NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (txConfig.first.first)
+                        << ", to SectorID=" << static_cast<uint16_t> (txConfig.first.second)
+                        << ", AwvID=" << static_cast<uint16_t> (txConfig.second));
+      m_codebook->SetActiveTxSectorID (txConfig.first.first, txConfig.first.second);
+      if (txConfig.second != NO_AWV_ID)
+        {
+          m_codebook->SetActiveTxAwvID (txConfig.second);
+        }
+    }
 
-  NS_LOG_INFO ("Sending MIMO BF Poll frame to " << receiver << " at " << Simulator::Now ()
-               << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-               << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
+  NS_LOG_INFO ("Sending MIMO BF Poll frame to " << receiver << " at " << Simulator::Now ());
 
   /* Transmit control frames directly without DCA + DCF Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
@@ -4403,13 +4321,21 @@ DmgWifiMac::SendMuMimoBfFeedbackFrame (Mac48Address station)
   packet->AddHeader (actionHdr);
 
   /* Set the best sector for transmission with this station */
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[station]);
-  m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+  /* MIMO BF Feedback packets are send with spatial expansion and mapping a single stream across all transmit chains */
+  m_codebook->SetCommunicationMode (MIMO_MODE);
+  for (auto const &txConfig : m_mimoConfigTraining)
+    {
+      NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (txConfig.first.first)
+                        << ", to SectorID=" << static_cast<uint16_t> (txConfig.first.second)
+                        << ", AwvID=" << static_cast<uint16_t> (txConfig.second));
+      m_codebook->SetActiveTxSectorID (txConfig.first.first, txConfig.first.second);
+      if (txConfig.second != NO_AWV_ID)
+        {
+          m_codebook->SetActiveTxAwvID (txConfig.second);
+        }
+    }
 
-  NS_LOG_INFO ("Sending MIMO BF Feedback frame to " << station
-               << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-               << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
-
+  NS_LOG_INFO ("Sending MIMO BF Feedback frame to " << station << " at " << Simulator::Now ());
   /* Transmit control frames directly without DCA + DCF Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
 }
@@ -4497,13 +4423,26 @@ DmgWifiMac::SendMuMimoBfSelectionFrame (void)
   packet->AddHeader (selectionFrame);
   packet->AddHeader (actionHdr);
 
-  /* Set the best sector for transmission with this station */
-  ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[m_aidMap[*m_currentMuGroupMember]]);
-  m_codebook->SetActiveTxSectorID (antennaConfigTx.first, antennaConfigTx.second);
+  /* For now we transmit as many setup frames as there are users in the MIMO group using the optimal sectors for each user.
+   * Should be optimized in the future if multiple STAs can receive frames send with the same Tx sector. */
+  /* MIMO BF Selection packets are send with spatial expansion and mapping a single stream across all transmit chains */
+  m_codebook->SetCommunicationMode (MIMO_MODE);
+  for (auto const &antenna : m_codebook->GetCurrentMimoAntennaIdList ())
+    {
+      ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[m_aidMap[*m_currentMuGroupMember]]);
+      ANTENNA_CONFIGURATION config = std::make_pair (antenna, antennaConfigTx.second);
+      AWV_CONFIGURATION pattern = std::make_pair (config, NO_AWV_ID);
+      NS_LOG_DEBUG ("Activate Transmit Antenna with AntennaID=" << static_cast<uint16_t> (pattern.first.first)
+                        << ", to SectorID=" << static_cast<uint16_t> (pattern.first.second)
+                        << ", AwvID=" << static_cast<uint16_t> (pattern.second));
+      m_codebook->SetActiveTxSectorID (pattern.first.first, pattern.first.second);
+      if (pattern.second != NO_AWV_ID)
+        {
+          m_codebook->SetActiveTxAwvID (pattern.second);
+        }
+    }
 
-  NS_LOG_INFO ("Sending broadcast MIMO BF Selection frame at " << Simulator::Now ()
-               << " with AntennaID=" << static_cast<uint16_t> (antennaConfigTx.first)
-               << " SectorID=" << static_cast<uint16_t> (antennaConfigTx.second));
+  NS_LOG_INFO ("Sending broadcast MIMO BF Selection frame at " << Simulator::Now ());
 
   /* Transmit control frames directly without DCA + DCF Manager */
   TransmitControlFrameImmediately (packet, hdr, MicroSeconds (0));
@@ -5201,6 +5140,7 @@ DmgWifiMac::FrameTxOkSuMimoBFT (const WifiMacHeader &hdr)
                   m_codebook->SetReceivingInQuasiOmniMode ();
                   m_dataCommunicationModeTable[hdr.GetAddr1 ()] = DATA_MODE_SU_MIMO;
                   m_low->MIMO_BFT_Phase_Ended ();
+                  m_mimoConfigTraining.clear ();
                   m_suMimoMimoPhaseComplete (hdr.GetAddr1 ());
                 }
             }
@@ -5335,6 +5275,7 @@ DmgWifiMac::FrameTxOkMuMimoBFT (const WifiMacHeader &hdr)
           GetDmgWifiPhy ()->SetMuMimoBeamformingTraining (false);
           m_muMimoBfPhase = MU_WAIT_MU_MIMO_BF_TRAINING;
           m_codebook->SetReceivingInQuasiOmniMode ();
+          m_mimoConfigTraining.clear ();
           for (auto user : m_edmgMuGroup.aidList)
             {
               m_dataCommunicationModeTable[m_aidMap[user]] = DATA_MODE_MU_MIMO;
@@ -5688,6 +5629,13 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                         // Get a list of the antenna IDs of all the antennas in the codebook.
                         std::vector<AntennaID> antennaIds = m_codebook->GetTotalAntennaIdList ();
                         edmgReplyRequestElement.SetTX_Antenna_Mask (antennaIds);
+                        for (auto & antenna: antennaIds)
+                          {
+                            ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[from]);
+                            ANTENNA_CONFIGURATION config = std::make_pair (antenna, antennaConfigTx.second);
+                            AWV_CONFIGURATION pattern = std::make_pair (config, NO_AWV_ID);
+                            m_mimoConfigTraining.push_back (pattern);
+                          }
                         /* Set up the antenna combinations to test in each packet of the MIMO BRP TXSS and calculate
                          * the number of MIMO BRP TXSS packets that we need if there are multiple antennas which are connected
                          * to the same RF Chain we need multiple BRP packets to train them, otherwise we just need one. */
@@ -6040,6 +5988,13 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                         // for now we train all receive sectors - can't choose candidates since no UL training was done in the SISO phase.
                         bool firstCombination = true;
                         m_codebook->InitializeMimoSectorSweeping (from, ReceiveSectorSweep, firstCombination);
+                        for (auto & antenna: m_codebook->GetTotalAntennaIdList ())
+                          {
+                            ANTENNA_CONFIGURATION_TX antennaConfigTx = std::get<0> (m_bestAntennaConfig[from]);
+                            ANTENNA_CONFIGURATION config = std::make_pair (antenna, antennaConfigTx.second);
+                            AWV_CONFIGURATION pattern = std::make_pair (config, NO_AWV_ID);
+                            m_mimoConfigTraining.push_back (pattern);
+                          }
                       }
                   }
                 return;
@@ -6162,6 +6117,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                         m_codebook->SetReceivingInQuasiOmniMode ();
                         m_dataCommunicationModeTable[from] = DATA_MODE_SU_MIMO;
                         m_low->MIMO_BFT_Phase_Ended ();
+                        m_mimoConfigTraining.clear ();
                         m_suMimoMimoPhaseComplete (from);
                       }
                     else if (m_muMimoBeamformingTraining)
@@ -6243,6 +6199,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                     m_muMimoBfPhase = MU_WAIT_MU_MIMO_BF_TRAINING;
                     m_codebook->SetReceivingInQuasiOmniMode ();
                     m_dataCommunicationModeTable[from] = DATA_MODE_MU_MIMO;
+                    m_mimoConfigTraining.clear ();
                     m_low->MIMO_BFT_Phase_Ended ();
                     m_muMimoMimoPhaseComplete ();
                   }

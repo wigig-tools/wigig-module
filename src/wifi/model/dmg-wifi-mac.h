@@ -588,8 +588,6 @@ public:
    * \param responder The MAC address of the STA that we are beamforming training with.
    */
   void StartSuSisoFeedback (Mac48Address responder, std::vector<AntennaID> antennaIds );
-  //// NINA ////
-
   /**
    * Starts the MIMO BRP TXSS after the setup procedure has been completed, as part of the SISO SU-MIMO phase.
    */
@@ -609,7 +607,6 @@ public:
    * \param address The MAC address of the peer station.
    */
   void SendSuMimoTxssFeedback (void);
-  //// NINA ////
   /**
   * \brief StartSuMimoMimoPhase
   * Starts the MIMO phase of SU-MIMO BFT. Receives a list of Tx candidates to try out which was generated based on the feedback
@@ -620,7 +617,6 @@ public:
   **/
   void StartSuMimoMimoPhase (Mac48Address from, MIMO_ANTENNA_COMBINATIONS_LIST candidates,
                              uint8_t txCombinationsRequested, bool useAwvs = true);
-  //// NINA ////
   /**
    * \brief SendSuMimoSetupFrame
    * Sends a MIMO BF Setup Frame to the peer station, specifying the requested parameters for the MIMO
@@ -683,33 +679,6 @@ public:
   MIMO_ANTENNA_COMBINATIONS_LIST FindKBestCombinations (uint16_t k, uint8_t numberOfStreams, uint8_t numberOfRxAntennas,
                                                         MIMO_FEEDBACK_MAP feedback);
   /**
-   * From a given feedback with measurements from the SISO phase of SU-MIMO Beamforming training for a 2x2 MIMO configuration
-   * find the K best candidates to test in the MIMO phase.
-   * \param k The number of candidates to test.
-   * \param feedback The feedback Map that contains all the measurements done in the SISO phase.
-   * \return A list of K best combinations of antenna configurations to test in the MIMO phase.
-   */
-  static MIMO_ANTENNA_COMBINATIONS_LIST FindKBestCombinations2x2MIMO (uint8_t k, MIMO_FEEDBACK_MAP &feedback);
-  //// NINA ////
-  /**
-   * From a given measurement list from the MIMO phase of SU-MIMO Beamforming training find the best combinations (according to the
-   * number of requested combinations) to feedback to the peer station
-   * \param numberOfTxCombinations The number of combinations the peer station has requested to feedback.
-   * \param measurements The measurement list that contains all the measurements done in the MIMO phase.
-   * \return A list of numberOfTxCombinations measurements taken during the MIMO phase.
-   */
-  static std::vector<uint32_t> FindBestTxCombinations2x2MIMO (uint8_t numberOfTxCombinations, uint16_t rxCombinationsTested,
-                                                              MIMO_SNR_LIST measurements);
-  /**
-   * From a given measurement list from the MIMO phase of SU-MIMO Beamforming training find the best combinations (according to the
-   * number of requested combinations) to feedback to the peer station
-   * \param numberOfTxCombinations The number of combinations the peer station has requested to feedback.
-   * \param measurements The measurement list that contains all the measurements done in the MIMO phase.
-   * \return A list of numberOfTxCombinations measurements taken during the MIMO phase.
-   */
-  static std::vector<std::vector<uint32_t> > FindBestTxCombinationsMuMimo (uint8_t nBestCombinations, uint16_t rxCombinationsTested,
-                                                                           uint8_t nTxAntennas, uint8_t nRxAntennas, MIMO_SNR_LIST measurements);
-  /**
    * From a given measurement list from the MIMO phase of MIMO Beamforming training find the best combinations (according to the
    * number of requested combinations) to feedback to the peer station.
    * \param nBestCombinations The number of combinations the peer station has requested to feedback.
@@ -733,7 +702,6 @@ public:
    * \return The Tx ID associated with the optimal antenna configuration.
    */
   MIMO_FEEDBACK_COMBINATION FindOptimalMuMimoConfig (uint8_t nTx, uint8_t nRx, MIMO_FEEDBACK_MAP feedback, std::vector<uint16_t> txAwvIds);
-  //// NINA ////
   /**
    * Get the current communication mode with the station (SISO, SU-MIMO or MU-MIMO) from the Data Communication
    * Mode table. In case there is no entry for the station the default mode is SISO.
@@ -748,7 +716,7 @@ public:
    * \return The number of streams that can be used for communication with the station.
    */
   uint8_t GetStationNStreams (Mac48Address station);
-
+  //// NINA ////
   /* EDMG MU-MIMO Beamforming functions */
   //// NINA ////
   /**
@@ -848,6 +816,7 @@ public:
    * Returns the last EDMG Group ID set element that was send.
    */
   Ptr<EDMGGroupIDSetElement> GetEdmgGroupIdSetElement (void) const;
+  //// NINA ////
 
 protected:
   friend class MacLow;

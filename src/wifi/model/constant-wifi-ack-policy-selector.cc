@@ -96,15 +96,25 @@ ConstantWifiAckPolicySelector::GetTemporaryParams (Ptr<WifiPsdu> psdu, MacLowTra
     }
 
   // Worst case scenario we have to send a BlockAckRequest followed by a BlockAck.
-  if (m_qosTxop->GetBaBufferSize (receiver, tid) > 64)
+  //// WIGIG ////
+  if (m_qosTxop->IsEdmgSupported ())
     {
-      NS_LOG_DEBUG ("Might need an Extended Compressed block ack request");
-      tempParams.EnableBlockAckRequest (BlockAckType::EXTENDED_COMPRESSED_BLOCK_ACK);
+      NS_LOG_DEBUG ("Implicitly requesting an EDMG Compressed block ack");
+      params.EnableBlockAck (BlockAckType::EDMG_COMPRESSED_BLOCK_ACK);
     }
   else
+  //// WIGIG ////
     {
-      NS_LOG_DEBUG ("Might need a Compressed block ack request");
-      tempParams.EnableBlockAckRequest (BlockAckType::COMPRESSED_BLOCK_ACK);
+      if (m_qosTxop->GetBaBufferSize (receiver, tid) > 64)
+        {
+          NS_LOG_DEBUG ("Might need an Extended Compressed block ack request");
+          tempParams.EnableBlockAckRequest (BlockAckType::EXTENDED_COMPRESSED_BLOCK_ACK);
+        }
+      else
+        {
+          NS_LOG_DEBUG ("Might need a Compressed block ack request");
+          tempParams.EnableBlockAckRequest (BlockAckType::COMPRESSED_BLOCK_ACK);
+        }
     }
   return tempParams;
 }
@@ -193,6 +203,28 @@ ConstantWifiAckPolicySelector::UpdateTxParams (Ptr<WifiPsdu> psdu, MacLowTransmi
         {
           NS_LOG_DEBUG ("Scheduling a Compressed block ack request");
           params.EnableBlockAckRequest (BlockAckType::COMPRESSED_BLOCK_ACK);
+        }//// WIGIG ////
+      if (m_qosTxop->IsEdmgSupported ())
+        {
+          NS_LOG_DEBUG ("Implicitly requesting an EDMG Compressed block ack");
+          params.EnableBlockAck (BlockAckType::EDMG_COMPRESSED_BLOCK_ACK);
+        }
+      else
+        //// WIGIG ////
+        {
+          // in case of single MPDU, there are previous unacknowledged frames, thus
+          // we cannot use Implicit Block Ack Request policy, otherwise we get a
+          // normal ack as response
+          if (m_qosTxop->GetBaBufferSize (receiver, tid) > 64)
+            {
+              NS_LOG_DEBUG ("Scheduling an Extended Compressed block ack request");
+              params.EnableBlockAckRequest (BlockAckType::EXTENDED_COMPRESSED_BLOCK_ACK);
+            }
+          else
+            {
+              NS_LOG_DEBUG ("Scheduling a Compressed block ack request");
+              params.EnableBlockAckRequest (BlockAckType::COMPRESSED_BLOCK_ACK);
+            }
         }
       return;
     }

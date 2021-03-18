@@ -172,9 +172,9 @@ IdealDmgWifiManager::DoReportRtsOk (WifiRemoteStation *st,
 
 void
 IdealDmgWifiManager::DoReportDataOk (WifiRemoteStation *st, double ackSnr, WifiMode ackMode,
-                                     double dataSnr, uint16_t dataChannelWidth, uint8_t)
+                                     double dataSnr, uint16_t dataChannelWidth, uint8_t dataNss)
 {
-  NS_LOG_FUNCTION (this << st << ackSnr << ackMode.GetUniqueName () << dataSnr << dataChannelWidth);
+  NS_LOG_FUNCTION (this << st << ackSnr << ackMode.GetUniqueName () << dataSnr << dataChannelWidth << +dataNss);
   IdealDmgWifiRemoteStation *station = static_cast<IdealDmgWifiRemoteStation*> (st);
   if (dataSnr == 0)
     {
@@ -186,9 +186,9 @@ IdealDmgWifiManager::DoReportDataOk (WifiRemoteStation *st, double ackSnr, WifiM
 
 void
 IdealDmgWifiManager::DoReportAmpduTxStatus (WifiRemoteStation *st, uint8_t nSuccessfulMpdus,
-                                            uint8_t nFailedMpdus, double rxSnr, double dataSnr)
+                                            uint8_t nFailedMpdus, double rxSnr, double dataSnr, uint16_t dataChannelWidth, uint8_t dataNss)
 {
-  NS_LOG_FUNCTION (this << st << +nSuccessfulMpdus << +nFailedMpdus << rxSnr << dataSnr);
+  NS_LOG_FUNCTION (this << st << +nSuccessfulMpdus << +nFailedMpdus << rxSnr << dataSnr << dataChannelWidth << +dataNss);
   IdealDmgWifiRemoteStation *station = static_cast<IdealDmgWifiRemoteStation*> (st);
   if (dataSnr == 0)
     {
@@ -203,6 +203,7 @@ IdealDmgWifiManager::DoReportFinalRtsFailed (WifiRemoteStation *station)
 {
   NS_LOG_FUNCTION (this << station);
   Reset (station);
+  m_mcsChanged (station->m_state->m_address, GetDefaultMode ().GetMcsValue ());
 }
 
 void
@@ -210,6 +211,7 @@ IdealDmgWifiManager::DoReportFinalDataFailed (WifiRemoteStation *station)
 {
   NS_LOG_FUNCTION (this << station);
   Reset (station);
+  m_mcsChanged (station->m_state->m_address, GetDefaultMode ().GetMcsValue ());
 }
 
 WifiTxVector
