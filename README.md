@@ -72,14 +72,16 @@ To build the project in optimized mode for fast execution type the following com
     ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi','flow-monitor','spectrum' --enable-static -d optimized
     ./waf build
 
-Warning: The previous command will generate large executable files.
+Warning: The previous command will generate large executable files due to the static building.
 
 ## Tutorial Scripts:
-The project includes different scripts located in the scratch folder to test the previously listed features and mechanisms. At the beginning of each script, we added a detailed description regarding the tested functionality, network topology, expected output, and usage method.
+The project includes different scripts located in the scratch folder to test the previously listed features and mechanisms. At the beginning of each script, we added a detailed description regarding the tested functionality, network topology, expected output, and usage examples.
 
 ## Publications:
-The implementation is based on the existing model of the WLAN IEEE 802.11 in ns-3. The following papers include background on IEEE 802.11ad, implementation details, and evaluation section for this model. If you use our model in your research, please cite the following papers: 
+The implementation is based on the WiFi module in ns-3. The following papers include background on IEEE 802.11ad/ay protocol, implementation details, and performance evaluation and validation for the implementation. If you use our model in your research, please cite the following papers: 
 
+* Hany Assasa, Nina Grosheva, Tanguy Ropitault, Steve Blandino, Nada Golmie, and Joerg Widmer
+**[Implementation and Evaluation of a WLAN IEEE 802.11 ay Model in Network Simulator ns-3](https://eprints.networks.imdea.org/2309/1/Implementation_and_Evaluation_of_a_WLAN_IEEE_802_11ay_NS3.pdf)**
 * Hany Assasa, and Joerg Widmer.
 **[Implementation and Evaluation of a WLAN IEEE 802.11ad Model in ns-3.](https://dl.acm.org/citation.cfm?id=2915377)**
 The Workshop on ns-3 (WNS3 2016), 15-16 June 2016, Seattle, WA, USA.
@@ -107,6 +109,6 @@ Please do not report any problem related to your modification of the original co
 
 ## Author Information:
 The project is developed and maintained by:
-1. [Hany Assasa](http://people.networks.imdea.org/~hany_assasa/) (Project leader)
+1. [Hany Assasa](http://people.networks.imdea.org/~hany_assasa/) (Project leader and maintainer)
 1. [Nina Grosheva](https://networks.imdea.org/team/imdea-networks-team/people/nina-grosheva/)
 
