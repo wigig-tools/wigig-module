@@ -62,11 +62,6 @@ QdPropagationEngine::GetTypeId (void)
                    StringValue (""),
                    MakeStringAccessor (&QdPropagationEngine::SetQdModelFolder),
                    MakeStringChecker ())
-    .AddAttribute ("EulerRotation",
-                   "Flag to indicate whether we use either Euler angles for rotation or the Quaternion transformation.",
-                   BooleanValue (true),
-                   MakeBooleanAccessor (&QdPropagationEngine::m_eulerTransform),
-                   MakeBooleanChecker ())
     .AddAttribute ("StartIndex",
                    "Select the starting index in a Q-D file.",
                    UintegerValue (0),
@@ -148,39 +143,13 @@ QdPropagationEngine::InitializeQDModelParameters (Ptr<const MobilityModel> txMob
   uint8_t numTxAntennas = txCodebook->GetTotalNumberOfAntennas ();
   uint8_t numRxAntennas = rxCodebook->GetTotalNumberOfAntennas ();
 
-  if (m_eulerTransform)
+  for (AntennaID i = 1 ; i <= numTxAntennas; i++)
     {
-      for (AntennaID i = 1 ; i <= numTxAntennas; i++)
-        {
-          EulerTransform (txSpectrum->GetCodebook ()->GetOrientation (i), rotmAod[i-1]);
-        }
-      for (AntennaID i = 1 ; i <= numRxAntennas; i++)
-        {
-          EulerTransform (rxSpectrum->GetCodebook ()->GetOrientation (i), rotmAoa[i-1]);
-        }
+      EulerTransform (txSpectrum->GetCodebook ()->GetOrientation (i), rotmAod[i-1]);
     }
-  else
+  for (AntennaID i = 1 ; i <= numRxAntennas; i++)
     {
-      double antennaOrientationVector[3];
-      double referenceVector[3] = {0,0,1};
-      for (AntennaID i = 1 ; i <= numTxAntennas; i++)
-        {
-          Orientation orientation = txSpectrum->GetCodebook ()->GetOrientation (i);
-          antennaOrientationVector[0] = orientation.x;
-          antennaOrientationVector[1] = orientation.y;
-          antennaOrientationVector[2] = orientation.z;
-          QuaternionTransform (referenceVector, antennaOrientationVector, rotmAod[i-1]);
-        }
-
-      for (AntennaID i = 1; i <= numRxAntennas; i++)
-        {
-          Orientation orientation = rxSpectrum->GetCodebook ()->GetOrientation (i);
-          double antennaOrientationVector[3];
-          antennaOrientationVector[0] = orientation.x;
-          antennaOrientationVector[1] = orientation.y;
-          antennaOrientationVector[2] = orientation.z;
-          QuaternionTransform (referenceVector, antennaOrientationVector, rotmAoa[i-1]);
-        }
+      EulerTransform (rxSpectrum->GetCodebook ()->GetOrientation (i), rotmAoa[i-1]);
     }
 
   std::string qdParameterFile;
@@ -523,7 +492,7 @@ QdPropagationEngine::GetChannelGain (Ptr<SpectrumValue> rxPsd,
                   complexPhase = Complex (cos (phase), sin (phase));
                   smallScaleFading = float (sqrt (pathPowerLinear)) * doppler * delay * complexPhase;
 
-                  /* Compute the gain for each band */
+                  /* Compute the gain for each subband */
                   indexTxAzimuth = aodAzimuthTxRx[chId].at (pathIndex);
                   indexTxElevation = aodElevationTxRx[chId].at (pathIndex);
                   txSum = txCodebook->GetAntennaArrayPattern (txPattern, indexTxAzimuth, indexTxElevation);
@@ -531,10 +500,12 @@ QdPropagationEngine::GetChannelGain (Ptr<SpectrumValue> rxPsd,
                   indexRxAzimuth = aoaAzimuthTxRx[chId].at (pathIndex);
                   indexRxElevation = aoaElevationTxRx[chId].at (pathIndex);
                   rxSum = rxCodebook->GetAntennaArrayPattern (rxPattern, indexRxAzimuth, indexRxElevation);
+                  // Normalize at the receiver to take into acccount noise amplification (Check our WiKi page
+                  // for more explanation regarding link budget calculations).
+                  rxSum /= DynamicCast<ParametricPatternConfig> (rxPattern)->GetNormalizationFactor ();
 
                   /* Add multipath effect to the subband gain */
                   subsbandGain = subsbandGain + rxSum * txSum * smallScaleFading;
-//                  NS_LOG_DEBUG ("TxSum=" << txSum << ", RxSum=" << rxSum);
                 }
             }
           else
@@ -827,101 +798,6 @@ QdPropagationEngine::EulerTransform (Orientation orientation, float2DVector_t& r
   rotm[2][0] = -sin (orientation.theta);
   rotm[2][1] = cos (orientation.theta) * sin (orientation.phi);
   rotm[2][2] = cos (orientation.theta) * cos (orientation.phi);
-
-  for (uint8_t i = 0; i < 3 ; i++)
-    {
-      floatVector_t rotmRow;
-      for (uint8_t j = 0; j < 3; j++)
-        {
-          rotmRow.push_back (rotm[i][j]);
-        }
-      rotMatrix.push_back (rotmRow);
-    }
-}
-
-void
-QdPropagationEngine::QuaternionTransform (double givenAxis[3], double desiredAxis[3], float2DVector_t& rotMatrix) const
-{
-  float rotm[3][3];     // Rotation matrix.
-  double theta;
-  float b[3];
-
-  double num = givenAxis[0] * desiredAxis[0] + givenAxis[1] * desiredAxis[1] + givenAxis[2] * desiredAxis[2];
-  double denum = sqrt ((pow (givenAxis[0], 2) + pow (givenAxis[1], 2) + pow (givenAxis[2], 2)) * (pow (desiredAxis[0], 2)
-                  + pow (desiredAxis[1], 2) + pow (desiredAxis[2], 2)));
-  theta = acos (num/denum);
-
-  b[0] = givenAxis[1] * desiredAxis[2] - desiredAxis[1] * givenAxis[2];
-  b[1] = desiredAxis[0] * givenAxis[2] - givenAxis[0] * desiredAxis[2];
-  b[2] = givenAxis[0] * desiredAxis[1] - desiredAxis[0] * givenAxis[1];
-
-  float normalizedB = sqrt (pow (b[0], 2) + pow (b[1], 2) + pow (b[2], 2));
-
-  if (normalizedB != 0)
-    {
-      float q0, q1, q2, q3;
-      float magnitudeQ;
-
-      b[0] = b[0]/normalizedB;
-      b[1] = b[1]/normalizedB;
-      b[2] = b[2]/normalizedB;
-
-      q0 = cos (theta/2);
-      q1 = sin (theta/2) * b[0];
-      q2 = sin (theta/2) * b[1];
-      q3 = sin (theta/2) * b[2];
-      magnitudeQ = sqrt (pow (q0, 2) + pow (q1, 2) + pow (q2, 2) + pow (q3, 2));
-      if (magnitudeQ != 0)
-        {
-          q0 = q0/magnitudeQ;
-          q1 = q1/magnitudeQ;
-          q2 = q2/magnitudeQ;
-          q3 = q3/magnitudeQ;
-        }
-
-      rotm[0][0] = pow (q0, 2) + pow (q1, 2) - pow (q2,2) - pow (q3, 2);
-      rotm[0][1] = 2*(q1*q2-q0*q3);
-
-      if (rotm[0][1] == -0.0)
-        rotm[0][1] = 0;
-      rotm[0][2] = 2*(q0*q2+q1*q3);
-
-      rotm[1][0] = 2*(q0*q3 + q1*q2);
-      rotm[1][1] = pow (q0, 2) - pow (q1, 2) + pow (q2, 2)-pow (q3, 2);
-      rotm[1][2] = 2*(q2*q3 - q0*q1);
-
-      rotm[2][0] = 2*(q1*q3 - q0*q2);
-      rotm[2][1] = 2*(q0*q1 + q2*q3);
-      rotm[2][2] = pow (q0, 2) - pow (q1, 2) - pow (q2, 2) + pow (q3, 2);
-    }
-  else if (normalizedB == 0 && theta == M_PI)
-    {
-      rotm[0][0] = -1;
-      rotm[0][1] = 0;
-      rotm[0][2] = 0;
-
-      rotm[1][0] = 0;
-      rotm[1][1] = -1;
-      rotm[1][2] = 0;
-
-      rotm[2][0] = 0;
-      rotm[2][1] = 0;
-      rotm[2][2] = -1;
-    }
-  else if (normalizedB == 0 && theta == 0)
-    {
-      rotm[0][0] = 1;
-      rotm[0][1] = 0;
-      rotm[0][2] = 0;
-
-      rotm[1][0] = 0;
-      rotm[1][1] = 1;
-      rotm[1][2] = 0;
-
-      rotm[2][0] = 0;
-      rotm[2][1] = 0;
-      rotm[2][2] = 1;
-    }
 
   for (uint8_t i = 0; i < 3 ; i++)
     {

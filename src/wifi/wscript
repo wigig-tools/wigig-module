@@ -135,6 +135,7 @@ def build(bld):
         'model/rf-chain.cc',
         'model/dmg-wifi-phy-header.cc',
         'model/wigig-data-types.cc',
+        'model/bft-id-tag.cc',
         'helper/wifi-radio-energy-model-helper.cc',
         'helper/athstats-helper.cc',
         'helper/wifi-helper.cc',
@@ -145,6 +146,7 @@ def build(bld):
         'helper/dmg-wifi-mac-helper.cc',
 #        'helper/multi-band-wifi-helper.cc',
         'helper/dmg-wifi-helper.cc',
+        'helper/beamforming-trace-helper.cc',
         ]
 
     obj_test = bld.create_ns3_module_test_library('wifi')
@@ -304,6 +306,7 @@ def build(bld):
         'model/constant-obss-pd-algorithm.h',
         'model/wifi-ack-policy-selector.h',
         'model/constant-wifi-ack-policy-selector.h',
+        'model/bft-id-tag.h',
         'helper/wifi-radio-energy-model-helper.h',
         'helper/athstats-helper.h',
         'helper/wifi-helper.h',
@@ -314,6 +317,7 @@ def build(bld):
 #        'helper/multi-band-wifi-helper.h',
         'helper/dmg-wifi-helper.h',
         'helper/dmg-wifi-mac-helper.h',
+        'helper/beamforming-trace-helper.h',
         ]
 
     if bld.env['ENABLE_GSL']:

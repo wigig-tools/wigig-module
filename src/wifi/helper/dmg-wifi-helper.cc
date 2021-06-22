@@ -140,12 +140,12 @@ DmgWifiPhyHelper::SetDefaultWiGigPhyValues (void)
 {
   /* Set the correct error model */
   SetErrorRateModel ("ns3::DmgErrorModel",
-                     "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
+                     "FileName", StringValue ("WigigFiles/ErrorModel/LookupTable_1458.txt"));
   Set ("RxNoiseFigure", DoubleValue (10));
   // The value correspond to DMG MCS-0.
   // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
   // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
-  Set ("RxSensitivity", DoubleValue (-78)); //CCA-SD for 802.11 signals.
+  Set ("RxSensitivity", DoubleValue (-101)); //CCA-SD for 802.11 signals.
   // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
   // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
   // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.

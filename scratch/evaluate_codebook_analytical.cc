@@ -32,14 +32,14 @@
  * Running the Simulation:
  * To run the script, type one of the following commands to change the location of the DMG STA
  * and check the corresponding best antenna sector used for communication:
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=1  --y_pos=0"
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=1  --y_pos=1"
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=0  --y_pos=1"
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=-1 --y_pos=1"
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=-1 --y_pos=0"
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=-1 --y_pos=-1"
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=0  --y_pos=-1"
- * ./waf --run "evaluate_custom_analytical_codebook --x_pos=1  --y_pos=-1"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=1  --y_pos=0"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=1  --y_pos=1"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=0  --y_pos=1"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=-1 --y_pos=1"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=-1 --y_pos=0"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=-1 --y_pos=-1"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=0  --y_pos=-1"
+ * ./waf --run "evaluate_codebook_analytical --x_pos=1  --y_pos=-1"
  *
  * Simulation Output:
  * 1. The selected transmit antenna ID and its sector ID for each device.

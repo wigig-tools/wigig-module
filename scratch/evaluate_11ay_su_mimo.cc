@@ -73,7 +73,7 @@ uint64_t receivedPackets = 0;
 bool csv = false;                               /* Enable CSV output. */
 
 /* SU-MIMO variables */
-uint32_t kBestCombinations = 10;                /* The number of K best candidates to test in the MIMO phase . */
+uint32_t kBestCombinations = 85;                /* The number of K best candidates to test in the MIMO phase . */
 uint8_t numberOfTxCombinationsRequested = 10;   /* The number of Tx combinations to feedback. */
 bool useAwvs = false;                           /* Flag to indicate whether we test AWVs in MIMO phase or not. */
 std::string tracesFolder = "Traces/";           /* Directory to store the traces. */
@@ -81,12 +81,6 @@ std::string tracesFolder = "Traces/";           /* Directory to store the traces
 /* Tracing */
 Ptr<QdPropagationEngine> qdPropagationEngine;   /* Q-D Propagation Engine. */
 AsciiTraceHelper ascii;
-struct MIMO_PARAMETERS : public SimpleRefCount<MIMO_PARAMETERS> {
-  uint32_t srcNodeID;
-  uint32_t dstNodeID;
-  Ptr<DmgWifiMac> srcWifiMac;
-  Ptr<DmgWifiMac> dstWifiMac;
-};
 
 /*** Beamforming Service Periods ***/
 uint8_t beamformedLinks = 0;                    /* Number of beamformed links */
@@ -115,23 +109,15 @@ CalculateThroughput (Ptr<OutputStreamWrapper> throughputOutput)
 }
 
 void
-SLSCompleted (Ptr<OutputStreamWrapper> stream, Ptr<SLS_PARAMETERS> parameters,
-              SlsCompletionAttrbitutes attributes)
+SLSCompleted (Ptr<DmgWifiMac> wifiMac, SlsCompletionAttrbitutes attributes)
 {
-  *stream->GetStream () << parameters->srcNodeID + 1 << "," << parameters->dstNodeID + 1 << ","
-                        << qdPropagationEngine->GetCurrentTraceIndex () << ","
-                        << uint16_t (attributes.sectorID) << "," << uint16_t (attributes.antennaID)  << ","
-                        << parameters->wifiMac->GetTypeOfStation ()  << ","
-                        << apWifiNetDevice->GetNode ()->GetId () + 1  << ","
-                        << Simulator::Now ().GetNanoSeconds () << std::endl;
-
   if (!csv)
     {
-      std::cout << "EDMG STA " << parameters->wifiMac->GetAddress ()
+      std::cout << "EDMG STA " << wifiMac->GetAddress ()
                 << " completed SLS phase with EDMG STA " << attributes.peerStation << std::endl;
       std::cout << "Best Tx Antenna Configuration: AntennaID=" << uint16_t (attributes.antennaID)
                 << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
-      parameters->wifiMac->PrintSnrTable ();
+      wifiMac->PrintSnrTable ();
       if (attributes.accessPeriod == CHANNEL_ACCESS_DTI)
           {
             beamformedLinks++;
@@ -192,176 +178,41 @@ PhyRxEnd (Ptr<const Packet>)
 }
 
 void
-SuMimoSisoPhaseMeasurements (Ptr<SLS_PARAMETERS> parameters, Mac48Address from, SU_MIMO_SNR_MAP measurementsMap, uint8_t edmgTrnN)
+SuMimoSisoPhaseCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address from, MIMO_FEEDBACK_MAP feedbackMap,
+                          uint8_t numberOfTxAntennas, uint8_t numberOfRxAntennas, uint16_t bftID)
 {
-
-  std::cout << "EDMG STA " << parameters->wifiMac->GetAddress ()
-            << " reporting SISO phase measurements of SU-MIMO BFT with EDMG STA " << from << " at " << Simulator::Now ().GetSeconds () << std::endl;
-  /* Save the SISO measuremnts to a trace file */
-  Ptr<OutputStreamWrapper> outputSisoPhase = ascii.CreateFileStream (tracesFolder + "SuMimoSisoPhaseMeasurements_" + std::to_string (parameters->srcNodeID + 1) + ".csv");
-  *outputSisoPhase->GetStream () << "SRC_ID,DST_ID,TRACE_IDX,RX_ANTENNA_ID,TX_ANTENNA_ID,TX_SECTOR_ID,SNR,Timestamp" << std::endl;
-  SNR_LIST_ITERATOR start;
-  for (SU_MIMO_SNR_MAP::iterator it = measurementsMap.begin (); it != measurementsMap.end (); it++)
-    {
-      start = it->second.begin();
-      SNR_LIST_ITERATOR snrIt = it->second.begin ();
-      while (snrIt != it->second.end ())
-        {
-          uint32_t awv = std::distance(start,snrIt) + 1;
-          *outputSisoPhase->GetStream () << parameters->srcNodeID + 1 << "," << parameters->dstNodeID + 1 << ","
-                                << qdPropagationEngine->GetCurrentTraceIndex () << ","
-                                << uint16_t (std::get<1> (it->first)) << "," << uint16_t (std::get<2> (it->first))  << ","
-                                << uint16_t (awv / edmgTrnN)  << "," <<  RatioToDb (*snrIt)  << ","
-                                << Simulator::Now ().GetNanoSeconds () << std::endl;
-          snrIt++;
-        }
-    }
-}
-
-void
-SuMimoSisoPhaseComplete (Ptr<SLS_PARAMETERS> parameters, Mac48Address from, MIMO_FEEDBACK_MAP feedbackMap,
-                         uint8_t numberOfTxAntennas, uint8_t numberOfRxAntennas)
-{
-  std::cout << "EDMG STA " << parameters->wifiMac->GetAddress ()
-            << " finished SISO phase of SU-MIMO BFT with EDMG STA " << from << " at " << Simulator::Now ().GetSeconds () << std::endl;
-  /* Save the SISO feedback measuremnts to a trace file */
-  Ptr<OutputStreamWrapper> outputSisoPhase = ascii.CreateFileStream (tracesFolder + "SuMimoSisoPhaseResults_"
-                                                                     + std::to_string (parameters->srcNodeID + 1) + ".csv");
-  *outputSisoPhase->GetStream () << "SRC_ID,DST_ID,TRACE_IDX,RX_ANTENNA_ID,TX_ANTENNA_ID,TX_SECTOR_ID,SNR,Timestamp" << std::endl;
-  for (MIMO_FEEDBACK_MAP::iterator it = feedbackMap.begin (); it != feedbackMap.end (); it++)
-    {
-      *outputSisoPhase->GetStream () << parameters->srcNodeID + 1 << "," << parameters->dstNodeID + 1 << ","
-                            << qdPropagationEngine->GetCurrentTraceIndex () << ","
-                            << uint16_t (std::get<1> (it->first)) << "," << uint16_t (std::get<0> (it->first))  << ","
-                            << uint16_t (std::get<2> (it->first))  << "," <<  RatioToDb ((it->second))  << ","
-                            << Simulator::Now ().GetNanoSeconds () << std::endl;
-    }
+  std::cout << "EDMG STA " << wifiMac->GetAddress () << " finished SISO phase of SU-MIMO BFT with EDMG STA "
+            << from << " at " << Simulator::Now ().GetSeconds () << std::endl;
   MIMO_ANTENNA_COMBINATIONS_LIST mimoCandidates =
-      parameters->wifiMac->FindKBestCombinations (kBestCombinations, numberOfTxAntennas, numberOfRxAntennas, feedbackMap);
-  //mimoCandidates.erase (mimoCandidates.begin (), mimoCandidates.begin () + 10);
+      wifiMac->FindKBestCombinations (kBestCombinations, numberOfTxAntennas, numberOfRxAntennas, feedbackMap);
   /* Append 5 AWVs to each sector in the codebook, increasing the granularity of steering to 5 degrees */
-  if (useAwvs)
-    DynamicCast<CodebookParametric> (parameters->wifiMac->GetCodebook ())->AppendAwvsForSuMimoBFT_27 ();
-  parameters->wifiMac->StartSuMimoMimoPhase (from, mimoCandidates, numberOfTxCombinationsRequested, useAwvs);
+  if (useAwvs) {
+    DynamicCast<CodebookParametric> (wifiMac->GetCodebook ())->AppendAwvsForSuMimoBFT_27 ();
+  }
+  wifiMac->StartSuMimoMimoPhase (from, mimoCandidates, numberOfTxCombinationsRequested, useAwvs);
 }
 
 void
-SuMimoMimoCandidatesSelected (Ptr<SLS_PARAMETERS> parameters, Mac48Address from, Antenna2SectorList txCandidates, Antenna2SectorList rxCandidates)
+SuMimoMimoCandidatesSelected (Ptr<DmgWifiMac> wifiMac, Mac48Address from,
+                              Antenna2SectorList txCandidates, Antenna2SectorList rxCandidates, uint16_t bftID)
 {
-  std::cout << "EDMG STA " << parameters->wifiMac->GetAddress ()
+  std::cout << "EDMG STA " << wifiMac->GetAddress ()
             << " reporting MIMO candidates Selection for SU-MIMO BFT with EDMG STA " << from
             << " at " << Simulator::Now ().GetSeconds () << std::endl;
-  /* Save the MIMO candidates to a trace file */
-  Ptr<OutputStreamWrapper> outputMimoTxCandidates = ascii.CreateFileStream (tracesFolder + "SuMimoMimoTxCandidates_" +
-                                                                            std::to_string (parameters->srcNodeID + 1) + ".csv");
-  uint8_t numberOfAntennas = txCandidates.size ();
-   *outputMimoTxCandidates->GetStream () << "SRC_ID,DST_ID,TRACE_IDX,";
-  for (uint8_t i = 1; i <= numberOfAntennas; i++)
-    {
-      *outputMimoTxCandidates->GetStream () << "ANTENNA_ID" << uint16_t(i) << ",SECTOR_ID" << uint16_t (i) << ",";
-    }
-  *outputMimoTxCandidates->GetStream () << std::endl;
-  uint16_t numberOfCandidates = txCandidates.begin ()->second.size ();
-  for (uint16_t i = 0; i < numberOfCandidates; i++)
-    {
-      *outputMimoTxCandidates->GetStream () << parameters->srcNodeID + 1 << "," << parameters->dstNodeID + 1 << ","
-                                            << qdPropagationEngine->GetCurrentTraceIndex () << ",";
-      for (Antenna2SectorListI it = txCandidates.begin (); it != txCandidates.end (); it++)
-        {
-          *outputMimoTxCandidates->GetStream () << uint16_t (it->first) << "," << uint16_t (it->second.at (i)) << ",";
-        }
-      *outputMimoTxCandidates->GetStream () << std::endl;
-    }
-  Ptr<OutputStreamWrapper> outputMimoRxCandidates = ascii.CreateFileStream (tracesFolder + "SuMimoMimoRxCandidates_" +
-                                                                            std::to_string (parameters->srcNodeID + 1) + ".csv");
-  *outputMimoRxCandidates->GetStream () << "SRC_ID,DST_ID,TRACE_IDX,";
-  for (uint8_t i = 1; i <= numberOfAntennas; i++)
-    {
-      *outputMimoRxCandidates->GetStream () << "ANTENNA_ID" << uint16_t(i) << ",SECTOR_ID" << uint16_t(i) << ",";
-    }
-  *outputMimoRxCandidates->GetStream () << std::endl;
-  numberOfCandidates = rxCandidates.begin ()->second.size ();
-  for (uint16_t i = 0; i < numberOfCandidates; i++)
-    {
-      *outputMimoRxCandidates->GetStream () << parameters->srcNodeID + 1 << "," << parameters->dstNodeID + 1 << ","
-                                            << qdPropagationEngine->GetCurrentTraceIndex () << ",";
-      for (Antenna2SectorListI it = rxCandidates.begin (); it != rxCandidates.end (); it++)
-        {
-          *outputMimoRxCandidates->GetStream () << uint16_t (it->first) << "," << uint16_t (it->second.at (i)) << ",";
-        }
-      *outputMimoRxCandidates->GetStream () << std::endl;
-    }
 }
 
 void
-SuMimoMimoPhaseMeasurements (Ptr<MIMO_PARAMETERS> parameters, Mac48Address from, MIMO_SNR_LIST mimoMeasurements,
-                             SNR_MEASUREMENT_AWV_IDs_QUEUE minSnr, bool differentRxConfigs,
-                             uint8_t nTxAntennas, uint8_t nRxAntennas, uint8_t rxCombinationsTested)
+SuMimoMimoPhaseMeasurements (Ptr<DmgWifiMac> wifiMac, MimoPhaseMeasurementsAttributes attributes)
 {
-  std::cout << "EDMG STA " << parameters->srcWifiMac->GetAddress ()
-            << " reporting MIMO phase measurements for SU-MIMO BFT with EDMG STA " << from
+  std::cout << "EDMG STA " << wifiMac->GetAddress ()
+            << " reporting MIMO phase measurements for SU-MIMO BFT with EDMG STA " << attributes.peerStation
             << " at " << Simulator::Now ().GetSeconds () << std::endl;
-  Ptr<OutputStreamWrapper> outputMimoPhase = ascii.CreateFileStream (tracesFolder + "SuMimoMimoPhaseMeasurements_" +
-                                                                 std::to_string (parameters->srcNodeID + 1) + ".csv");
-   *outputMimoPhase->GetStream () << "SRC_ID,DST_ID,TRACE_IDX,";
-  for (uint8_t i = 1; i <= nTxAntennas; i++)
-    {
-      *outputMimoPhase->GetStream () << "TX_ANTENNA_ID" << uint16_t(i) << ",TX_SECTOR_ID" << uint16_t(i) << ",TX_AWV_ID" << uint16_t(i) << ",";
-    }
-  for (uint8_t i = 1; i <= nRxAntennas; i++)
-    {
-      *outputMimoPhase->GetStream () << "RX_ANTENNA_ID" << uint16_t(i) << ",RX_SECTOR_ID" << uint16_t(i) << ",RX_AWV_ID" << uint16_t(i) << ",";
-    }
-  for (uint8_t i = 0; i < nRxAntennas * nTxAntennas; i++)
-    {
-      *outputMimoPhase->GetStream () << "SNR,";
-    }
-  *outputMimoPhase->GetStream () << "min_Stream_SNR" << std::endl;
-  while (!minSnr.empty ())
-    {
-      MEASUREMENT_AWV_IDs awvId = minSnr.top ().second;
-      MIMO_AWV_CONFIGURATION rxCombination =
-          parameters->srcWifiMac->GetCodebook ()->GetMimoConfigFromRxAwvId (awvId.second, from);
-      MIMO_AWV_CONFIGURATION txCombination =
-          parameters->dstWifiMac->GetCodebook ()->GetMimoConfigFromTxAwvId (awvId.first, parameters->srcWifiMac->GetAddress ());
-      uint16_t txId = awvId.first;
-      MIMO_SNR_LIST measurements;
-      for (auto & rxId : awvId.second)
-        {
-          measurements.push_back (mimoMeasurements.at ((txId - 1) * rxCombinationsTested + rxId.second - 1));
-        }
-      *outputMimoPhase->GetStream () << parameters->srcNodeID + 1 << "," << parameters->dstNodeID + 1 << ","
-                                     << qdPropagationEngine->GetCurrentTraceIndex () << ",";
-      for (uint8_t i = 0; i < nTxAntennas; i ++)
-        {
-          *outputMimoPhase->GetStream () << uint16_t (txCombination.at (i).first.first)
-                                         << "," << uint16_t (txCombination.at (i).first.second)
-                                         << "," << uint16_t (txCombination.at (i).second) << ",";
-        }
-      for (uint8_t i = 0; i < nRxAntennas; i++)
-        {
-          *outputMimoPhase->GetStream () << uint16_t (rxCombination.at (i).first.first)
-                                         << "," << uint16_t (rxCombination.at (i).first.second)
-                                         << "," << uint16_t (rxCombination.at (i).second) << ",";
-        }
-      uint8_t snrIndex = 0;
-      for (uint8_t i = 0; i < nTxAntennas; i++)
-        {
-          for (uint8_t j = 0; j < nRxAntennas; j++)
-            {
-              *outputMimoPhase->GetStream () << RatioToDb (measurements.at (j).second.at (snrIndex)) << ",";
-              snrIndex++;
-            }
-        }
-      *outputMimoPhase->GetStream () << RatioToDb (minSnr.top ().first) << std::endl;
-      minSnr.pop ();
-    }
 }
 
 void
-SuMimoMimoPhaseComplete (Ptr<SLS_PARAMETERS> parameters, Mac48Address from)
+SuMimoMimoPhaseCompleted (Ptr<DmgWifiMac> wifiMac, Mac48Address from)
 {
-  std::cout << "EDMG STA " << parameters->wifiMac->GetAddress ()
+  std::cout << "EDMG STA " << wifiMac->GetAddress ()
             << " finished MIMO phase of SU-MIMO BFT with EDMG STA " << from << " at " << Simulator::Now ().GetSeconds () << std::endl;
   suMimoCompleted = true;
 //    if (applicationType == "onoff")
@@ -416,6 +267,9 @@ main (int argc, char *argv[])
   std::string arrayConfig = "28x_AzEl_SU-MIMO_2x2_27";  /* Phased antenna array configuration*/
   std::string qdChannelFolder = "SU-MIMO-Scenarios/su2x2Mimo3cm/Output/Ns3";/* Path to the folder containing SU-MIMO Q-D files. */
   uint32_t traceIndex = 0;                          /* Trace Index in the Q-D file. */
+  bool preambleDetection = true;	             /* Whether a preamble detection model is used. */
+  double preambleMinRssi = -78; 		     /* The min RSSI needed to detect the preamble if a preamble detection model is used. */
+  double preambleSnrThreshold = -10;		     /* The min SNR needed to detect the preamble if a preamble detection model us used. */
 
   /* Command line argument parser setup. */
   CommandLine cmd;
@@ -473,7 +327,7 @@ main (int argc, char *argv[])
   /**** Set up Channel ****/
   Ptr<MultiModelSpectrumChannel> spectrumChannel = CreateObject<MultiModelSpectrumChannel> ();
   qdPropagationEngine = CreateObject<QdPropagationEngine> ();
-  qdPropagationEngine->SetAttribute ("QDModelFolder", StringValue ("DmgFiles/QdChannel/" + qdChannelFolder + "/"));
+  qdPropagationEngine->SetAttribute ("QDModelFolder", StringValue ("WigigFiles/QdChannel/" + qdChannelFolder + "/"));
   Ptr<QdPropagationLossModel> lossModelRaytracing = CreateObject<QdPropagationLossModel> (qdPropagationEngine);
   Ptr<QdPropagationDelayModel> propagationDelayRayTracing = CreateObject<QdPropagationDelayModel> (qdPropagationEngine);
   spectrumChannel->AddSpectrumPropagationLossModel (lossModelRaytracing);
@@ -487,13 +341,20 @@ main (int argc, char *argv[])
   spectrumWifiPhy.Set ("TxPowerStart", DoubleValue (txPower));
   spectrumWifiPhy.Set ("TxPowerEnd", DoubleValue (txPower));
   spectrumWifiPhy.Set ("TxPowerLevels", UintegerValue (1));
+  /* Add a preamble detection model based on thresholds for the RSSI and SINR of the preamble. */
+  if (preambleDetection)
+  {
+     spectrumWifiPhy.Set ("PreambleDetectionModel", StringValue ("ns3::ThresholdPreambleDetectionModel"));
+     Config::SetDefault ("ns3::ThresholdPreambleDetectionModel::MinimumRssi", DoubleValue (preambleMinRssi));
+     Config::SetDefault ("ns3::ThresholdPreambleDetectionModel::Threshold", DoubleValue (preambleSnrThreshold));
+  }
   /* Set operating channel */
   EDMG_CHANNEL_CONFIG config = FindChannelConfiguration (channelNumber);
   spectrumWifiPhy.Set ("ChannelNumber", UintegerValue (config.chNumber));
   spectrumWifiPhy.Set ("PrimaryChannelNumber", UintegerValue (config.primayChannel));
   /* Set the correct error model */
   spectrumWifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
-                                     "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458_ay.txt"));
+                                     "FileName", StringValue ("WigigFiles/ErrorModel/LookupTable_1458_ay.txt"));
   /* Enable support for SU-MIMO */
   spectrumWifiPhy.Set ("SupportSuMimo", BooleanValue (true));
   /* Set default algorithm for all nodes to be constant rate */
@@ -521,7 +382,7 @@ main (int argc, char *argv[])
   wifi.SetCodebook ("ns3::CodebookParametric",
                     "MimoCodebook", BooleanValue (true),
                     "TotalAntennas", UintegerValue (numStreams),
-                    "FileName", StringValue ("DmgFiles/Codebook/CODEBOOK_URA_AP_" + arrayConfig + ".txt"));
+                    "FileName", StringValue ("WigigFiles/Codebook/CODEBOOK_URA_AP_" + arrayConfig + ".txt"));
 
   /* Create Wifi Network Devices (WifiNetDevice) */
   NetDeviceContainer apDevice;
@@ -537,7 +398,7 @@ main (int argc, char *argv[])
   wifi.SetCodebook ("ns3::CodebookParametric",
                     "MimoCodebook", BooleanValue (true),
                     "TotalAntennas", UintegerValue (numStreams),
-                    "FileName", StringValue ("DmgFiles/Codebook/CODEBOOK_URA_STA_" + arrayConfig + ".txt"));
+                    "FileName", StringValue ("WigigFiles/Codebook/CODEBOOK_URA_STA_" + arrayConfig + ".txt"));
 
   staDevices = wifi.Install (spectrumWifiPhy, wifiMac, staWifiNode);
 
@@ -613,50 +474,28 @@ main (int argc, char *argv[])
   staRemoteStationManager = StaticCast<WifiRemoteStationManager> (staWifiNetDevice->GetRemoteStationManager ());
 
   /** Connect Traces **/
-  AsciiTraceHelper ascii;
+  Ptr<SuMimoBeamformingTraceHelper> beamformingTracerHelper
+      = Create<SuMimoBeamformingTraceHelper> (qdPropagationEngine, tracesFolder, std::to_string (RngSeedManager::GetRun ()));
 
-  /* EDMG AP Straces */
-  Ptr<OutputStreamWrapper> outputSlsPhase = CreateSlsTraceStream (tracesFolder + "slsResults" + arrayConfig);
-  *outputSlsPhase->GetStream () << "SRC_ID,DST_ID,TRACE_IDX,ANTENNA_ID_1,SECTOR_ID_1,AWV_ID_1,"
-                                   "ANTENNA_ID_2,SECTOR_ID_2,AWV_ID_2,ROLE,BSS_ID,SNR,Timestamp" << std::endl;
-
-  /* SLS Traces */
-  Ptr<SLS_PARAMETERS> parametersAp = Create<SLS_PARAMETERS> ();
-  parametersAp->srcNodeID = apWifiNetDevice->GetNode ()->GetId ();
-  parametersAp->dstNodeID = staWifiNetDevice->GetNode ()->GetId ();
-  parametersAp->wifiMac = apWifiMac;
-  Ptr<MIMO_PARAMETERS> mimoParametersAp = Create<MIMO_PARAMETERS> ();
-  mimoParametersAp->srcNodeID = apWifiNetDevice->GetNode ()->GetId ();
-  mimoParametersAp->dstNodeID = staWifiNetDevice->GetNode ()->GetId ();
-  mimoParametersAp->srcWifiMac = apWifiMac;
-  mimoParametersAp->dstWifiMac = staWifiMac;
-  apWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, outputSlsPhase, parametersAp));
-  apWifiMac->TraceConnectWithoutContext ("SuMimoSisoPhaseMeasurements", MakeBoundCallback (&SuMimoSisoPhaseMeasurements, parametersAp));
-  apWifiMac->TraceConnectWithoutContext ("SuMimoSisoPhaseCompleted", MakeBoundCallback (&SuMimoSisoPhaseComplete, parametersAp));
-  apWifiMac->TraceConnectWithoutContext ("SuMimoMimoCandidatesSelected", MakeBoundCallback (&SuMimoMimoCandidatesSelected, parametersAp));
-  apWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseMeasurements", MakeBoundCallback (&SuMimoMimoPhaseMeasurements, mimoParametersAp));
-  apWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseCompleted", MakeBoundCallback (&SuMimoMimoPhaseComplete, parametersAp));
+  /* EDMG AP Traces */
+  beamformingTracerHelper->ConnectTrace (apWifiMac);
+  apWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, apWifiMac));
+  apWifiMac->TraceConnectWithoutContext ("SuMimoSisoPhaseCompleted", MakeBoundCallback (&SuMimoSisoPhaseCompleted, apWifiMac));
+  apWifiMac->TraceConnectWithoutContext ("SuMimoMimoCandidatesSelected", MakeBoundCallback (&SuMimoMimoCandidatesSelected, apWifiMac));
+  apWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseMeasurements", MakeBoundCallback (&SuMimoMimoPhaseMeasurements, apWifiMac));
+  apWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseCompleted", MakeBoundCallback (&SuMimoMimoPhaseCompleted, apWifiMac));
   apWifiPhy->TraceConnectWithoutContext ("PhyRxEnd", MakeCallback (&PhyRxEnd));
   apWifiPhy->TraceConnectWithoutContext ("PhyRxDrop", MakeCallback (&PhyRxDrop));
 
-  /* EDMG STA Straces */
-  Ptr<SLS_PARAMETERS> parametersSta = Create<SLS_PARAMETERS> ();
-  parametersSta->srcNodeID = staWifiNetDevice->GetNode ()->GetId ();
-  parametersSta->dstNodeID = apWifiNetDevice->GetNode ()->GetId ();
-  parametersSta->wifiMac = staWifiMac;
-  Ptr<MIMO_PARAMETERS> mimoParametersSta = Create<MIMO_PARAMETERS> ();
-  mimoParametersSta->srcNodeID = staWifiNetDevice->GetNode ()->GetId ();
-  mimoParametersSta->dstNodeID = apWifiNetDevice->GetNode ()->GetId ();
-  mimoParametersSta->srcWifiMac = staWifiMac;
-  mimoParametersSta->dstWifiMac = apWifiMac;
+  /* EDMG STA Traces */
+  beamformingTracerHelper->ConnectTrace (staWifiMac);
   staWifiMac->TraceConnectWithoutContext ("Assoc", MakeBoundCallback (&StationAssoicated, staWifiMac));
-  staWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, outputSlsPhase, parametersSta));
+  staWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, staWifiMac));
   staWifiMac->TraceConnectWithoutContext ("DTIStarted", MakeBoundCallback (&DataTransmissionIntervalStarted, staWifiMac));
-  staWifiMac->TraceConnectWithoutContext ("SuMimoSisoPhaseMeasurements", MakeBoundCallback (&SuMimoSisoPhaseMeasurements, parametersSta));
-  staWifiMac->TraceConnectWithoutContext ("SuMimoSisoPhaseCompleted", MakeBoundCallback (&SuMimoSisoPhaseComplete, parametersSta));
-  staWifiMac->TraceConnectWithoutContext ("SuMimoMimoCandidatesSelected", MakeBoundCallback (&SuMimoMimoCandidatesSelected, parametersSta));
-  staWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseMeasurements", MakeBoundCallback (&SuMimoMimoPhaseMeasurements, mimoParametersSta));
-  staWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseCompleted", MakeBoundCallback (&SuMimoMimoPhaseComplete, parametersSta));
+  staWifiMac->TraceConnectWithoutContext ("SuMimoSisoPhaseCompleted", MakeBoundCallback (&SuMimoSisoPhaseCompleted, staWifiMac));
+  staWifiMac->TraceConnectWithoutContext ("SuMimoMimoCandidatesSelected", MakeBoundCallback (&SuMimoMimoCandidatesSelected, staWifiMac));
+  staWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseMeasurements", MakeBoundCallback (&SuMimoMimoPhaseMeasurements, staWifiMac));
+  staWifiMac->TraceConnectWithoutContext ("SuMimoMimoPhaseCompleted", MakeBoundCallback (&SuMimoMimoPhaseCompleted, staWifiMac));
   staWifiPhy->TraceConnectWithoutContext ("PhyTxEnd", MakeCallback (&PhyTxEnd));
   staRemoteStationManager->TraceConnectWithoutContext ("MacTxDataFailed", MakeCallback (&MacTxDataFailed));
 

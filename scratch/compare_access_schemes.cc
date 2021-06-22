@@ -172,7 +172,7 @@ main (int argc, char *argv[])
     {
       /* Set the correct error model */
       wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
-                                 "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458_ay.txt"));
+                                 "FileName", StringValue ("WigigFiles/ErrorModel/LookupTable_1458_ay.txt"));
     }
   /* Set default algorithm for all nodes to be constant rate */
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));

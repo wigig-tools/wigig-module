@@ -17,7 +17,39 @@ NS_LOG_COMPONENT_DEFINE ("CodebookParametric");
 
 NS_OBJECT_ENSURE_REGISTERED (CodebookParametric);
 
+float
+CalculateNormalizationFactor (WeightsVector &weightsVector)
+{
+  float normlizationValue = 0;
+  for (WeightsVectorI it = weightsVector.begin (); it != weightsVector.end (); it++)
+    {
+      normlizationValue += std::pow (std::abs (*it), 2.0);
+    }
+  normlizationValue = sqrt (normlizationValue);
+  return normlizationValue;
+}
+
 /****** Parametric Pattern Configuration ******/
+
+void
+ParametricPatternConfig::SetWeights (WeightsVector weights)
+{
+  NS_LOG_FUNCTION (this);
+  m_weights = weights;
+  m_normalizationFactor = CalculateNormalizationFactor (weights);
+}
+
+WeightsVector
+ParametricPatternConfig::GetWeights (void) const
+{
+  return m_weights;
+}
+
+float
+ParametricPatternConfig::GetNormalizationFactor (void) const
+{
+  return m_normalizationFactor;
+}
 
 ArrayPattern
 ParametricPatternConfig::GetArrayPattern (void) const
@@ -41,7 +73,7 @@ ParametricPatternConfig::CalculateArrayPattern (Ptr<ParametricAntennaConfig> ant
     {
       Complex value = 0;
       uint16_t j = 0;
-      for (WeightsVectorCI it = weights.begin (); it != weights.end (); it++, j++)
+      for (WeightsVectorCI it = m_weights.begin (); it != m_weights.end (); it++, j++)
         {
           value += (*it) * antennaConfig->steeringVector [azimuthAngle][elevationAngle][j];
         }
@@ -53,7 +85,7 @@ ParametricPatternConfig::CalculateArrayPattern (Ptr<ParametricAntennaConfig> ant
 /****** Parametric Antenna Configuration ******/
 
 void
-ParametricAntennaConfig::CalculateArrayPattern (WeightsVector &weights, ArrayPattern &arrayPattern)
+ParametricAntennaConfig::CalculateArrayPattern (WeightsVector weights, ArrayPattern &arrayPattern)
 {
   arrayPattern = new Complex *[AZIMUTH_CARDINALITY];
   for (uint16_t m = 0; m < AZIMUTH_CARDINALITY; m++)
@@ -122,10 +154,6 @@ CodebookParametric::GetTypeId (void)
     .SetGroupName ("Wifi")
     .SetParent<Codebook> ()
     .AddConstructor<CodebookParametric> ()
-    .AddAttribute ("NormalizeWeights", "Whether we normalize the antenna weights vector or not.",
-                   BooleanValue (false),
-                   MakeBooleanAccessor (&CodebookParametric::m_normalizeWeights),
-                   MakeBooleanChecker ())
     .AddAttribute ("PrecalculatePatterns",
                    "Whether we precalculate all the beam patterns over the 3D space within our simulation or"
                    " we calculate only beam patterns based on the utilized angles in our Q-D traces.",
@@ -270,19 +298,6 @@ CodebookParametric::NormalizeWeights (WeightsVector &weightsVector)
     }
 }
 
-float
-CodebookParametric::CalculateNormalizationFactor (WeightsVector &weightsVector)
-{
-  NS_LOG_FUNCTION (this);
-  float normlizationValue = 0;
-  for (WeightsVectorI it = weightsVector.begin (); it != weightsVector.end (); it++)
-    {
-      normlizationValue += std::pow (std::abs (*it), 2.0);
-    }
-  normlizationValue = sqrt (normlizationValue);
-  return normlizationValue;
-}
-
 WeightsVector
 CodebookParametric::ReadAntennaWeightsVector (std::ifstream &file, uint16_t elements)
 {
@@ -295,10 +310,6 @@ CodebookParametric::ReadAntennaWeightsVector (std::ifstream &file, uint16_t elem
       getline (split, amp, ',');
       getline (split, phase, ',');
       weights.push_back (std::polar (std::stof (amp), std::stof (phase)));
-    }
-  if (m_normalizeWeights)
-    {
-      NormalizeWeights (weights);
     }
   return weights;
 }
@@ -361,13 +372,10 @@ CodebookParametric::LoadCodebook (std::string filename)
       std::getline (file, line);
       antennaConfig->elevationOrientationDegree = std::stod (line);
 
-      /* Temporary */
+      /* Initialize rotation axes */
       antennaConfig->orientation.psi = 0;
       antennaConfig->orientation.theta = 0;
       antennaConfig->orientation.phi = 0;
-      antennaConfig->orientation.x = 0;
-      antennaConfig->orientation.y = 0;
-      antennaConfig->orientation.z = 1;
 
       /* Read the number of antenna elements */
       std::getline (file, line);
@@ -429,11 +437,10 @@ CodebookParametric::LoadCodebook (std::string filename)
 
       /* Read Quasi-omni antenna weights and calculate its directivity */
       Ptr<ParametricPatternConfig> quasiOmni = Create<ParametricPatternConfig> ();
-      quasiOmni->weights = ReadAntennaWeightsVector (file, antennaConfig->numElements);
+      quasiOmni->SetWeights (ReadAntennaWeightsVector (file, antennaConfig->numElements));
       if (m_precalculatedPatterns)
         {
-          antennaConfig->CalculateArrayPattern (quasiOmni->weights, quasiOmni->arrayPattern);
-
+          antennaConfig->CalculateArrayPattern (quasiOmni->GetWeights (), quasiOmni->arrayPattern);
         }
       antennaConfig->SetQuasiOmniConfig (quasiOmni);
 
@@ -477,11 +484,10 @@ CodebookParametric::LoadCodebook (std::string filename)
             }
 
           /* Read sector antenna weights vector and calculate its directivity */
-          sectorConfig->weights = ReadAntennaWeightsVector (file, antennaConfig->numElements);
-          sectorConfig->normalizationFactor = CalculateNormalizationFactor (sectorConfig->weights);
+          sectorConfig->SetWeights (ReadAntennaWeightsVector (file, antennaConfig->numElements));
           if (m_precalculatedPatterns)
             {
-              antennaConfig->CalculateArrayPattern (sectorConfig->weights, sectorConfig->arrayPattern);
+              antennaConfig->CalculateArrayPattern (sectorConfig->GetWeights (), sectorConfig->arrayPattern);
             }
           antennaConfig->sectorList[sectorID] = sectorConfig;
         }
@@ -552,13 +558,10 @@ CodebookParametric::CreateMimoCodebook (std::string filename)
   std::getline (file, line);
   antennaConfig->elevationOrientationDegree = std::stod (line);
 
-  /* Temporary */
+  /* Initialize rotation axes */
   antennaConfig->orientation.psi = 0;
   antennaConfig->orientation.theta = 0;
   antennaConfig->orientation.phi = 0;
-  antennaConfig->orientation.x = 0;
-  antennaConfig->orientation.y = 0;
-  antennaConfig->orientation.z = 1;
 
   /* Read the number of antenna elements */
   std::getline (file, line);
@@ -620,10 +623,10 @@ CodebookParametric::CreateMimoCodebook (std::string filename)
 
   /* Read Quasi-omni antenna weights and calculate its directivity */
   Ptr<ParametricPatternConfig> quasiOmni = Create<ParametricPatternConfig> ();
-  quasiOmni->weights = ReadAntennaWeightsVector (file, antennaConfig->numElements);
+  quasiOmni->SetWeights (ReadAntennaWeightsVector (file, antennaConfig->numElements));
   if (m_precalculatedPatterns)
     {
-      antennaConfig->CalculateArrayPattern (quasiOmni->weights, quasiOmni->arrayPattern);
+      antennaConfig->CalculateArrayPattern (quasiOmni->GetWeights (), quasiOmni->arrayPattern);
 
     }
   antennaConfig->SetQuasiOmniConfig (quasiOmni);
@@ -668,11 +671,10 @@ CodebookParametric::CreateMimoCodebook (std::string filename)
         }
 
       /* Read sector antenna weights vector and calculate its directivity */
-      sectorConfig->weights = ReadAntennaWeightsVector (file, antennaConfig->numElements);
-      sectorConfig->normalizationFactor = CalculateNormalizationFactor (sectorConfig->weights);
+      sectorConfig->SetWeights (ReadAntennaWeightsVector (file, antennaConfig->numElements));
       if (m_precalculatedPatterns)
         {
-          antennaConfig->CalculateArrayPattern (sectorConfig->weights, sectorConfig->arrayPattern);
+          antennaConfig->CalculateArrayPattern (sectorConfig->GetWeights (), sectorConfig->arrayPattern);
         }
       antennaConfig->sectorList[sectorID] = sectorConfig;
     }
@@ -703,8 +705,8 @@ CodebookParametric::CreateMimoCodebook (std::string filename)
       dstAntennaConfig->CopyAntennaArray (antennaConfig);
       /* Copy quasi-omni config */
       Ptr<ParametricPatternConfig> quasiPattern = Create<ParametricPatternConfig> ();
-      quasiPattern->normalizationFactor = antennaConfig->GetQuasiOmniConfig ()->normalizationFactor;
-      quasiPattern->weights = antennaConfig->GetQuasiOmniConfig ()->weights;
+      quasiPattern->m_weights = antennaConfig->GetQuasiOmniConfig ()->m_weights;
+      quasiPattern->m_normalizationFactor = antennaConfig->GetQuasiOmniConfig ()->m_normalizationFactor;
       quasiPattern->arrayPattern = antennaConfig->GetQuasiOmniConfig ()->arrayPattern;
       dstAntennaConfig->SetQuasiOmniConfig (quasiPattern);
       for (SectorListI sectorIter = antennaConfig->sectorList.begin ();
@@ -713,10 +715,10 @@ CodebookParametric::CreateMimoCodebook (std::string filename)
           Ptr<ParametricSectorConfig> dstSectorConfig = Create<ParametricSectorConfig> ();
           /* Copy sector config */
           srcSectorConfig = DynamicCast<ParametricSectorConfig> (sectorIter->second);
-          dstSectorConfig->normalizationFactor = srcSectorConfig->normalizationFactor;
           dstSectorConfig->sectorType = srcSectorConfig->sectorType;
           dstSectorConfig->sectorUsage = srcSectorConfig->sectorUsage;
-          dstSectorConfig->weights = srcSectorConfig->weights;
+          dstSectorConfig->m_weights = srcSectorConfig->m_weights;
+          dstSectorConfig->m_normalizationFactor = srcSectorConfig->m_normalizationFactor;
           dstSectorConfig->arrayPattern = srcSectorConfig->arrayPattern;
           dstAntennaConfig->sectorList[sectorIter->first] = dstSectorConfig;
         }
@@ -803,7 +805,7 @@ CodebookParametric::UpdateSectorWeights (AntennaID antennaID, SectorID sectorID,
       if (sectorIter != antennaConfig->sectorList.end ())
         {
           Ptr<ParametricSectorConfig> sectorConfig = DynamicCast<ParametricSectorConfig> (sectorIter->second);
-          sectorConfig->weights = weightsVector;
+          sectorConfig->SetWeights (weightsVector);
           antennaConfig->CalculateArrayPattern (weightsVector, sectorConfig->arrayPattern);
         }
       else
@@ -854,7 +856,7 @@ CodebookParametric::ArrayPatternsPrecalculated (void) const
 }
 
 void
-CodebookParametric::PrintWeights (WeightsVector &weightsVector)
+CodebookParametric::PrintWeights (WeightsVector weightsVector)
 {
   NS_LOG_FUNCTION (this);
   for (WeightsVectorI it = weightsVector.begin (); it != weightsVector.end () - 1; it++)
@@ -883,7 +885,7 @@ CodebookParametric::PrintCodebookContent (bool printAWVs)
       std::cout << "Phase Quantization Bits     = " << uint16_t (antennaConfig->GetPhaseQuantizationBits ()) << std::endl;
       std::cout << "Number of Sectors           = " << antennaConfig->sectorList.size () << std::endl;
       std::cout << "Quasi-omni Weights          = ";
-      PrintWeights (antennaConfig->GetQuasiOmniConfig ()->weights);
+      PrintWeights (antennaConfig->GetQuasiOmniConfig ()->GetWeights ());
       for (SectorListI sectorIter = antennaConfig->sectorList.begin ();
            sectorIter != antennaConfig->sectorList.end (); sectorIter++)
         {
@@ -894,7 +896,7 @@ CodebookParametric::PrintCodebookContent (bool printAWVs)
           std::cout << "Sector Type             = " << sectorConfig->sectorType << std::endl;
           std::cout << "Sector Usage            = " << sectorConfig->sectorUsage << std::endl;
           std::cout << "Sector Weights          = ";
-          PrintWeights (sectorConfig->weights);
+          PrintWeights (sectorConfig->GetWeights ());
           if (printAWVs)
             {
               for (uint8_t awvIndex = 0; awvIndex < sectorConfig->awvList.size (); awvIndex++)
@@ -902,7 +904,7 @@ CodebookParametric::PrintCodebookContent (bool printAWVs)
                   std::cout << "**********************************************************" << std::endl;
                   std::cout << "AWV ID (" << uint16_t (awvIndex) << ")" << std::endl;
                   std::cout << "Weights             = ";
-                  PrintWeights (DynamicCast<Parametric_AWV_Config> (sectorConfig->awvList[awvIndex])->weights);
+                  PrintWeights (DynamicCast<Parametric_AWV_Config> (sectorConfig->awvList[awvIndex])->GetWeights ());
                 }
             }
         }
@@ -925,7 +927,7 @@ CodebookParametric::PrintAWVs (AntennaID antennaID, SectorID sectorID)
               std::cout << "**********************************************************" << std::endl;
               std::cout << "AWV ID (" << uint16_t (awvIndex) << ")" << std::endl;
               std::cout << "Weights             = ";
-              PrintWeights (DynamicCast<Parametric_AWV_Config> (sectorConfig->awvList[awvIndex])->weights);
+              PrintWeights (DynamicCast<Parametric_AWV_Config> (sectorConfig->awvList[awvIndex])->GetWeights ());
             }
         }
       else
@@ -946,7 +948,7 @@ CodebookParametric::UpdateQuasiOmniWeights (AntennaID antennaID, WeightsVector &
   if (iter != m_antennaArrayList.end ())
     {
       Ptr<ParametricAntennaConfig> antennaConfig = StaticCast<ParametricAntennaConfig> (iter->second);
-      antennaConfig->GetQuasiOmniConfig ()->weights = weightsVector;
+      antennaConfig->GetQuasiOmniConfig ()->SetWeights (weightsVector);
       antennaConfig->CalculateArrayPattern (weightsVector, antennaConfig->GetQuasiOmniConfig ()->arrayPattern);
     }
   else
@@ -985,7 +987,7 @@ CodebookParametric::AppendSector (AntennaID antennaID, SectorID sectorID, Sector
         }
 
       /* Read sector weights and calculate directivity */
-      sectorConfig->weights = weightsVector;
+      sectorConfig->SetWeights (weightsVector);
 //      sectorConfig->directivity = CalculateArrayPattern (weightsVector, antennaConfig->steeringVector);
 
       /* Check if the sector exists*/
@@ -1020,8 +1022,8 @@ CodebookParametric::AppendBeamRefinementAwv (AntennaID antennaID, SectorID secto
         {
           Ptr<ParametricSectorConfig> sectorConfig = DynamicCast<ParametricSectorConfig> (sectorIter->second);
           Ptr<Parametric_AWV_Config> awvConfig = Create<Parametric_AWV_Config> ();
-          awvConfig->weights = weightsVector;
-          antennaConfig->CalculateArrayPattern (sectorConfig->weights, awvConfig->arrayPattern);
+          awvConfig->SetWeights (weightsVector);
+          antennaConfig->CalculateArrayPattern (sectorConfig->GetWeights (), awvConfig->arrayPattern);
           sectorConfig->awvList.push_back (awvConfig);
           /* Change this */
           NS_ASSERT_MSG (sectorConfig->awvList.size () <= 64, "We can append upto 64 AWV per sector.");
@@ -1069,12 +1071,8 @@ CodebookParametric::AppendBeamRefinementAwv (AntennaID antennaID, SectorID secto
             {
               weightsVector.push_back (std::conj (antennaConfig->steeringVector [azimuth][elevation][i]));
             }
-          if (m_normalizeWeights)
-            {
-              NormalizeWeights (weightsVector);
-            }
-          awvConfig->weights = weightsVector;
-          antennaConfig->CalculateArrayPattern (awvConfig->weights, awvConfig->arrayPattern);
+          awvConfig->SetWeights (weightsVector);
+          antennaConfig->CalculateArrayPattern (awvConfig->GetWeights (), awvConfig->arrayPattern);
           sectorConfig->awvList.push_back (awvConfig);
         }
       else
@@ -1224,8 +1222,8 @@ CodebookParametric::CopyCodebook (const Ptr<Codebook> codebook)
       m_rfChainList[arrayIt->first] = dstRfChain;
       /* Copy quasi-omni config */
       Ptr<ParametricPatternConfig> quasiPattern = Create<ParametricPatternConfig> ();
-      quasiPattern->normalizationFactor = srcAntennaConfig->GetQuasiOmniConfig ()->normalizationFactor;
-      quasiPattern->weights = srcAntennaConfig->GetQuasiOmniConfig ()->weights;
+      quasiPattern->m_weights = srcAntennaConfig->GetQuasiOmniConfig ()->m_weights;
+      quasiPattern->m_normalizationFactor = srcAntennaConfig->GetQuasiOmniConfig ()->m_normalizationFactor;
       quasiPattern->arrayPattern = srcAntennaConfig->GetQuasiOmniConfig ()->arrayPattern;
       dstAntennaConfig->SetQuasiOmniConfig (quasiPattern);
       for (SectorListI sectorIter = srcAntennaConfig->sectorList.begin ();
@@ -1234,10 +1232,10 @@ CodebookParametric::CopyCodebook (const Ptr<Codebook> codebook)
           Ptr<ParametricSectorConfig> dstSectorConfig = Create<ParametricSectorConfig> ();
           /* Copy sector config */
           srcSectorConfig = DynamicCast<ParametricSectorConfig> (sectorIter->second);
-          dstSectorConfig->normalizationFactor = srcSectorConfig->normalizationFactor;
+          dstSectorConfig->m_normalizationFactor = srcSectorConfig->m_normalizationFactor;
           dstSectorConfig->sectorType = srcSectorConfig->sectorType;
           dstSectorConfig->sectorUsage = srcSectorConfig->sectorUsage;
-          dstSectorConfig->weights = srcSectorConfig->weights;
+          dstSectorConfig->m_weights = srcSectorConfig->m_weights;
           dstSectorConfig->arrayPattern = srcSectorConfig->arrayPattern;
           dstAntennaConfig->sectorList[sectorIter->first] = dstSectorConfig;
         }
@@ -1252,7 +1250,6 @@ CodebookParametric::CopyCodebook (const Ptr<Codebook> codebook)
 //      m_rfChainList[chainIt->first] = dstRfChain;
 //    }
 //  Ptr<RFChain> srcRfChain;
-  m_normalizeWeights = srcCodebook->m_normalizeWeights;
   m_precalculatedPatterns = srcCodebook->m_precalculatedPatterns;
   /* Set that we have cloned another codebook to avoid*/
   m_cloned = true;

@@ -2542,10 +2542,15 @@ WifiPhy::GetPayloadDuration (uint32_t size, WifiTxVector txVector, uint16_t freq
 
       /* Make sure the result is in nanoseconds. */
       uint32_t tData = lrint (ceil ((double (Nblks) * 512 + Ngi) / 1.76)); /* The duration of the data part */
-      NS_LOG_DEBUG ("bits " << Nbits << " cbits " << Ncbits
+      NS_LOG_DEBUG ("bits " << Nbits
+                    << " cbits " << Ncbits
+                    << " Ncbps " << Ncbps
+                    << " Nspb " << Nspb
                     << " Ncw " << Ncw
                     << " Nblks " << Nblks
-                    << " rate " << payloadMode.GetDataRate() << " Payload Time " << tData << " ns");
+                    << " data-rate " << payloadMode.GetDataRate()
+                    << " phy-rate " << payloadMode.GetPhyRate ()
+                    << " Payload Time " << tData << " ns");
 
       return NanoSeconds (tData);
     }

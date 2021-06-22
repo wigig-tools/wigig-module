@@ -34,7 +34,7 @@ TypeId FrameCaptureModel::GetTypeId (void)
     .SetGroupName ("Wifi")
     .AddAttribute ("CaptureWindow",
                    "The duration of the capture window.",
-                   TimeValue (MicroSeconds (16)),
+                   TimeValue (NanoSeconds (1891)),
                    MakeTimeAccessor (&FrameCaptureModel::m_captureWindow),
                    MakeTimeChecker ())
   ;

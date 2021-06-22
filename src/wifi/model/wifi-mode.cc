@@ -763,7 +763,7 @@ WifiModeFactory::CreateWifiMode (std::string uniqueName,
                                  WifiModulationClass modClass,
                                  bool isMandatory,
                                  uint64_t bandwidth,
-                                 uint64_t phyRate,
+                                 uint64_t dataRate,
                                  WifiCodeRate codingRate,
                                  uint16_t constellationSize)
 {
@@ -776,38 +776,38 @@ WifiModeFactory::CreateWifiMode (std::string uniqueName,
   //The modulation class for this WifiMode must be valid.
   NS_ASSERT (modClass != WIFI_MOD_CLASS_UNKNOWN);
   item->bandwidth = bandwidth;
-  item->phyRate = phyRate;
+  item->dataRate = dataRate;
   item->codingRate = codingRate;
 
   switch (codingRate)
     {
     case WIFI_CODE_RATE_5_6:
-      item->dataRate = phyRate * 5 / 6;
+      item->phyRate = dataRate * 6 / 5;
       break;
     case WIFI_CODE_RATE_3_4:
-      item->dataRate = phyRate * 3 / 4;
+      item->phyRate = dataRate * 4 / 3;
       break;
     case WIFI_CODE_RATE_2_3:
-      item->dataRate = phyRate * 2 / 3;
+      item->phyRate = dataRate * 3 / 2;
       break;
     case WIFI_CODE_RATE_1_2:
-      item->dataRate = phyRate * 1 / 2;
+      item->phyRate = dataRate * 2 / 1;
       break;
     case WIFI_CODE_RATE_5_8:
-      item->dataRate = phyRate * 5 / 8;
+      item->phyRate = dataRate * 8 / 5;
       break;
     case WIFI_CODE_RATE_13_16:
-      item->dataRate = phyRate * 13 / 16;
+      item->phyRate = dataRate * 16 / 13;
       break;
     case WIFI_CODE_RATE_1_4:
-      item->dataRate = phyRate * 1 / 4;
+      item->phyRate = dataRate * 4 / 1;
       break;
     case WIFI_CODE_RATE_7_8:
-      item->dataRate = phyRate * 7 / 8;
+      item->phyRate = dataRate * 8 / 7;
       break;
     case WIFI_CODE_RATE_UNDEFINED:
     default:
-      item->dataRate = phyRate;
+      NS_ABORT_MSG ("Non-supported coding rate");
       break;
     }
 

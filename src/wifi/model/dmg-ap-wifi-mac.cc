@@ -21,6 +21,7 @@
 #include "wifi-utils.h"
 #include "wifi-phy.h"
 #include "dmg-wifi-phy.h"
+#include "bft-id-tag.h"
 
 namespace ns3 {
 
@@ -1351,8 +1352,13 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
 
           /* Raise an event that we selected the best Tx sector to the DMG STA (in BHI only STA chooses) */
           m_slsCompleted (SlsCompletionAttrbitutes (address, CHANNEL_ACCESS_BHI, BeamformingInitiator,
-                                                    m_isInitiatorTXSS, m_isResponderTXSS,
+                                                    m_isInitiatorTXSS, m_isResponderTXSS, m_bftIdMap [address],
                                                     antennaConfig.first, antennaConfig.second, m_maxSnr));
+          if (m_groupTraining)
+            {
+              m_groupBeamformingCompleted (GroupBfCompletionAttrbitutes (address, BeamformingResponder, m_bftIdMap [address],
+                                                                         antennaConfig.first, antennaConfig.second, NO_AWV_ID, m_maxSnr));
+            }
         }
       else
         {
@@ -1396,7 +1402,7 @@ DmgApWifiMac::FrameTxOk (const WifiMacHeader &hdr)
       m_performingBFT = false;
       m_slsResponderStateMachine = SLS_RESPONDER_TXSS_PHASE_COMPELTED;
       m_slsCompleted (SlsCompletionAttrbitutes (address, CHANNEL_ACCESS_DTI, BeamformingResponder,
-                                                m_isInitiatorTXSS, m_isResponderTXSS,
+                                                m_isInitiatorTXSS, m_isResponderTXSS, m_bftIdMap [address],
                                                 antennaConfig.first, antennaConfig.second, m_maxSnr));
       /* Resume data transmission after SLS operation */
       if (m_currentAllocation == CBAP_ALLOCATION)
@@ -2367,6 +2373,11 @@ DmgApWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
               m_receivedOneSSW = true;
               m_abftCollision = false;
               m_peerAbftStation = hdr->GetAddr2 ();
+              //// NINA ////
+              BftIdTag tag;
+              packet->RemovePacketTag (tag);
+              m_bftIdMap [hdr->GetAddr2 ()] = tag.Get ();
+              //// NINA ////
             }
 
           if (m_abftCollision)
@@ -2392,7 +2403,6 @@ DmgApWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                 {
                   CtrlDMG_SSW sswFrame;
                   packet->RemoveHeader (sswFrame);
-
                   DMG_SSW_Field ssw = sswFrame.GetSswField ();
                   /* Map the antenna Tx configuration for the frame received by SLS of the DMG-STA */
                   MapTxSnr (from, ssw.GetDMGAntennaID (), ssw.GetSectorID (), m_stationManager->GetRxSnr ());
@@ -2929,13 +2939,13 @@ DmgApWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                           {
                             /* Find the best SNR sent */
                             SNR_INT_LIST list = channelElement->GetSnrList ();
-                            SNR_INT snr = list.front ();
-                            int highIndex = 0;
-                            for (uint8_t i=0; i < list.size(); i++ )
+                            SNR_INT snr = MapIntToSnr (list.front ());
+                            uint8_t highIndex = 0;
+                            for (uint8_t i = 0; i < list.size(); i++ )
                               {
-                                if (snr < list[i])
+                                if (snr < MapIntToSnr (list[i]))
                                   {
-                                    snr = list[i];
+                                    snr = MapIntToSnr (list[i]);
                                     highIndex = i;
                                   }
                               }
@@ -2949,6 +2959,13 @@ DmgApWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                               {
                                 UpdateBestRxAntennaConfiguration (from, newConfig, MapIntToSnr(snr));
                               }
+                            //// NINA ////
+                            /* Update the BFT id for BFT with this peer station */
+                            BftIdTag tag;
+                            packet->RemovePacketTag (tag);
+                            m_bftIdMap[from] = tag.Get ();
+                            m_groupBeamformingCompleted (GroupBfCompletionAttrbitutes (from, BeamformingResponder, m_bftIdMap[from], newConfig.first,
+                                                                                       newConfig.second, NO_AWV_ID, MapIntToSnr (snr)));
                           }
                         return;
                       }

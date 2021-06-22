@@ -585,6 +585,12 @@ QosTxop::NotifyAccessGranted (void)
       NS_LOG_DEBUG ("the lifetime of current packet expired");
       m_currentPacket = 0;
     }
+  // discard the current packet if there has been a switch in the transmission mode (SISO/MIMO) between its suspension and transmission
+  if ((!m_low->CompletedSuspendedPsduTransmission (this) || !m_low->IsCurrentAllocationEmpty ()) && m_low->SwitchInTransmissionMode ())
+    {
+      NS_LOG_DEBUG ("there has been a switch in the transmission mode (SISO/MIMO) for the packet destination");
+      m_currentPacket = 0;
+    }
 
   /* Update Allocation duration */
   Time allocationRemaining = GetAllocationRemaining ();
@@ -608,16 +614,35 @@ QosTxop::NotifyAccessGranted (void)
         }
       if (!m_low->CompletedSuspendedPsduTransmission (this))
         {
-          m_low->ResumeTransmission (allocationRemaining, this);
-          return;
+          if (m_currentPacket != 0)
+            {
+              m_low->ResumeTransmission (allocationRemaining, this);
+              return;
+            }
+          else
+            {
+              // In case when the MSDU lifetime for the suspended transmission has expired
+              m_low->AbortSuspendedTransmission ();
+              NS_LOG_DEBUG ("Deleting allocation which incudes the packet with the expired lifetime");
+            }
+
         }
       /* This happens if we have resumed a transmission, but it did not successed due to the start of an SLS phase */
-      if (m_currentPacket != 0 && m_currentHdr.IsQosData ()
+      if (m_currentHdr.IsQosData ()
           && GetBaAgreementEstablished (m_currentHdr.GetAddr1 (), m_currentHdr.GetQosTid ())
           && !m_low->IsCurrentAllocationEmpty ())
         {
-          m_low->ResumeTransmission (allocationRemaining, this);
-          return;
+          if (m_currentPacket != 0)
+            {
+              m_low->ResumeTransmission (allocationRemaining, this);
+              return;
+            }
+          else
+            {
+              // In case when the MSDU lifetime for the suspended transmission has expired
+              m_low->AbortSuspendedTransmission ();
+              NS_LOG_DEBUG ("Deleting allocation which incudes the packet with the expired lifetime");
+            }
         }
     }
 

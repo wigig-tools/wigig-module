@@ -140,13 +140,14 @@ struct SlsCompletionAttrbitutes {
   SlsCompletionAttrbitutes ();
   SlsCompletionAttrbitutes (Mac48Address _peerStation, ChannelAccessPeriod _accessPeriod,
                             BeamformingDirection _beamformingDirection,
-                            bool _isInitiatorTXSS, bool _isResponderTXSS,
+                            bool _isInitiatorTXSS, bool _isResponderTXSS, uint16_t _bftID,
                             AntennaID _antennaID, SectorID _sectorID, double _maxSnr)
     : peerStation (_peerStation),
       accessPeriod (_accessPeriod),
       beamformingDirection (_beamformingDirection),
       isInitiatorTXSS (_isInitiatorTXSS),
       isResponderTXSS (_isResponderTXSS),
+      bftID (_bftID),
       antennaID (_antennaID),
       sectorID (_sectorID),
       maxSnr (_maxSnr)
@@ -157,6 +158,7 @@ struct SlsCompletionAttrbitutes {
   BeamformingDirection beamformingDirection;  //!< Initiator or Responder.
   bool isInitiatorTXSS;                       //!< Flag to indicate if the initiator is TXSS or RXSS.
   bool isResponderTXSS;                       //!< Flag to indicate if the responder is TXSS or RXSS.
+  uint16_t bftID;                             //!< The ID of the current BFT.
   AntennaID antennaID;                        //!< The ID of the selected antenna.
   SectorID sectorID;                          //!< The ID of the selected sector.
   double maxSnr;                              //!< The maximum snr value as a result fo the SLS procedure.
@@ -214,6 +216,58 @@ enum BEAM_LINK_MAINTENANCE_TIMER_STATE {
   BEAM_LINK_MAINTENANCE_TIMER_SETUP_RELEASE,
   BEAM_LINK_MAINTENANCE_TIMER_HALT,
   BEAM_LINK_MAINTENANCE_TIMER_EXPIRES
+};
+
+/**
+ * The Group Beamforming completion callback structure.
+ */
+struct GroupBfCompletionAttrbitutes {
+  GroupBfCompletionAttrbitutes ();
+  GroupBfCompletionAttrbitutes (Mac48Address _peerStation, BeamformingDirection _beamformingDirection, uint16_t _bftID,
+                            AntennaID _antennaID, SectorID _sectorID, AWV_ID _awvID, double _maxSnr)
+    : peerStation (_peerStation),
+      beamformingDirection (_beamformingDirection),
+      bftID (_bftID),
+      antennaID (_antennaID),
+      sectorID (_sectorID),
+      awvID (_awvID),
+      maxSnr (_maxSnr)
+  {}
+
+  Mac48Address peerStation;                   //!< The MAC address of the peer station.
+  BeamformingDirection beamformingDirection;  //!< Initiator or Responder.
+  uint16_t bftID;                             //!< The ID of the current BFT.
+  AntennaID antennaID;                        //!< The ID of the selected antenna.
+  SectorID sectorID;                          //!< The ID of the selected sector.
+  AWV_ID awvID;                               //!< The ID of the select AWV.
+  double maxSnr;                              //!< The maximum snr value as a result fo the SLS procedure.
+};
+
+/**
+ * The MIMO phase measurements callback structure.
+ */
+struct MimoPhaseMeasurementsAttributes {
+  MimoPhaseMeasurementsAttributes ();
+  MimoPhaseMeasurementsAttributes (Mac48Address _peerStation, MIMO_SNR_LIST _mimoSnrList, SNR_MEASUREMENT_AWV_IDs_QUEUE _queue,
+                            bool _differentRxCombinations, uint8_t _nTxAntennas, uint8_t _nRxAntennas, uint8_t _rxCombinationsTested, uint16_t _bftID )
+    : peerStation (_peerStation),
+      mimoSnrList (_mimoSnrList),
+      queue (_queue),
+      differentRxCombinations (_differentRxCombinations),
+      nTxAntennas (_nTxAntennas),
+      nRxAntennas (_nRxAntennas),
+      rxCombinationsTested (_rxCombinationsTested),
+      bftID (_bftID)
+  {}
+
+  Mac48Address peerStation;                   //!< The MAC address of the peer station.
+  MIMO_SNR_LIST mimoSnrList;                  //!< The list of measurements taken during the MIMO phase.
+  SNR_MEASUREMENT_AWV_IDs_QUEUE queue;        //!< A priority queue based on the minumum per-stream SNR for every possible AWV ID combination.
+  bool differentRxCombinations;               //!< Whether or not we want to feedback different Rx combinations.
+  uint8_t nTxAntennas;                         //!< The number of Tx Antennas.
+  uint8_t nRxAntennas;                         //!< The number of Rx Antennas.
+  uint8_t rxCombinationsTested;               //!< Number of Rx Combinations tested.
+  uint16_t bftID;                             //!< The ID of the current BFT.
 };
 
 /**
@@ -820,6 +874,7 @@ public:
 
 protected:
   friend class MacLow;
+  friend class DmgStaWifiMac;
 
   virtual void DoDispose (void);
   virtual void DoInitialize (void);
@@ -1635,67 +1690,73 @@ protected:
   TracedCallback<Mac48Address, BeamRefinementType, AntennaID, SectorID, AWV_ID> m_brpCompleted;
   /**
    * Trace callback for Group Beamforming completion.
-   * \param Mac48Address The MAC address of the peer station.
-   * \param txSectorID The ID of the selected sector for Tx (For the AP).
-   * \param txAntennaID The ID of the selected antenna for Tx (For the AP).
-   * \param rxSectorID The ID of the selected sector for Rx (For the STA).
-   * \param rxAntennaID The ID of the selected antenna for Rx (For the STA).
-   * \param rxAwvID The ID of the selected AWV for Rx (For the STA).
    */
-  TracedCallback<Mac48Address, SectorID, AntennaID, SectorID, AntennaID, AWV_ID, double> m_groupBeamformingCompleted;
+  TracedCallback<GroupBfCompletionAttrbitutes> m_groupBeamformingCompleted;
   /**
    * Trace callback for SISO Phase Measurements in SU-MIMO BFT.
    * \param Mac48Address The MAC address of the peer station.
    * \param SU_MIMO_SNE_MAP The map with the measurements from the SISO phase.
    * \param uint8_t The edmg TRN N value which states how many repetitions there are of each AWV.
+   * \param uint16_t The BFT ID of the current BFT.
    */
-  TracedCallback<Mac48Address, SU_MIMO_SNR_MAP, uint8_t> m_suMimoSisoPhaseMeasurements;
+  TracedCallback<Mac48Address, SU_MIMO_SNR_MAP, uint8_t, uint16_t> m_suMimoSisoPhaseMeasurements;
   /**
    * Trace callback for SISO phase of SU-MIMO completion.
    * \param Mac48Address The MAC address of the peer station.
    * \param SU_MIMO_FEEDBACK_MAP The map with feedback from the SISO phase.
    * \param uint8_t The number of Tx antennas that we want to have concurrently active.
    * \param uint8_t The number of Rx Antennas of the peer station.
+   * \param uint16_t The ID of the current BFT.
    */
-  TracedCallback<Mac48Address, MIMO_FEEDBACK_MAP, uint8_t, uint8_t> m_suMimoSisoPhaseComplete;
+  TracedCallback<Mac48Address, MIMO_FEEDBACK_MAP, uint8_t, uint8_t, uint16_t> m_suMimoSisoPhaseComplete;
   /**
    * Trace callback for MIMO candidates selection for SU-MIMO.
    * \param Mac48Address The MAC address of the peer station.
    * \param Antenna2SectorList The Tx Candidates to be tested in the MIMO phase.
    * \param Antenna2SectorList The Rx Candidates to be tested in the MIMO phase.
+   * \param uint16_t The ID of the current BFT.
    */
-  TracedCallback<Mac48Address, Antenna2SectorList, Antenna2SectorList> m_suMimomMimoCandidatesSelected;
+  TracedCallback<Mac48Address, Antenna2SectorList, Antenna2SectorList, uint16_t> m_suMimomMimoCandidatesSelected;
   /**
    * Trace callback for MIMO Phase measurements in SU-MIMO BFT.
-   * \param Mac48Address The MAC address of the peer station.
-   * \param MIMO_SNR_LIST The list of measurements taken during the MIMO phase.
-   * \param SNR_MEASUREMENT_AWV_IDs_QUEUE A priority queue based on the minumum per-stream SNR for every possible AWV ID combination.
-   * \param bool Whether or not we want to feedback different Rx combinations.
-   * \param uint8_t The number of Tx Antennas.
-   * \param uint8_t The number of Rx Antennas.
-   * \param uint8_t Number of Rx Combinations tested.
    */
-  TracedCallback<Mac48Address, MIMO_SNR_LIST, SNR_MEASUREMENT_AWV_IDs_QUEUE, bool, uint8_t, uint8_t, uint8_t> m_suMimoMimoPhaseMeasurements;
+  TracedCallback<MimoPhaseMeasurementsAttributes> m_suMimoMimoPhaseMeasurements;
   TracedCallback<Mac48Address> m_suMimoMimoPhaseComplete;
   /**
    * Trace callback for SISO Phase Measurements in MU-MIMO BFT.
    * \param Mac48Address The MAC address of the peer station.
    * \param MU_MIMO_SNR_MAP The map with the measurements from the SISO phase.
+   * \param uint8_t The MU group ID for the current training.
+   * \param uint16_t The BFT ID of the current BFT.
    */
-  TracedCallback<Mac48Address, MU_MIMO_SNR_MAP> m_muMimoSisoPhaseMeasurements;
+  TracedCallback<Mac48Address, MU_MIMO_SNR_MAP, uint8_t, uint16_t> m_muMimoSisoPhaseMeasurements;
   /**
    * Trace callback for SISO phase of MU-MIMO completion.
    * \param MU_MIMO_FEEDBACK_MAP The map with feedback from the SISO phase.
    * \param uint8_t The number of Tx antennas that we want to have concurrently active.
    * \param uint8_t The number of Rx Stations we trained with.
+   * \param uint8_t The MU group ID for the current training.
+   * \param uint16_t The BFT ID of the current BFT.
    */
-  TracedCallback<MIMO_FEEDBACK_MAP, uint8_t, uint8_t> m_muMimoSisoPhaseComplete;
+  TracedCallback<MIMO_FEEDBACK_MAP, uint8_t, uint8_t, uint8_t, uint16_t> m_muMimoSisoPhaseComplete;
   /**
    * Trace callback for MIMO candidates selection for MU-MIMO.
    * \param uint8_t The MU Group ID of the group being trained.
    * \param Antenna2SectorList The Tx Candidates to be tested in the MIMO phase.
+   * \param uint16_t The BFT ID of the current BFT.
    */
-  TracedCallback<uint8_t, Antenna2SectorList> m_muMimomMimoCandidatesSelected;
+  TracedCallback<uint8_t, Antenna2SectorList, uint16_t> m_muMimomMimoCandidatesSelected;
+  /**
+   * Trace callback for MIMO Phase measurements in MU-MIMO BFT.
+   */
+  TracedCallback<MimoPhaseMeasurementsAttributes, uint8_t> m_muMimoMimoPhaseMeasurements;
+  /**
+   * Trace callback for MIMO candidates selection for MU-MIMO.
+   * \param MIMO_AWV_CONFIGURATION The optimal MIMO configuration.
+   * \param uint8_t The MU Group ID of the group being trained.
+   * \param uint16_t The BFT ID of the current BFT.
+   */
+  TracedCallback<MIMO_AWV_CONFIGURATION, uint8_t, uint16_t> m_muMimoOptimalConfig;
   TracedCallback<> m_muMimoMimoPhaseComplete;
   /**
    * Trace callback for polling from Inititator during SISO Fbck phase of MU-MIMO BFT.
@@ -1712,7 +1773,7 @@ protected:
    * Register MU MIMO SISO Phase complete callback.
    * \param callback The SISO phase complete callback.
    */
-  void RegisterMuMimoSisoPhaseComplete (MIMO_FEEDBACK_MAP muMimoFbckMap, uint8_t nRFChains, uint8_t nStas);
+  void RegisterMuMimoSisoPhaseComplete (MIMO_FEEDBACK_MAP muMimoFbckMap, uint8_t nRFChains, uint8_t nStas, uint8_t muGroup, uint16_t bftID);
 
   /** Link Maintenance Variabeles **/
   BeamLinkMaintenanceUnitIndex m_beamlinkMaintenanceUnit;   //!< Link maintenance unit according to 802.11ad-2012.
@@ -1758,6 +1819,10 @@ protected:
   TRN2SNR m_trn2Snr;                                    //!< Variable to store SNR per TRN subfield for ongoing beam refinement phase or beam tracking.
   TRN2SNR_MAP m_trn2snrMap;                             //!< Variable to store SNR vector for TRN Subfields per device.
   Mac48Address m_peerStation;     /* The address of the station we are waiting BRP Response from */
+  typedef std::map<Mac48Address, uint16_t> BFT_ID_MAP;  //!< Typedef for a MAP that holds a BFT ID (identifying the current BFT process) per station.
+  BFT_ID_MAP m_bftIdMap;
+  typedef std::map<uint8_t, uint16_t> MU_MIMO_BFT_ID_MAP;  //!< Typedef for a MAP that holds a BFT ID (identifying the current BFT process) per MU group.
+  MU_MIMO_BFT_ID_MAP m_muMimoBftIdMap;
 
   /* AID to MAC Address mapping */
   typedef std::map<uint16_t, Mac48Address> AID_MAP;
@@ -1800,7 +1865,8 @@ protected:
   AID_LIST_I m_currentMuGroupMember; //!< Iterator that points to the current member from the MU group being polled for feedback/transmitted to.
   typedef std::map<Mac48Address, DATA_COMMUNICATION_MODE> DataCommunicationModeTable;
   DataCommunicationModeTable m_dataCommunicationModeTable; //!< Table that contains the current communication mode (SISO, SU-MIMO or MU-MIMO) with a given station.
-
+  EventId m_informationUpdateEvent;                  //!< Event for Information Update.
+  Time m_informationUpdateTimeout;                   //!< Information Update timeout
 private:
   /**
    * This function is called upon transmission of a 802.11 Management frame.

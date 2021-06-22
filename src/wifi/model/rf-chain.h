@@ -75,9 +75,6 @@ struct Orientation {
   double psi;         //!< Rotation around the z-axis.
   double theta;       //!< Rotation around the y-axis.
   double phi;         //!< Rotation around the x-axis.
-  double x;
-  double y;
-  double z;
 };
 
 struct RFChain;

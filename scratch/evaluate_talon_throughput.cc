@@ -171,14 +171,14 @@ main (int argc, char *argv[])
 
   /* Set Numerical Codebook for the DMG PCP/AP */
   wifi.SetCodebook ("ns3::CodebookNumerical",
-                    "FileName", StringValue ("DmgFiles/Codebook/NUMERICAL_TALONAD7200_AP.txt"));
+                    "FileName", StringValue ("WigigFiles/Codebook/NUMERICAL_TALONAD7200_AP.txt"));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apWifiNode);
 
   /* Set Numerical Codebook for the DMG STA */
   wifi.SetCodebook ("ns3::CodebookNumerical",
-                    "FileName", StringValue ("DmgFiles/Codebook/NUMERICAL_TALONAD7200_STA.txt"));
+                    "FileName", StringValue ("WigigFiles/Codebook/NUMERICAL_TALONAD7200_STA.txt"));
 
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid), "ActiveProbing", BooleanValue (false),

@@ -29,7 +29,7 @@
  * and the DMG PCP/AP to decrease/increase the received SNR.
  *
  * Running Simulation:
- * ./waf --run "evaluate_dmg_error_model --simulationTime=10 --pcap=true"
+ * ./waf --run "evaluate_per_vs_snr_11ad"
  *
  * Simulation Output:
  * The simulation generates the following traces:
@@ -66,7 +66,6 @@ void
 MacRxOk (WifiMacType, Mac48Address, double snrValue)
 {
   macRxOk++;
-  std::cout << snr << std::endl;
   snr += snrValue;
 }
 
@@ -125,9 +124,9 @@ main (int argc, char *argv[])
   Ptr<OutputStreamWrapper> outputFile = ascii.CreateFileStream ("PER_vs_SNR_11ad.csv");
   *outputFile->GetStream () << "MCS,DIST,APP_TX_PKTS,MAC_RX_OK,MAC_TX_FAILED,PHY_TX_PKTS,PHX_RX_PKTS,PHY_RX_DROPPED,SNR" << std::endl;
 
-  for (uint mcs = 1; mcs <= 12; mcs++)
+  for (uint8_t mcs = 1; mcs <= 12; mcs++)
     {
-      for (double distance = 27.0; distance <= 27; distance += 0.1)
+      for (double distance = 0.1; distance <= 27; distance += 0.1)
         {
           /* Reset Counters */
           macTxDataFailed = 0;
@@ -259,7 +258,7 @@ main (int argc, char *argv[])
           Simulator::Run ();
           Simulator::Destroy ();
 
-          *outputFile->GetStream () << mcs << "," << distance << "," << onoff->GetTotalTxPackets ()
+          *outputFile->GetStream () << uint16_t (mcs) << "," << distance << "," << onoff->GetTotalTxPackets ()
                                     << "," << macRxOk << "," << macTxDataFailed << ","
                                     << transmittedPackets << "," << receivedPackets << "," << droppedPackets << ","
                                     << RatioToDb (snr / double (macRxOk)) << std::endl;

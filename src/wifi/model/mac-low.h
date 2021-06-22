@@ -467,6 +467,10 @@ public:
    * \param txop Pointer to the transmit opprtunity associated with the suspedned transmission.
    */
   void ResumeTransmission (Time duration, Ptr<Txop> txop);
+  /**
+   * Abort suspended transmission - in case the suspended packet lifetime has passed.
+   */
+  void AbortSuspendedTransmission (void);
 
 
   void ChangeAllocationPacketsAddress (AllocationID allocationId, Mac48Address destAdd);
@@ -495,6 +499,11 @@ public:
    *          otherwise false.
    */
   bool CompletedSuspendedPsduTransmission (Ptr<Txop> txop) const;
+  /**
+   * Check whether there has been a switch in the transmission mode (SISO/MIMO) between the suspension of the transmission and its restoration.
+   * \return True if there has been a switch in the transmission mode between the suspenssion and restoration of the transmission.
+   */
+  bool SwitchInTransmissionMode (void) const;
   //// WIGIG ////
 
   /**

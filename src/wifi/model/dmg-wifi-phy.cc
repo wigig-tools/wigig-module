@@ -1210,9 +1210,9 @@ DmgWifiPhy::EndReceiveTrnField (bool isBeacon)
     {
       m_receivingTRNfield = false;
     }
-  if (isBeacon)
+  if (isBeacon && m_psduSuccess)
     {
-      if (m_isQuasiOmni && m_psduSuccess)
+      if (m_isQuasiOmni)
         {
           m_codebook->SetReceivingInQuasiOmniMode (m_oldAntennaID);
         }
@@ -1657,7 +1657,7 @@ DmgWifiPhy::ContinueReceiveHeader (Ptr<Event> event)
 Time
 DmgWifiPhy::GetPreambleDetectionDuration (void)
 {
-  return MicroSeconds (1);
+  return NanoSeconds (290);
 }
 
 Time
@@ -1859,6 +1859,11 @@ DmgWifiPhy::StartReceivePreamble (Ptr<WifiPpdu> ppdu, std::vector<double> rxPowe
               if (endRx > (Simulator::Now () + m_state->GetDelayUntilIdle ()))
                 {
                   // WIGIG Add HERE (NINA)
+                  if (txVector.GetEDMGTrainingFieldLength () > 0 || txVector.GetTrainngFieldLength () > 0)
+                    {
+                      Simulator::Schedule (rxDuration, &InterferenceHelper::AddForeignSignal, &m_interference, totalDuration - rxDuration, rxPowerW);
+                      Simulator::Schedule (rxDuration, &DmgWifiPhy::MaybeCcaBusyDuration, this);
+                    }
                   //that packet will be noise _after_ the reception of the currently-received packet.
                   MaybeCcaBusyDuration ();
                 }

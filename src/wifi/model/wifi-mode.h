@@ -375,7 +375,7 @@ public:
    * \param isMandatory true if this WifiMode is mandatory, false otherwise.
    * \param bandwidth the bandwidth (Hz) of the signal generated when the
    *        associated WifiMode is used.
-   * \param phyRate the rate (bits/second) at which the PHY supports.
+   * \param dataRate the rate (bits/second) measured at the MAC SAP..
    * \param codingRate if convolutional coding is used for this rate
    *        then this parameter specifies the convolutional coding rate
    *        used. If there is no explicit convolutional coding step (e.g.,
@@ -392,7 +392,7 @@ public:
                                   WifiModulationClass modClass,
                                   bool isMandatory,
                                   uint64_t bandwidth,
-                                  uint64_t phyRate,
+                                  uint64_t dataRate,
                                   WifiCodeRate codingRate,
                                   uint16_t constellationSize);
   /**

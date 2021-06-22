@@ -609,6 +609,15 @@ MacLow::ResumeTransmission (Time duration, Ptr<Txop> txop)
 }
 
 void
+MacLow::AbortSuspendedTransmission (void)
+{
+  NS_LOG_FUNCTION (this);
+  m_restoredSuspendedTransmission = false;
+  m_currentAllocation = 0;
+  m_allocationPeriodsTable.erase (m_currentAllocationID);
+}
+
+void
 MacLow::ChangeAllocationPacketsAddress (AllocationID allocationId, Mac48Address destAdd)
 {
   NS_LOG_FUNCTION (this << uint16_t (allocationId) << destAdd);
@@ -706,6 +715,24 @@ MacLow::CompletedSuspendedPsduTransmission (Ptr<Txop> txop) const
   else
     {
       return true;
+    }
+}
+
+bool
+MacLow::SwitchInTransmissionMode (void) const
+{
+  Mac48Address address = m_currentAllocation->psdu->GetAddr1 ();
+  if (m_currentAllocation->txVector.Get_NUM_STS () != StaticCast<DmgWifiMac> (m_mac)->GetStationNStreams (address))
+    {
+      NS_LOG_INFO ("The number of space-time streams in the saved allocation and the one currently calculate do not match. There has been a switch in"
+                   "the transmission mode");
+      return true;
+    }
+  else
+    {
+      NS_LOG_INFO ("The number of space-time streams in the saved allocation and the one currently calculate match. There has not been a switch in"
+                   "the transmission mode");
+      return false;
     }
 }
 //// WIGIG ////

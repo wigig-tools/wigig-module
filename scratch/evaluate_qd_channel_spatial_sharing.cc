@@ -43,21 +43,20 @@
  *
  * Running Simulation:
  * To use this script simply type the following run command:
- * ./waf --run "qd_channel_spatial_sharing --enableMobility=false"
+ * ./waf --run "evaluate_qd_channel_spatial_sharing --enableMobility=false"
  *
  * Simulation Output:
+ * The simulation generates the following traces:
+ * 1. PCAP traces for each station.
+ * 2. SLS results for visualization in Q-D Visualizer.
+ * 3. SNR Information for TXSS phases.
+ * 4. SNR Information for data packets if enabled.
  */
 
 NS_LOG_COMPONENT_DEFINE ("EvaluateQdSpatialSharing");
 
 using namespace ns3;
 using namespace std;
-
-/* Tracing */
-typedef std::map<Mac48Address, uint32_t> MAP_MAC2ID;
-typedef MAP_MAC2ID::iterator MAP_MAC2ID_I;
-MAP_MAC2ID map_Mac2ID;
-Ptr<QdPropagationEngine> qdPropagationEngine; /* Q-D Propagation Engine. */
 
 /** Simulation Arguments **/
 string applicationType = "onoff";             /* Type of the Tx application */
@@ -73,8 +72,13 @@ bool csv = true;                              /* Enable CSV output. */
 bool enableJitter = true;                     /* Enable Beacon Interval Jitter to randomize Beacon Interval start time. */
 string beaconJitter = "ns3::UniformRandomVariable[Min=0|Max=10]";
 
-/**  Applications **/
+/** Variables **/
 CommunicationPairList communicationPairList;  /* List of communicating devices. */
+Ptr<QdPropagationEngine> qdPropagationEngine; /* Q-D Propagation Engine. */
+
+/*** Beamforming CBAP ***/
+uint16_t biThreshold = 10;                    /* BI Threshold to trigger TXSS TXOP. */
+std::map<Mac48Address, uint16_t> biCounter;   /* Number of beacon intervals that have passed. */
 
 void
 CalculateThroughput (void)
@@ -134,18 +138,11 @@ CreateAccessPoint (Ptr<Node> apNode, Ssid ssid,
 }
 
 void
-SLSCompleted (Ptr<OutputStreamWrapper> stream,  Ptr<SLS_PARAMETERS> parameters, SlsCompletionAttrbitutes attributes)
+SLSCompleted (Ptr<DmgWifiMac> wifiMac, SlsCompletionAttrbitutes attributes)
 {
-  *stream->GetStream () << parameters->srcNodeID + 1 << "," << map_Mac2ID[attributes.peerStation] + 1 << ","
-                        << qdPropagationEngine->GetCurrentTraceIndex () << ","
-                        << uint16_t (attributes.sectorID) << "," << uint16_t (attributes.antennaID)  << ","
-                        << parameters->wifiMac->GetTypeOfStation ()  << ","
-                        << map_Mac2ID[parameters->wifiMac->GetBssid ()] + 1  << ","
-                        << Simulator::Now ().GetSeconds () << std::endl;
-
   if (!csv)
     {
-      std::cout << "DMG STA " << parameters->wifiMac->GetAddress ()
+      std::cout << "DMG STA " << wifiMac->GetAddress ()
                 << " completed SLS phase with DMG STA " << attributes.peerStation << std::endl;
       std::cout << "Best Tx Antenna Configuration: AntennaID=" << uint16_t (attributes.antennaID)
                 << ", SectorID=" << uint16_t (attributes.sectorID) << std::endl;
@@ -239,10 +236,6 @@ InstallMAC_Layer (Ptr<Node> node, DmgWifiHelper &wifi, SpectrumDmgWifiPhyHelper 
   return wifi.Install (wifiPhy, wifiMac, node, false);
 }
 
-/*** Beamforming CBAP ***/
-uint16_t biThreshold = 10;                                    /* BI Threshold to trigger TXSS TXOP. */
-std::map<Mac48Address, uint16_t> biCounter;                   /* Number of beacon intervals that have passed. */
-
 void
 DataTransmissionIntervalStarted (Ptr<DmgApWifiMac> apWifiMac, Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, Time)
 {
@@ -276,19 +269,19 @@ int
 main (int argc, char *argv[])
 {
   uint32_t bufferSize = 131072;                           /* TCP Send/Receive Buffer Size. */
-  string queueSize = "4000p";                        /* Wifi MAC Queue Size. */
+  string queueSize = "4000p";                             /* Wifi MAC Queue Size. */
   bool frameCapture = false;                              /* Use a frame capture model. */
   double frameCaptureMargin = 10;                         /* Frame capture margin in dB. */
   string phyMode = "DMG_MCS12";                           /* Type of the Physical Layer. */
-  bool normalizeWeights = false;                          /* Whether we normalize the antenna weights vector or not. */
   uint32_t parallelLinks = 2;                             /* The number of parallel links. */
   uint32_t snapshotLength = std::numeric_limits<uint32_t>::max ();       /* The maximum PCAP Snapshot Length */
-  string raa = "ConstantRate";                       /* The rate adaptation algorithm used by both STAs and APs. */
+  string raa = "ConstantRate";                            /* The rate adaptation algorithm used by both STAs and APs. */
   bool verbose = false;                                   /* Print Logging Information. */
+  string directory = "Traces/";                           /* Path to the directory where to store the results. */
   bool pcapTracing = false;                               /* PCAP Tracing is enabled or not. */
   bool enableMobility = false;                            /* Enable mobility. */
-  string arrayConfig = "28";                         /* Phased antenna array configuration. */
-  string qdChannelFolder = "SpatialSharingMobility"; /* The name of the folder containing the QD-Channel files. */
+  string arrayConfig = "28";                              /* Phased antenna array configuration. */
+  string qdChannelFolder = "SpatialSharingMobility";      /* The name of the folder containing the QD-Channel files. */
 
   /* Command line argument parser setup. */
   CommandLine cmd;
@@ -306,7 +299,6 @@ main (int argc, char *argv[])
   cmd.AddValue ("frameCaptureMargin", "Frame capture model margin in dB", frameCaptureMargin);
   cmd.AddValue ("raa", "The rate adaptation algorithm (RAA) used by both DMG STAs and DMG APs", raa);
   cmd.AddValue ("phyMode", "802.11ad PHY Mode", phyMode);
-  cmd.AddValue ("normalizeWeights", "Whether we normalize the antenna weights vector or not", normalizeWeights);
   cmd.AddValue ("enableJitter", "Enable Beacon Interval Jitter to randomize Beacon Interval start time", enableJitter);
   cmd.AddValue ("beaconJitter", "Beacon Jitter value in MicroSeconds", beaconJitter);
   cmd.AddValue ("parallelLinks", "The number of parallel links", parallelLinks);
@@ -314,6 +306,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("simulationTime", "Simulation time in seconds", simulationTime);
   cmd.AddValue ("qdChannelFolder", "The name of the folder containing the QD-Channel files", qdChannelFolder);
+  cmd.AddValue ("directory", "Path to the directory where we store the results", directory);
   cmd.AddValue ("pcap", "Enable PCAP Tracing", pcapTracing);
   cmd.AddValue ("snapshotLength", "The maximum PCAP Snapshot Length", snapshotLength);
   cmd.AddValue ("arrayConfig", "Antenna array configuration", arrayConfig);
@@ -347,7 +340,7 @@ main (int argc, char *argv[])
   /**** Set up Channel ****/
   Ptr<MultiModelSpectrumChannel> spectrumChannel = CreateObject<MultiModelSpectrumChannel> ();
   qdPropagationEngine = CreateObject<QdPropagationEngine> ();
-  qdPropagationEngine->SetAttribute ("QDModelFolder", StringValue ("DmgFiles/QdChannel/" + qdChannelFolder + "/"));
+  qdPropagationEngine->SetAttribute ("QDModelFolder", StringValue ("WigigFiles/QdChannel/" + qdChannelFolder + "/"));
   Ptr<QdPropagationLossModel> lossModelRaytracing = CreateObject<QdPropagationLossModel> (qdPropagationEngine);
   Ptr<QdPropagationDelayModel> propagationDelayRayTracing = CreateObject<QdPropagationDelayModel> (qdPropagationEngine);
   spectrumChannel->AddSpectrumPropagationLossModel (lossModelRaytracing);
@@ -405,13 +398,11 @@ main (int argc, char *argv[])
 
   /* Set Parametric Codebook for all the DMG PCPs/APs */
   CodebookParametricHelper codebookHelper;
-  codebookHelper.SetCodebookParameters ("NormalizeWeights", BooleanValue (normalizeWeights),
-                                        "FileName", StringValue ("DmgFiles/Codebook/CODEBOOK_URA_AP_" + arrayConfig + "x.txt"));
+  codebookHelper.SetCodebookParameters ("FileName", StringValue ("WigigFiles/Codebook/CODEBOOK_URA_AP_" + arrayConfig + "x.txt"));
   codebookHelper.Install (apDevices);
 
   /* Set Parametric Codebook for all the DMG STAs */
-  codebookHelper.SetCodebookParameters ("NormalizeWeights", BooleanValue (normalizeWeights),
-                                        "FileName", StringValue ("DmgFiles/Codebook/CODEBOOK_URA_STA_" + arrayConfig + "x.txt"));
+  codebookHelper.SetCodebookParameters ("FileName", StringValue ("WigigFiles/Codebook/CODEBOOK_URA_STA_" + arrayConfig + "x.txt"));
   codebookHelper.Install (staDevices);
 
   /* Setting mobility model */
@@ -442,27 +433,16 @@ main (int argc, char *argv[])
                                                                                    apInterfaces.GetAddress (i));
     }
 
-  /* MAP MAC Addresses to NodeIDs */
-  NetDeviceContainer devices;
-  Ptr<WifiNetDevice> netDevice;
-  devices.Add (apDevices);
-  devices.Add (staDevices);
-  for (uint32_t i = 0; i < devices.GetN (); i++)
-    {
-      netDevice = StaticCast<WifiNetDevice> (devices.Get (i));
-      map_Mac2ID[netDevice->GetMac ()->GetAddress ()] = netDevice->GetNode ()->GetId ();
-    }
-
   /* Connect DMG PCP/AP and DMG STA Traces */
   Ptr<WifiNetDevice> wifiNetDevice;
   Ptr<DmgApWifiMac> dmgApWifiMac;
   Ptr<DmgStaWifiMac> dmgStaWifiMac;
   Ptr<WifiRemoteStationManager> apRemoteStationManager;
-  uint32_t nodeId;
 
-  /* Get SLS Traces */
+  /** Connect Traces **/
   AsciiTraceHelper ascii;
-  Ptr<OutputStreamWrapper> outputSlsPhase = CreateSlsTraceStream ("slsResults" + arrayConfig);
+  Ptr<SlsBeamformingTraceHelper> slsTracerHelper
+      = Create<SlsBeamformingTraceHelper> (qdPropagationEngine, directory, std::to_string (RngSeedManager::GetRun ()));
 
   /* Get SNR Traces */
   Ptr<OutputStreamWrapper> snrStream = ascii.CreateFileStream ("snrValues.csv");
@@ -473,23 +453,17 @@ main (int argc, char *argv[])
       /* DMG STA Traces */
       wifiNetDevice = StaticCast<WifiNetDevice> (staDevices.Get (i));
       dmgStaWifiMac = StaticCast<DmgStaWifiMac> (wifiNetDevice->GetMac ());
+      slsTracerHelper->ConnectTrace (dmgStaWifiMac);
       dmgStaWifiMac->TraceConnectWithoutContext ("Assoc", MakeBoundCallback (&StationAssoicated, staWifiNodes.Get (i), dmgStaWifiMac));
       dmgStaWifiMac->TraceConnectWithoutContext ("DeAssoc", MakeBoundCallback (&StationDeassoicated, staWifiNodes.Get (i), dmgStaWifiMac));
-      Ptr<SLS_PARAMETERS> parametersSta = Create<SLS_PARAMETERS> ();
-      nodeId = wifiNetDevice->GetNode ()->GetId ();
-      parametersSta->srcNodeID = nodeId;
-      parametersSta->wifiMac = dmgStaWifiMac;
-      dmgStaWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted,  outputSlsPhase, parametersSta));
+      dmgStaWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, dmgStaWifiMac));
 
       /* DMG PCP/AP Traces */
       wifiNetDevice = StaticCast<WifiNetDevice> (apDevices.Get (i));
       dmgApWifiMac = StaticCast<DmgApWifiMac> (wifiNetDevice->GetMac ());
+      slsTracerHelper->ConnectTrace (dmgApWifiMac);
       apRemoteStationManager = wifiNetDevice->GetRemoteStationManager ();
-      Ptr<SLS_PARAMETERS> parametersAp = Create<SLS_PARAMETERS> ();
-      nodeId = wifiNetDevice->GetNode ()->GetId ();
-      parametersAp->srcNodeID = nodeId;
-      parametersAp->wifiMac = dmgStaWifiMac;
-      dmgApWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, outputSlsPhase,  parametersAp));
+      dmgApWifiMac->TraceConnectWithoutContext ("SLSCompleted", MakeBoundCallback (&SLSCompleted, dmgApWifiMac));
       dmgApWifiMac->TraceConnectWithoutContext ("DTIStarted", MakeBoundCallback (&DataTransmissionIntervalStarted,
                                                                                  dmgApWifiMac, dmgStaWifiMac));
       apRemoteStationManager->TraceConnectWithoutContext ("MacRxOK", MakeBoundCallback (&MacRxOk, dmgApWifiMac, snrStream));

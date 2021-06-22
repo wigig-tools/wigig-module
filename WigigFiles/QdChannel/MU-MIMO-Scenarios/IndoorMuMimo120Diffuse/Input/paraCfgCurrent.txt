@@ -1,0 +1,17 @@
+ParameterName	ParameterValue
+environmentFileName	BoxLectureRoom.xml
+indoorSwitch	1
+numberOfTimeDivisions	1
+referencePoint	[0,0,0]
+selectPlanesByDist	inf
+switchDiffuseComponent	1
+diffusePathGainThreshold	-25
+switchQDModel	nistMeasurements
+totalNumberOfReflections	1
+totalTimeDuration	21
+switchSaveVisualizerFiles	1
+carrierFrequency	60e9
+qdFilesFloatPrecision	6
+useOptimizedOutputToFile	1
+outputFormat	both
+materialLibraryPath	material_libraries/materialLibraryLectureRoom.csv

@@ -12,7 +12,7 @@
 
 /**
  * Simulation Objective:
- * This script is used to evaluate allocation of Beamforming Service Periods in IEEE 802.11ad.
+ * This script is used to evaluate the beam refinement protocol (BRP) in IEEE 802.11ad.
  *
  * Network Topology:
  * The scenario consists of 2 DMG STAs (West + East) and one PCP/AP as following:
@@ -23,21 +23,18 @@
  * West DMG STA (-1,0)                      East DMG STA (1,0)
  *
  * Simulation Description:
- * Once all the stations have assoicated successfully with the PCP/AP, the PCP/AP allocates three SPs
- * to perform Beamforming Training (TXSS) as following:
- *
- * SP1: DMG West STA -----> DMG East STA
- * SP2: DMG AP -----> DMG East STA
- * SP3: DMG West STA -----> DMG AP
+ * Once all the stations have assoicated successfully with the PCP/AP, the PCP/AP allocates one SP
+ * to perform Beamforming Training (TXSS) between West DMG STA and East DMG STA. Once the SLS TXSS
+ * is compelted, West DMG STA initiate BRP to refine its beam pattern.
  *
  * Running the Simulation:
  * To run the script with the default parameters:
- * ./waf --run "evaluate_beamforming_sp"
+ * ./waf --run "evaluate_beam_refinement_protocol"
  *
  * Simulation Output:
  * The simulation generates the following traces:
  * 1. PCAP traces for each station. From the PCAP files, we can see the allocation of beamforming service periods.
- * 2. SNR Dump for each sector.
+ * 2. BRP ASCII traces.
  */
 
 NS_LOG_COMPONENT_DEFINE ("BRP_Protocol");
@@ -90,7 +87,6 @@ StationAssoicated (Ptr<DmgStaWifiMac> staWifiMac, Mac48Address address, uint16_t
       uint32_t startTime =0;
       startTime = apWifiMac->AllocateBeamformingServicePeriod (westWifiMac->GetAssociationID (),
                                                                eastWifiMac->GetAssociationID (), startTime, true);
-
     }
 }
 

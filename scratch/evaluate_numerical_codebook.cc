@@ -36,7 +36,6 @@
  * ./waf --run "evaluate_numerical_codebook --x_pos=-1 --y_pos=-1"
  * ./waf --run "evaluate_numerical_codebook --x_pos=0  --y_pos=-1"
  * ./waf --run "evaluate_numerical_codebook --x_pos=1  --y_pos=-1"
- *
  */
 
 NS_LOG_COMPONENT_DEFINE ("NumericalCodebook");
@@ -104,32 +103,20 @@ main (int argc, char *argv[])
   /* Simple propagation delay model */
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
   /* Friis model with standard-specific wavelength */
-  wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (56.16e9));
+  wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel", "Frequency", DoubleValue (60.48e9));
 
   /**** SETUP ALL NODES ****/
   DmgWifiPhyHelper wifiPhy = DmgWifiPhyHelper::Default ();
   /* Nodes will be added to the channel we set up earlier */
   wifiPhy.SetChannel (wifiChannel.Create ());
   /* All nodes transmit at 10 dBm == 10 mW, no adaptation */
-  wifiPhy.Set ("TxPowerStart", DoubleValue (20.0));
-  wifiPhy.Set ("TxPowerEnd", DoubleValue (20.0));
+  wifiPhy.Set ("TxPowerStart", DoubleValue (10.0));
+  wifiPhy.Set ("TxPowerEnd", DoubleValue (10.0));
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Set the correct error model */
-  wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
-                             "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
-  // The value correspond to DMG MCS-0.
-  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
-  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
-  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
-  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
-  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue (phyMode),
-                                                                "DataMode", StringValue (phyMode));
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue (phyMode));
 
   /* Make two nodes and set them up with the phy and the mac */
   NodeContainer wifiNodes;
@@ -151,14 +138,14 @@ main (int argc, char *argv[])
 
   /* Set Numerical Codebook for the AP */
   wifi.SetCodebook ("ns3::CodebookNumerical",
-                    "FileName", StringValue ("codebook_ap.txt"));
+                    "FileName", StringValue ("WigigFiles/Codebook/NUMERICAL_TALONAD7200_AP.txt"));
 
   NetDeviceContainer apDevice;
   apDevice = wifi.Install (wifiPhy, wifiMac, apWifiNode);
 
   /* Set Numerical Codebook for the STA */
   wifi.SetCodebook ("ns3::CodebookNumerical",
-                    "FileName", StringValue ("codebook_sta.txt"));
+                    "FileName", StringValue ("WigigFiles/Codebook/NUMERICAL_TALONAD7200_STA.txt"));
 
   wifiMac.SetType ("ns3::DmgStaWifiMac",
                    "Ssid", SsidValue (ssid),
@@ -209,9 +196,8 @@ main (int argc, char *argv[])
 
   Simulator::Stop (Seconds (simulationTime));
   Simulator::Run ();
-
-  cout << "End Simulation at " << Simulator::Now ().GetSeconds () << endl;
   Simulator::Destroy ();
+  cout << "End Simulation at " << Simulator::Now ().GetSeconds () << endl;
 
   return 0;
 }

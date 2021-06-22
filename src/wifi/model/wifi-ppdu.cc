@@ -617,6 +617,7 @@ WifiPpdu::GetTxVector (void) const
           txVector.SetMode (WifiMode ("DMG_MCS0"));
           txVector.SetTrainngFieldLength (m_dmgCtrlHeader.GetTrainingLength ());
           txVector.SetPacketType (m_dmgCtrlHeader.GetPacketType ());
+          txVector.SetChannelWidth (2160);
           break;
         }
       case WIFI_MOD_CLASS_DMG_SC:
@@ -652,6 +653,7 @@ WifiPpdu::GetTxVector (void) const
           else
             {
               txVector.SetMode (DmgWifiPhy::GetDmgMcs (m_dmgScHeader.GetBaseMcs ()));
+              txVector.SetChannelWidth (2160);
             }
           break;
         }
@@ -688,6 +690,7 @@ WifiPpdu::GetTxVector (void) const
           else
             {
               txVector.SetMode (DmgWifiPhy::GetDmgMcs (m_dmgOfdmHeader.GetBaseMcs ()));
+              txVector.SetChannelWidth (2160);
             }
           break;
         }

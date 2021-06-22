@@ -146,7 +146,7 @@ main (int argc, char *argv[])
                                             StringValue (wifiModePrefix + "_MCS" + std::to_string (mcs)));
               /* Set the correct error model */
               wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
-                                         "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458_ay.txt"));
+                                         "FileName", StringValue ("WigigFiles/ErrorModel/LookupTable_1458_ay.txt"));
 
               /* Make two nodes and set them up with the PHY and the MAC */
               NodeContainer wifiNodes;

@@ -33,8 +33,8 @@
  * To run the script with the default parameters:
  * ./waf --run "evaluate_simple_service_period"
  *
- * To run the script with different duration for the service period e.g. SP1=10ms:
- * ./waf --run "evaluate_service_period_udp --spDuration=10000"
+ * To run the script with different duration for the service period e.g. SP=10ms:
+ * ./waf --run "evaluate_simple_service_period --spDuration=10000"
  *
  * Simulation Output:
  * The simulation generates the following traces:

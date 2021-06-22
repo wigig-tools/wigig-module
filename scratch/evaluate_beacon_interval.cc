@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019 IMDEA Networks Institute
+ * Copyright (c) 2015-2020 IMDEA Networks Institute
  * Author: Hany Assasa <hany.assasa@gmail.com>
  */
 #include "ns3/applications-module.h"
@@ -12,18 +12,18 @@
 
 /**
  * Simulation Objective:
- * This script is used to evaluate various options to control different access periods within the Beacon Interval.
+ * Evaluate various options to control different access periods within the Beacon Interval.
  *
  * Network Topology:
- * Network topology is simple and consists of One Access Point + One Station. Each station has one antenna array with
- * eight virutal sectors to cover 360 in the 2D Domain.
+ * Network topology is simple and consists of One Access Point + One Station. Each station has one antenna
+ * array with eight virutal sectors to cover 360 in the 2D domain.
  *
  *              DMG PCP/AP (0,0)                       DMG STA (-1,0)
  *
  * Running Simulation:
  * To evaluate the script, run the following command:
  * ./waf --run "evaluate_beacon_interval --beaconInterval=102400 --nextBeacon=1 --beaconRandomization=true
- *  --btiDuration=400 --nextAbft=0 --atiPresent=false --simulationTime=10"
+ * --nextAbft=0 --atiPresent=false --simulationTime=10"
  *
  * Simulation Output:
  * The simulation generates the following traces:
@@ -62,7 +62,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("beaconInterval", "The interval between two Target Beacon Transmission Times (TBTTs)", beaconInterval);
   cmd.AddValue ("beaconRandomization", "Whether to change the sequence of DMG Beacons at each BI", beaconRandomization);
   cmd.AddValue ("nextBeacon", "The number of beacon intervals following the current beacon interval during"
-                "which the DMG Beacon is not be present", nextBeacon);
+                              "which the DMG Beacon is not be present", nextBeacon);
   cmd.AddValue ("nextAbft", "The number of beacon intervals during which the A-BFT is not be present", nextAbft);
   cmd.AddValue ("slotsPerABFT", "The number of Sector Sweep Slots Per A-BFT", slotsPerABFT);
   cmd.AddValue ("sswPerSlot", "The number of SSW Frames per Sector Sweep Slot", sswPerSlot);
@@ -100,20 +100,8 @@ main (int argc, char *argv[])
   wifiPhy.Set ("TxPowerLevels", UintegerValue (1));
   /* Set operating channel */
   wifiPhy.Set ("ChannelNumber", UintegerValue (2));
-  /* Set the correct error model */
-  wifiPhy.SetErrorRateModel ("ns3::DmgErrorModel",
-                             "FileName", StringValue ("DmgFiles/ErrorModel/LookupTable_1458.txt"));
-  // The value correspond to DMG MCS-0.
-  // The start of a valid DMG control PHY transmission at a receive level greater than the minimum sensitivity
-  // for control PHY (–78 dBm) shall cause CCA to indicate busy with a probability > 90% within 3 μs.
-  wifiPhy.Set ("EnergyDetectionThreshold", DoubleValue (-78)); //CCA-SD for 802.11 signals.
-  // The start of a valid DMG SC PHY transmission at a receive level greater than the minimum sensitivity for
-  // MCS 1 (–68 dBm) shall cause CCA to indicate busy with a probability > 90% within 1 μs. The receiver shall
-  // hold the carrier sense signal busy for any signal 20 dB above the minimum sensitivity for MCS 1.
-  wifiPhy.Set ("CcaMode1Threshold", DoubleValue (-48)); // CCA-ED for non-802.11 signals.
   /* Set default algorithm for all nodes to be constant rate */
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "ControlMode", StringValue ("DMG_MCS12"),
-                                                                "DataMode", StringValue ("DMG_MCS12"));
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode", StringValue ("DMG_MCS12"));
 
   /* Make two nodes and set them up with the PHY and the MAC */
   NodeContainer wifiNodes;

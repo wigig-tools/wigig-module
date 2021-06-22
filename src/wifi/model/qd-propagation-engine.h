@@ -82,15 +82,6 @@ typedef TraceFiles::iterator TraceFiles_I;                                      
 class DmgWifiSpectrumSignalParameters;
 class NodeContainer;
 
-/**
- * Different options for normalizing antenna weights.
- */
-enum WeightsNormlization {
-  WEIGHTS_NORMALIZE_TX_RX = 0,           //!< For a fair comparison between different types of antenna arrays.
-  WEIGHTS_NORMALIZE_RX_ONLY = 1,         //!< To mimic practical phased antenna array, where noise is also amplified for each antenna element.
-  WEIGHTS_NORMALIZATION_DISABLED = 2,    //!< The current operation mode.
-};
-
 class QdPropagationEngine : public Object
 {
 public:
@@ -211,13 +202,6 @@ private:
    */
   void EulerTransform (Orientation orientation, float2DVector_t& rotMatrix) const;
   /**
-   * Quaternion Transformtion from the reference axis to the desired axis.
-   * \param givenAxis The reference axis in terms of global coordinate system.
-   * \param desiredAxis The target axis in terms of global coordinate system.
-   * \param rotMatrix Rotation matrix corresponding to the quaternion transformation.
-   */
-  void QuaternionTransform (double givenAxis[3], double desiredAxis[3], float2DVector_t& rotMatrix) const;
-  /**
    * Transform angles using the rotation vector obtained from the quaternion transformation.
    * \param elevation The elevation angle in radians.
    * \param azimuth The azimuth angle in radians.
@@ -259,7 +243,6 @@ private:
 
   std::map<uint32_t, uint32_t> nodeId2QdId; //!< Structure to map node ID to Q-D Channel ID.
   bool m_useCustomIDs;                      //!< Flag to indicate whether we use custom list to map ns-3 nodes IDs to Q-D Software IDs.
-  bool m_eulerTransform;                    //!< Flag to indicate whether we Euler angles for rotation or we use Quaternion.
 
 };
 

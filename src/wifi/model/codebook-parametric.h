@@ -29,16 +29,23 @@ typedef ArrayPatternMap::const_iterator ArrayPatternMapCI;    //!< Typedef for a
 struct ParametricPatternConfig;
 
 /**
+ * Calculate the normalization factor associated with the antennas weights vector.
+ * \param weightsVector The antennas weights vector to be normalized.
+ * \return The normalization factor assoicated with the antennas weights vector.
+ */
+float CalculateNormalizationFactor (WeightsVector &weightsVector);
+
+/**
  * Parametric phased antenna array configuration.
  */
 struct ParametricAntennaConfig : public PhasedAntennaArrayConfig {
 public:
   /**
    * Calculate phased antenna array complex pattern.
-   * \param weightsVector The weights of the antenna elements.
+   * \param weightsVector The complex weights of the antenna elements.
    * \param arrayPattern Pointer to the complex matrix of antenna array pattern.
    */
-  void CalculateArrayPattern (WeightsVector &weights, ArrayPattern &arrayPattern);
+  void CalculateArrayPattern (WeightsVector weights, ArrayPattern &arrayPattern);
   /**
    * Get the quasi-omni antenna array pattern associated with this array.
    * \param azimuthAngle
@@ -87,6 +94,21 @@ private:
 struct ParametricPatternConfig : virtual public PatternConfig {
 public:
   /**
+   * Set the weights that define the array pattern of the phased antenna array.
+   * \param weights Vector of complex weights values.
+   */
+  void SetWeights (WeightsVector weights);
+  /**
+   * Get the weights that define the array pattern of the phased antenna array.
+   * \return Vector of complex weights values.
+   */
+  WeightsVector GetWeights (void) const;
+  /**
+   * Get the normalization value based on the current antenna weights vector.
+   * \return The normalization value based on the current antenna weights vector.
+   */
+  float GetNormalizationFactor (void) const;
+  /**
    * Get the array pattern associated with this sector/awv.
    * \return The array pattern of the antenna array.
    */
@@ -105,16 +127,16 @@ public:
    */
   void CalculateArrayPattern (Ptr<ParametricAntennaConfig> antennaConfig, uint16_t azimuthAngle, uint16_t elevationAngle);
 
-public:
-  WeightsVector weights;                        //!< Weights that define the directivity of the phased antenna array.
-  float normalizationFactor;                    //!< Normalization factor based on the current weights.
-
 protected:
   friend class CodebookParametric;
   friend class ParametricAntennaConfig;
 
   ArrayPattern arrayPattern;                    //<! The complex phased antenna array pattern after applying the weights vector.
   ArrayPatternMap arrayPatternMap;              //<! The complex values of the phased antenna array pattern.
+
+private:
+  WeightsVector m_weights;                      //!< Weights that define the directivity of the phased antenna array.
+  float m_normalizationFactor;                  //!< Normalization factor based on the current weights.
 
 };
 
@@ -312,7 +334,7 @@ private:
    * Print antenna weights vector or beamforming vector.
    * \param weightsVector The list of antenna weights to be printed.
    */
-  void PrintWeights (WeightsVector &weightsVector);
+  void PrintWeights (WeightsVector weightsVector);
   /**
    * Set Codebook File Name.
    * \param fileName The name of the codebook file to load.
@@ -330,15 +352,8 @@ private:
    * \param weightsVector The antennas weights vector to be normalized.
    */
   inline void NormalizeWeights (WeightsVector &weightsVector);
-  /**
-   * Calculate the normalization factor associated with the antennas weights vector.
-   * \param weightsVector The antennas weights vector to be normalized.
-   * \return The normalization factor assoicated with the antennas weights vector.
-   */
-  float CalculateNormalizationFactor (WeightsVector &weightsVector);
 
 private:
-  bool m_normalizeWeights;        //!< Flag to indicate if we normalize the antennas weights vector or not.
   bool m_precalculatedPatterns;   //!< Flag to indicate whether we have precalculated the array pattern.
   bool m_cloned;                  //!< Flag to indicate if we have cloned this codebook.
   bool m_mimoCodebook;            //!< Flag to indicate if we have MIMO codebook or typical legacy codebook.

@@ -21,6 +21,7 @@
 #include "msdu-aggregator.h"
 #include "wifi-mac-queue.h"
 #include "wifi-utils.h"
+#include "bft-id-tag.h"
 
 #include <algorithm>
 #include <queue>
@@ -97,6 +98,10 @@ DmgWifiMac::GetTypeId (void)
                     BooleanValue (true),
                     MakeBooleanAccessor (&DmgWifiMac::m_useRxSectors),
                     MakeBooleanChecker ())
+    .AddAttribute ("InformationUpdateTimeout", "The interval between two consecutive information update attempts.",
+                    TimeValue (MilliSeconds (10)),
+                    MakeTimeAccessor (&DmgWifiMac::m_informationUpdateTimeout),
+                    MakeTimeChecker ())
 
     /* Link Maintenance Attributes */
     .AddAttribute ("BeamLinkMaintenanceUnit", "The unit used for dot11BeamLinkMaintenanceTime calculation.",
@@ -172,12 +177,13 @@ DmgWifiMac::GetTypeId (void)
                      "ns3::DmgWifiMac::SuMimoMimoCandidatesSelectedTracedCallback")
     .AddTraceSource ("SuMimoMimoPhaseMeasurements",
                      "Trace the SU-MIMO MIMO phase measurements.",
-                      MakeTraceSourceAccessor (&DmgWifiMac::m_suMimoMimoPhaseMeasurements),
-                      "ns3::DmgWifiMac::SuMimoMimoPhaseMeasurementsTracedCallback")
+                     MakeTraceSourceAccessor (&DmgWifiMac::m_suMimoMimoPhaseMeasurements),
+                     "ns3::DmgWifiMac::SuMimoMimoPhaseMeasurementsTracedCallback")
     .AddTraceSource ("SuMimoMimoPhaseCompleted",
                      "SU-MIMO MIMO phase beamforming training is completed.",
                      MakeTraceSourceAccessor (&DmgWifiMac::m_suMimoMimoPhaseComplete),
                      "ns3::DmgWifiMac::SuMimoMimoPhaseCompletedTracedCallback")
+
     /* EDMG MU-MIMO Beamforming Training Related Traces */
     .AddTraceSource ("MU_MIMO_StateMachine",
                      "Trace the current state of the MU-MIMO beamforming training state machine.",
@@ -195,6 +201,14 @@ DmgWifiMac::GetTypeId (void)
                      "Candidates for MIMO phase of MU MIMO BFT have been selected",
                      MakeTraceSourceAccessor (&DmgWifiMac::m_muMimomMimoCandidatesSelected),
                      "ns3::DmgWifiMac::MuMimoMimoCandidatesSelectedTracedCallback")
+    .AddTraceSource ("MuMimoMimoPhaseMeasurements",
+                     "Trace the MU-MIMO MIMO phase measurements.",
+                     MakeTraceSourceAccessor (&DmgWifiMac::m_muMimoMimoPhaseMeasurements),
+                     "ns3::DmgWifiMac::MuMimoMimoPhaseMeasurementsTracedCallback")
+    .AddTraceSource ("MuMimoOptimalConfiguration",
+                     "The optimal MU-MIMO Configuration chosen at the end of the MU-MIMO BFT.",
+                     MakeTraceSourceAccessor (&DmgWifiMac::m_muMimoOptimalConfig),
+                     "ns3::DmgWifiMac::MuMimoOptimalConfigurationTracedCallback")
     .AddTraceSource ("MuMimoMimoPhaseCompleted",
                      "MU-MIMO MIMO phase beamforming training is completed.",
                      MakeTraceSourceAccessor (&DmgWifiMac::m_muMimoMimoPhaseComplete),
@@ -218,7 +232,8 @@ DmgWifiMac::DmgWifiMac ()
     m_muMimoBeamformingTraining (false),
     m_isMuMimoInitiator (false),
     m_muMimoFbckTimeout (),
-    m_beamLinkMaintenanceTimeout ()
+    m_beamLinkMaintenanceTimeout (),
+    m_informationUpdateEvent ()
 
 {
   NS_LOG_FUNCTION (this);
@@ -975,6 +990,19 @@ DmgWifiMac::StartBeamformingInitiatorPhase (void)
                                                    m_codebook->GetTotalNumberOfTransmitSectors ());
       NS_LOG_DEBUG ("Initiator: Schedulled RSS Event at " << Simulator::Now () + rssTime);
       m_rssEvent = Simulator::Schedule (rssTime, &DmgWifiMac::StartBeamformingResponderPhase, this, m_peerStationAddress);
+      //// NINA ////
+      /* Set the BFT ID of the current BFT - if this is the first BFT with the peer STA, initialize it to 0, otherwise increase it by 1 to signal a new BFT */
+      BFT_ID_MAP::iterator it = m_bftIdMap.find (m_peerStationAddress);
+      if (it != m_bftIdMap.end ())
+        {
+          uint16_t bftId = it->second + 1;
+          m_bftIdMap [m_peerStationAddress] = bftId;
+        }
+      else
+        {
+          m_bftIdMap [m_peerStationAddress] = 0;
+        }
+      //// NINA ////
       if (m_isInitiatorTXSS)
         {
           m_slsInitiatorStateMachine = SLS_INITIATOR_SECTOR_SELECTOR;
@@ -1174,6 +1202,12 @@ DmgWifiMac::SendInitiatorTransmitSectorSweepFrame (Mac48Address address)
   sswFrame.SetSswFeedbackField (sswFeedback);
   packet->AddHeader (sswFrame);
 
+  //// NINA ////
+  BftIdTag tag;
+  tag.Set (m_bftIdMap[address]);
+  packet->AddPacketTag (tag);
+  //// NINA ////
+
   NS_LOG_INFO ("Sending SSW Frame " << Simulator::Now () << " with AntennaID=" <<
                static_cast<uint16_t> (ssw.GetDMGAntennaID ()) << ", SectorID=" << static_cast<uint16_t> (ssw.GetSectorID ()));
 
@@ -1214,6 +1248,12 @@ DmgWifiMac::SendRespodnerTransmitSectorSweepFrame (Mac48Address address)
   sswFrame.SetSswField (ssw);
   sswFrame.SetSswFeedbackField (sswFeedback);
   packet->AddHeader (sswFrame);
+
+  //// NINA ////
+  BftIdTag tag;
+  tag.Set (m_bftIdMap[address]);
+  packet->AddPacketTag (tag);
+  //// NINA ////
 
   NS_LOG_INFO ("Sending SSW Frame " << Simulator::Now () << " with AntennaID=" <<
                static_cast<uint16_t> (ssw.GetDMGAntennaID ()) << ", SectorID=" << static_cast<uint16_t> (ssw.GetSectorID ()));
@@ -1310,6 +1350,10 @@ DmgWifiMac::ReceiveShortSswFrame (Ptr<Packet> packet, double rxSnr)
               m_muMimoSisoSnrMap.clear ();
               m_mimoSisoSnrList.clear ();
               uint8_t numberOfAntenans = 8;
+              /* Save the BFT ID of the current BFT. */
+              BftIdTag tag;
+              packet->RemovePacketTag (tag);
+              m_muMimoBftIdMap [m_edmgMuGroup.groupID] = tag.Get ();
               // If we have the capabilities of the intitiator get the number of Rx antennas to estimate the duration of the initiator txss - otherwise assume 8 antennas - the max.
               AID_MAP::iterator it = m_aidMap.find (shortSsw.GetSourceAID ());
               if (it != m_aidMap.end ())
@@ -1320,7 +1364,6 @@ DmgWifiMac::ReceiveShortSswFrame (Ptr<Packet> packet, double rxSnr)
                       numberOfAntenans = peerCapabilities->GetNumberOfRxDmgAntennas ();
                     }
                 }
-
               Time initiatorTxssRemainderDuration = CalculateShortSectorSweepDuration (numberOfAntenans, shortSsw.GetCDOWN ());
               Time sisoFeebackDuration = shortSsw.GetSisoFbckDuration ();
               /* Schedule a timer for the end of the SISO phase - if we do not receive a BRP poll frame asking for feedback assume that MU-MIMO BFT failed */
@@ -1426,6 +1469,12 @@ DmgWifiMac::SendReceiveSectorSweepFrame (Mac48Address address, uint16_t count, B
   sswFrame.SetSswField (ssw);
   sswFrame.SetSswFeedbackField (sswFeedback);
   packet->AddHeader (sswFrame);
+
+  //// NINA ////
+  BftIdTag tag;
+  tag.Set (m_bftIdMap[address]);
+  packet->AddPacketTag (tag);
+  //// NINA ////
 
   NS_LOG_INFO ("Sending SSW Frame " << Simulator::Now ()
                << " with AntennaID=" << static_cast<uint16_t> (m_codebook->GetActiveAntennaID ())
@@ -1636,7 +1685,7 @@ DmgWifiMac::PrintSnrTable (void)
       SNR_PAIR snrPair = it->second;
       std::cout << "Peer DMG STA: " << it->first << std::endl;
       std::cout << "***********************************************" << std::endl;
-      std::cout << "Tansmit Sector Sweep (TXSS) SNRs: " << std::endl;
+      std::cout << "Transmit Sector Sweep (TXSS) SNRs: " << std::endl;
       std::cout << "***********************************************" << std::endl;
       PrintSnrConfiguration (snrPair.first);
       std::cout << "***********************************************" << std::endl;
@@ -1784,6 +1833,16 @@ DmgWifiMac::SendInformationResponse (Mac48Address to, ExtInformationResponse &re
   packet->AddHeader (responseHdr);
   packet->AddHeader (actionHdr);
 
+  //// NINA ////
+  /* In case we're sending an unsolicited Information Response as part of Group BFT, send a tag with the BFT ID */
+  BFT_ID_MAP::iterator it = m_bftIdMap.find (to);
+  if (it != m_bftIdMap.end ())
+    {
+      BftIdTag tag;
+      tag.Set (m_bftIdMap[to]);
+      packet->AddPacketTag (tag);
+    }
+  //// NINA ////
   m_txop->Queue (packet, hdr);
 }
 
@@ -1847,6 +1906,12 @@ DmgWifiMac::SendUnsolicitedTrainingResponse (Mac48Address receiver)
   responseHdr.SetChannelMeasurementElement (channelElement);
   responseHdr.SetEdmgChannelMeasurementElement (edmgChannelElement);
 
+  if (m_informationUpdateEvent.IsRunning ())
+    {
+      m_informationUpdateEvent.Cancel ();
+    }
+  m_informationUpdateEvent = Simulator::Schedule (m_informationUpdateTimeout,
+                                             &DmgWifiMac::SendUnsolicitedTrainingResponse, this, receiver);
   SendInformationResponse (receiver, responseHdr);
 }
 
@@ -2253,6 +2318,11 @@ DmgWifiMac::SendMimoBrpFrame (Mac48Address receiver, BRP_Request_Field &requestF
   packet->AddHeader (brpFrame);
   packet->AddHeader (actionHdr);
 
+  //// NINA ////
+  BftIdTag tag;
+  tag.Set (m_bftIdMap[receiver]);
+  packet->AddPacketTag (tag);
+  //// NINA ////
 
   /* Set the best sector for transmission with this station */
   /* MIMO BRP packets are send with spatial expansion and mapping a single stream across all transmit chains */
@@ -2622,6 +2692,11 @@ DmgWifiMac::StartSuMimoBeamforming (Mac48Address responder, bool isBrpTxssNeeded
       AWV_CONFIGURATION pattern = std::make_pair (config, NO_AWV_ID);
       m_mimoConfigTraining.push_back (pattern);
     }
+  // Update the BFT id between the peer stations
+  BFT_ID_MAP::iterator it1 = m_bftIdMap.find (responder);
+  uint16_t bftId = it1->second + 1;
+  m_bftIdMap [m_peerStationAddress] = bftId;
+
   if (isBrpTxssNeeded)
     StartMimoBrpTxssSetup (responder, antennaIds);
   else
@@ -2738,7 +2813,7 @@ DmgWifiMac::EndMimoTrnField (void)
     {
       if ((m_suMimoBfPhase == SU_SISO_INITIATOR_TXSS) || (m_suMimoBfPhase == SU_SISO_RESPONDER_TXSS))
         {
-          m_suMimoSisoPhaseMeasurements (m_peerStation, m_suMimoSisoSnrMap, m_edmgTrnN);
+          m_suMimoSisoPhaseMeasurements (m_peerStation, m_suMimoSisoSnrMap, m_edmgTrnN, m_bftIdMap [m_peerStation]);
           Simulator::Schedule (m_mbifs, &DmgWifiMac::SendSuMimoTxssFeedback, this);
           if (m_isBrpResponder[m_peerStation])
             m_suMimoBfPhase = SU_SISO_RESPONDER_FBCK;
@@ -2851,7 +2926,8 @@ DmgWifiMac::SendSuMimoTxssFeedback (void)
 }
 
 void
-DmgWifiMac::StartSuMimoMimoPhase (Mac48Address from, MIMO_ANTENNA_COMBINATIONS_LIST candidates, uint8_t txCombinationsRequested, bool useAwvs)
+DmgWifiMac::StartSuMimoMimoPhase (Mac48Address from, MIMO_ANTENNA_COMBINATIONS_LIST candidates,
+                                  uint8_t txCombinationsRequested, bool useAwvs)
 {
   NS_LOG_FUNCTION (this << from << uint16_t (txCombinationsRequested) << useAwvs);
   m_peerStation = from;
@@ -2902,7 +2978,7 @@ DmgWifiMac::StartSuMimoMimoPhase (Mac48Address from, MIMO_ANTENNA_COMBINATIONS_L
           rxCandidateSectors[antenna] = rxSectors;
         }
     }
-  m_suMimomMimoCandidatesSelected (from, candidateSectors, rxCandidateSectors);
+  m_suMimomMimoCandidatesSelected (from, candidateSectors, rxCandidateSectors, m_bftIdMap [from]);
   double numberOfSubfields = m_codebook->GetSMBT_Subfields (from, candidateAntennas, candidateSectors, rxCandidateSectors);
   m_rxCombinationsTested = numberOfSubfields;
   if (numberOfSubfields > 16)
@@ -3503,7 +3579,16 @@ DmgWifiMac::FindBestTxCombinations (uint8_t nBestCombinations, uint16_t rxCombin
           minSnr.push (std::make_pair (maxMinSnr, measurementAwvId));
         }
     }
-  m_suMimoMimoPhaseMeasurements (m_peerStation, measurements, minSnr, differentRxCombinations, nTxAntennas, nRxAntennas, rxCombinationsTested);
+  if (m_suMimoBeamformingTraining)
+    {
+      m_suMimoMimoPhaseMeasurements (MimoPhaseMeasurementsAttributes (m_peerStation, measurements, minSnr, differentRxCombinations,
+                                     nTxAntennas, nRxAntennas, rxCombinationsTested, m_bftIdMap[m_peerStation]));
+    }
+  else
+    {
+      m_muMimoMimoPhaseMeasurements (MimoPhaseMeasurementsAttributes (m_peerStation, measurements, minSnr, differentRxCombinations,
+                                     nTxAntennas, nRxAntennas, rxCombinationsTested, m_muMimoBftIdMap [m_edmgMuGroup.groupID]), m_edmgMuGroup.groupID);
+    }
   /* Find the top combinations according to the maximum minimum SINR */
   while (bestCombinations.size () != nBestCombinations && !minSnr.empty ())
     {
@@ -3680,7 +3765,17 @@ DmgWifiMac::StartMuMimoBeamforming (bool isInitiatorTxssNeeded, uint8_t edmgGrou
   m_low->MIMO_BFT_Phase_Started ();
   m_muMimoBeamformingTraining = true;
   m_isMuMimoInitiator = true;
-
+  /* Set the BFT id for the MU group - set it to 0 if it´s the first training or increase it by 1 otherwise. */
+  MU_MIMO_BFT_ID_MAP::iterator it = m_muMimoBftIdMap.find (edmgGroupId);
+  if (it != m_muMimoBftIdMap.end ())
+    {
+      uint16_t bftId = it->second + 1;
+      m_muMimoBftIdMap [edmgGroupId] = bftId;
+    }
+  else
+    {
+      m_muMimoBftIdMap [edmgGroupId] = 0;
+    }
   if (isInitiatorTxssNeeded)
     StartMuMimoInitiatorTXSS ();
   else
@@ -3721,6 +3816,11 @@ DmgWifiMac::SendMuMimoInitiatorTxssFrame (void)
 
   Ptr<Packet> packet = Create<Packet> ();
   packet->AddHeader (shortSsw);
+
+  /* Add the BFT ID tag for the MU group */
+  BftIdTag tag;
+  tag.Set (m_muMimoBftIdMap [m_edmgMuGroup.groupID]);
+  packet->AddPacketTag (tag);
 
   NS_LOG_INFO ("Sending short SSW Frame " << Simulator::Now () << " with AntennaID="
                << static_cast<uint16_t> (m_codebook->GetActiveAntennaID ())
@@ -3769,7 +3869,7 @@ void
 DmgWifiMac::SendBrpFbckFrame (Mac48Address station, bool useAwvsinMimoPhase)
 {
   NS_LOG_FUNCTION (this << station << useAwvsinMimoPhase);
-  m_muMimoSisoPhaseMeasurements (station, m_muMimoSisoSnrMap );
+  m_muMimoSisoPhaseMeasurements (station, m_muMimoSisoSnrMap, m_edmgMuGroup.groupID, m_muMimoBftIdMap [m_edmgMuGroup.groupID]);
   BeamRefinementElement element;
   element.SetBfTrainingType (MU_MIMO_BF);
   element.SetSnrPresent (true);
@@ -3950,7 +4050,7 @@ DmgWifiMac::StartMuMimoMimoPhase (MIMO_ANTENNA_COMBINATIONS_LIST candidates, boo
             }
         }
     }
-  m_muMimomMimoCandidatesSelected (m_edmgMuGroup.groupID, candidateSectors);
+  m_muMimomMimoCandidatesSelected (m_edmgMuGroup.groupID, candidateSectors, m_muMimoBftIdMap [m_edmgMuGroup.groupID]);
   /* Create a MIMO configuration to be used when transmitting the packet to multiple stations using spatial expansion. For now we assume that
    * the number of stations being trained is equal to the number of antennas being trained and we steer each antenna toward the optimal sector for
    * one station from the group. Note that if we want to train more stations than antennas this will not work. Also, we assume that the given sector is
@@ -4204,6 +4304,7 @@ void
 DmgWifiMac::SendMuMimoBfFeedbackFrame (Mac48Address station)
 {
   NS_LOG_FUNCTION (this << station);
+  m_peerStation = station;
   ExtMimoBfFeedbackFrame feedbackFrame;
   MIMOFeedbackControl feedbackElement;
   feedbackElement.SetMimoBeamformingType (MU_MIMO_BEAMFORMING);
@@ -4360,6 +4461,7 @@ DmgWifiMac::StartMuMimoSelectionSubphase (void)
   uint16_t txId = std::get<2> (optimalConfigs.at (0));
   /* Find and save the optimal MIMO Tx Configuration for future use */
   MIMO_AWV_CONFIGURATION txCombination = m_codebook->GetMimoConfigFromTxAwvId (txId, GetAddress ());
+  m_muMimoOptimalConfig (txCombination, m_edmgMuGroup.groupID, m_muMimoBftIdMap [m_edmgMuGroup.groupID]);
   BEST_ANTENNA_MU_MIMO_COMBINATIONS::iterator it1 = m_muMimoTxCombinations.find (m_edmgMuGroup.groupID);
   if (it1 != m_muMimoTxCombinations.end ())
     {
@@ -4465,9 +4567,9 @@ DmgWifiMac::RegisterMuMimoSisoFbckPolled (Mac48Address from)
 }
 
 void
-DmgWifiMac::RegisterMuMimoSisoPhaseComplete (MIMO_FEEDBACK_MAP muMimoFbckMap, uint8_t nRFChains, uint8_t nStas)
+DmgWifiMac::RegisterMuMimoSisoPhaseComplete (MIMO_FEEDBACK_MAP muMimoFbckMap, uint8_t nRFChains, uint8_t nStas, uint8_t muGroup, uint16_t bftID)
 {
-  m_muMimoSisoPhaseComplete (muMimoFbckMap, nRFChains, nStas);
+  m_muMimoSisoPhaseComplete (muMimoFbckMap, nRFChains, nStas, muGroup, bftID);
 }
 //// NINA ////
 
@@ -5200,7 +5302,8 @@ DmgWifiMac::FrameTxOkMuMimoBFT (const WifiMacHeader &hdr)
       else
         {
           m_muMimoFbckTimeout = Simulator::Schedule (feedbackDuration, &DmgWifiMac::RegisterMuMimoSisoPhaseComplete, this,
-                                                     m_muMimoFeedbackMap, m_codebook->GetTotalNumberOfRFChains (), m_edmgMuGroup.aidList.size ());
+                                                     m_muMimoFeedbackMap, m_codebook->GetTotalNumberOfRFChains (), m_edmgMuGroup.aidList.size (),
+                                                     m_edmgMuGroup.groupID, m_muMimoBftIdMap [m_edmgMuGroup.groupID]);
         }
     }
   else if ((m_muMimoBfPhase == MU_MIMO_BF_SETUP) && m_isMuMimoInitiator)
@@ -5353,6 +5456,12 @@ DmgWifiMac::ReceiveSectorSweepFrame (Ptr<Packet> packet, const WifiMacHeader *hd
       NS_LOG_INFO ("Received SSW frame different DMG STA=" << hdr->GetAddr2 ());
       return;
     }
+
+  //// NINA ////
+  BftIdTag tag;
+  packet->RemovePacketTag (tag);
+  m_bftIdMap [hdr->GetAddr2 ()] = tag.Get ();
+  //// NINA ////
 
   DMG_SSW_Field ssw = sswFrame.GetSswField ();
   DMG_SSW_FBCK_Field sswFeedback = sswFrame.GetSswFeedbackField ();
@@ -5511,7 +5620,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
 
       /* Raise a callback indicating we've completed the SLS phase */
       m_slsCompleted (SlsCompletionAttrbitutes (from, CHANNEL_ACCESS_DTI, BeamformingInitiator,
-                                                m_isInitiatorTXSS, m_isResponderTXSS,
+                                                m_isInitiatorTXSS, m_isResponderTXSS, m_bftIdMap [from],
                                                 antennaConfigTx.first, antennaConfigTx.second, m_maxSnr));
 
       /* Inform DMG SLS TXOP that we've received the SSW-ACK frame */
@@ -5645,6 +5754,11 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                         edmgReplyRequestElement.SetTXSS_Packets (m_txssPackets);
                         edmgReplyRequestElement.SetTXSS_Repeat (m_txssRepeat);
                         NS_LOG_LOGIC ("MIMO BRP TXSS Setup Subphase is being terminated by Responder=" << GetAddress ());
+
+                        // Update the BFT ID according to the initiator.
+                        BftIdTag tag;
+                        packet->RemovePacketTag (tag);
+                        m_bftIdMap [from] = tag.Get ();
 
                         /* Send BRP Frame terminating the setup phase from the responder side */
                         Simulator::Schedule (m_mbifs, &DmgWifiMac::SendEmptyMimoBrpFrame, this, from,
@@ -5788,7 +5902,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                               {
                                 /* Otherwise the SISO phase of MU MIMO BFT is complete */
                                 m_muMimoSisoPhaseComplete (m_muMimoFeedbackMap, m_codebook->GetTotalNumberOfRFChains (),
-                                                           m_edmgMuGroup.aidList.size ());
+                                                           m_edmgMuGroup.aidList.size (), m_edmgMuGroup.groupID, m_muMimoBftIdMap [m_edmgMuGroup.groupID]);
                               }
                           }
                       }
@@ -5798,7 +5912,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                         m_suMimoBfPhase = SU_MIMO_SETUP_PHASE;
                         //Inform the user that SISO phase has completed - he chooses the algorithm to select the candidate and starts the MIMO phase
                         m_suMimoSisoPhaseComplete (from, m_suMimoFeedbackMap, m_codebook->GetCurrentMimoAntennaIdList ().size (),
-                                                   m_peerAntennaIds.size ());
+                                                   m_peerAntennaIds.size (), m_bftIdMap [from]);
                       }
                     /* We have received a BRP transaction frame */
                     else if (m_isMimoBrpSetupCompleted[from] || (m_muMimoBeamformingTraining && m_recordTrnSnrValues))
@@ -5964,7 +6078,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                       {
                         m_suMimoBfPhase = SU_MIMO_SETUP_PHASE;
                         m_suMimoSisoPhaseComplete (from, m_suMimoFeedbackMap, m_codebook->GetCurrentMimoAntennaIdList ().size (),
-                                                   m_peerAntennaIds.size ());
+                                                   m_peerAntennaIds.size (), m_bftIdMap [from]);
                         m_recordTrnSnrValues = true;
                       }
                     // If we are the initiator start the MIMO BF training Subphase
@@ -6182,6 +6296,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                       }
                     /* Find the MIMO RX combination associated with the Rx Indices and save them for future MIMO transmissions. */
                     MIMO_AWV_CONFIGURATION rxCombination = m_codebook->GetMimoConfigFromRxAwvId (rxAwvIds, from);
+                    m_muMimoOptimalConfig (rxCombination, element.GetEDMGGroupID (), m_muMimoBftIdMap [element.GetEDMGGroupID ()]);
                     BEST_ANTENNA_MU_MIMO_COMBINATIONS::iterator it1 = m_muMimoRxCombinations.find (element.GetEDMGGroupID ());
                     if (it1 != m_muMimoRxCombinations.end ())
                       {

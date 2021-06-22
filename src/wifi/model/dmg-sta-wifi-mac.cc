@@ -166,6 +166,9 @@ DmgStaWifiMac::GetTypeId (void)
     .AddTraceSource ("TransmissionLinkChanged", "The current transmission link has been changed.",
                      MakeTraceSourceAccessor (&DmgStaWifiMac::m_transmissionLinkChanged),
                      "ns3::DmgStaWifiMac::TransmissionLinkChangedTracedCallback")
+    .AddTraceSource ("GroupUpdateFailed", "The transmission od an update for the best sector for the AP failed.",
+                     MakeTraceSourceAccessor (&DmgStaWifiMac::m_updateFailed),
+                     "ns3::DmgStaWifiMac::UpdateFailedTracedCallback")
   ;
   return tid;
 }
@@ -225,6 +228,8 @@ DmgStaWifiMac::DoInitialize (void)
 
   /* EDMG variables */
   m_groupTraining = false;
+  m_groupBeamformingFailed = false;
+  m_groupTrainingPerformed = false;
 
   /* Initialize upper DMG Wifi MAC */
   DmgWifiMac::DoInitialize ();
@@ -895,6 +900,10 @@ DmgStaWifiMac::EndBeaconInterval (void)
       /* If there is wait until the current reception is finished before switching the antenna configuration */
       Simulator::Schedule(endRx, &Codebook::SetCommunicationMode , m_codebook, SISO_MODE);
     }
+  if (m_informationUpdateEvent.IsRunning ())
+    {
+      m_informationUpdateEvent.Cancel ();
+    }
   StartBeaconInterval ();
 }
 
@@ -1144,12 +1153,10 @@ DmgStaWifiMac::RegisterBeaconSnr (AntennaID antennaId, SectorID sectorId, AWV_ID
   NS_LOG_FUNCTION (this << uint16_t (subfieldsRemaining) << uint16_t (trnUnitsRemaining) << snr);
   if (m_groupTraining && m_accessPeriod == CHANNEL_ACCESS_BTI)
     {
-      NS_LOG_DEBUG ("Rx Config: " <<  uint16_t (antennaId) << " " <<  uint16_t (sectorId) << " "  <<
-          uint16_t (awvId));
+      NS_LOG_DEBUG ("Rx Config: " <<  uint16_t (antennaId) << " " <<  uint16_t (sectorId) << " "  << uint16_t (awvId));
       NS_LOG_DEBUG ("Tx Config: " << uint16_t (m_currentTxConfig.first.first) << " " << uint16_t (m_currentTxConfig.first.second));
 
-     AWV_CONFIGURATION_RX currentRxConfig = std::make_pair (std::make_pair (antennaId, sectorId),
-                                                        awvId);
+     AWV_CONFIGURATION_RX currentRxConfig = std::make_pair (std::make_pair (antennaId, sectorId), awvId);
      AWV_CONFIGURATION_TX_RX currentConfig = std::make_pair (m_currentTxConfig, currentRxConfig);
      STATION_SNR_AWV_MAP_I it = m_apSnrAwvMap.find (apAddress);
      if (it != m_apSnrAwvMap.end ())
@@ -1176,19 +1183,28 @@ DmgStaWifiMac::StartGroupBeamformingTraining (void)
   /* Save the transmit antenna config to feedback to the AP */
   AWV_CONFIGURATION_TX txConfig = config.first;
   AWV_CONFIGURATION_RX rxConfig = config.second;
-  m_feedbackAntennaConfig = txConfig.first;
   /* update the SNR table (m_stationSnrMap) with the newest SNR values (for the best receive config) */
   UpdateSnrTable (m_peerStation);
   /* Check if there has been a change in the best transit config detected for the AP */
-  ANTENNA_CONFIGURATION_COMBINATION newConfig = std::make_tuple(rxConfig.first.first, txConfig.first.first, txConfig.first.second);
-  bool updateConfig = DetectChangeInConfiguration (newConfig);
-  //updateConfig = true;
+  bool updateConfig = (m_feedbackAntennaConfig != txConfig.first);
   NS_LOG_DEBUG ("Best Rx Config: " << uint16_t (rxConfig.first.first) << " " << uint16_t (rxConfig.first.second) << " " << uint16_t (rxConfig.second));
-  NS_LOG_DEBUG ("Best Tx Config: " << uint16_t (m_feedbackAntennaConfig.first) << " " << uint16_t (m_feedbackAntennaConfig.second));
+  NS_LOG_DEBUG ("Best Tx Config: " << uint16_t (txConfig.first.first) << " " << uint16_t (txConfig.first.second));
   /* Update the best antenna config (Rx/Tx and RX) and if a change in config has been detected send an Unsolicited
    * Information Response frame to the AP to inform them of the change */
-  m_groupBeamformingCompleted (m_peerStation, m_feedbackAntennaConfig.first, m_feedbackAntennaConfig.second,
-                               rxConfig.first.first, rxConfig.first.second, rxConfig.second, maxSnr);
+  m_feedbackAntennaConfig = txConfig.first;
+  /* Set the BFT ID of the current BFT - if this is the first BFT with the peer STA, initialize it to 0, otherwise increase it by 1 to signal a new BFT */
+  BFT_ID_MAP::iterator it = m_bftIdMap.find (m_peerStation);
+  if (it != m_bftIdMap.end ())
+    {
+      uint16_t bftId = it->second + 1;
+      m_bftIdMap [m_peerStation] = bftId;
+    }
+  else
+    {
+      m_bftIdMap [m_peerStation] = 0;
+    }
+  m_groupBeamformingCompleted (GroupBfCompletionAttrbitutes (m_peerStation, BeamformingInitiator, m_bftIdMap[m_peerStation],
+                                                             rxConfig.first.first, rxConfig.first.second, rxConfig.second, maxSnr));
   if (m_antennaPatternReciprocity)
     {
       UpdateBestAntennaConfiguration (m_peerStation, rxConfig.first, rxConfig.first, maxSnr);
@@ -1196,9 +1212,12 @@ DmgStaWifiMac::StartGroupBeamformingTraining (void)
         {
           UpdateBestAWV (m_peerStation, rxConfig.second, rxConfig.second );
         }
-      if (updateConfig && IsAssociated ())
+      if ((updateConfig || m_groupBeamformingFailed) && IsAssociated ())
         {
+          if (m_groupBeamformingFailed)
+            m_updateFailed (m_peerStation);
           SendUnsolicitedTrainingResponse (m_peerStation);
+          m_groupBeamformingFailed = true;
         }
     }
   else
@@ -1211,6 +1230,7 @@ DmgStaWifiMac::StartGroupBeamformingTraining (void)
       /* To do: if there is no antenna reciprocity perform an unsolicted RSS */
     }
   m_groupTraining = false;
+  m_groupTrainingPerformed = false;
 }
 
 void
@@ -1401,7 +1421,7 @@ DmgStaWifiMac::StartDataTransmissionInterval (void)
         */
 
       // If we´ve associated and there were TRN fields appended to the beacons in the last BTI - start group beamforming training
-      if (m_groupTraining && IsAssociated ())
+      if (m_groupTraining && IsAssociated () && m_groupTrainingPerformed)
         {
           StartGroupBeamformingTraining ();
         }
@@ -2723,6 +2743,21 @@ DmgStaWifiMac::TxOk (Ptr<const Packet> packet, const WifiMacHeader &hdr)
 //            }
 //        }
 //    }
+  if (hdr.IsAction ())
+    {
+      WifiActionHeader actionHdr;
+      Ptr<Packet> packet1 = packet->Copy ();
+      packet1->RemoveHeader (actionHdr);
+      if (actionHdr.GetAction ().dmgAction == WifiActionHeader::DMG_INFORMATION_RESPONSE)
+        {
+          NS_LOG_LOGIC ("Transmitted Information Response to " << hdr.GetAddr2 () << " after Group Beamforming");
+          m_groupBeamformingFailed = false;
+          if (m_informationUpdateEvent.IsRunning ())
+            {
+              m_informationUpdateEvent.Cancel ();
+            }
+        }
+    }
   DmgWifiMac::TxOk (packet, hdr);
 }
 
@@ -2852,7 +2887,7 @@ DmgStaWifiMac::FrameTxOk (const WifiMacHeader &hdr)
       m_performingBFT = false;
       m_slsResponderStateMachine = SLS_RESPONDER_TXSS_PHASE_COMPELTED;
       m_slsCompleted (SlsCompletionAttrbitutes (hdr.GetAddr1 (), CHANNEL_ACCESS_DTI, BeamformingResponder,
-                                                m_isInitiatorTXSS, m_isResponderTXSS,
+                                                m_isInitiatorTXSS, m_isResponderTXSS, m_bftIdMap [hdr.GetAddr1 ()],
                                                 antennaConfig.first, antennaConfig.second, m_maxSnr));
       /* Resume data transmission after SLS operation */
       if (m_currentAllocation == CBAP_ALLOCATION)
@@ -3363,7 +3398,7 @@ DmgStaWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
 //          UpdateApInfoFromBeacon (beacon, hdr->GetAddr2 (), hdr->GetAddr3 ());
         }
 
-      if (goodBeacon && !m_activeScanning)
+      if (goodBeacon && !m_activeScanning && m_accessPeriod == CHANNEL_ACCESS_BTI)
         {
           /* Check if we have already received a DMG Beacon during the BTI period. */
           if (!m_receivedDmgBeacon)
@@ -3575,6 +3610,14 @@ DmgStaWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
 
             }
           m_slsResponderStateMachine = SLS_RESPONDER_SECTOR_SELECTOR;
+          //// NINA ////
+          /* If this is the first beacon ever received, initialize the BFT ID with the AP to 0 */
+          BFT_ID_MAP::iterator it = m_bftIdMap.find (from);
+          if (it == m_bftIdMap.end ())
+            {
+              m_bftIdMap[from] = 0;
+            }
+          //// NINA ////
         }
 
       if (goodBeacon && m_state == WAIT_BEACON && m_activeScanning)
@@ -3642,9 +3685,10 @@ DmgStaWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
               /* Raise an event that we selected the best sector to the DMG AP */
               m_slsResponderStateMachine = SLS_RESPONDER_TXSS_PHASE_COMPELTED;
               m_slsCompleted (SlsCompletionAttrbitutes (hdr->GetAddr2 (), CHANNEL_ACCESS_BHI, BeamformingResponder,
-                                                        m_isInitiatorTXSS, m_isResponderTXSS,
+                                                        m_isInitiatorTXSS, m_isResponderTXSS, m_bftIdMap [hdr->GetAddr2 ()],
                                                         antennaConfig.first, antennaConfig.second, m_maxSnr));
-
+              m_groupBeamformingCompleted (GroupBfCompletionAttrbitutes (hdr->GetAddr2 (), BeamformingInitiator, m_bftIdMap [hdr->GetAddr2 ()],
+                                                                         antennaConfig.first, antennaConfig.second, NO_AWV_ID, m_maxSnr));
               /* We received SSW-FBCK so we cancel the timeout event and update counters */
               /* The STA shall set FailedRSSAttempts to 0 upon successfully receiving an SSW-Feedback frame during the A-BFT. */
               m_failedRssAttemptsCounter = 0;
