@@ -79,8 +79,8 @@ typedef std::pair<uint32_t, uint32_t> CommunicatingPair;                        
 typedef std::vector<CommunicatingPair> TraceFiles;                              //!< Check whether trace files have been loaded or not.
 typedef TraceFiles::iterator TraceFiles_I;                                      //!< Typedef for iterator over traces files.
 
-class DmgWifiSpectrumSignalParameters;
 class NodeContainer;
+struct DmgWifiSpectrumSignalParameters;
 
 class QdPropagationEngine : public Object
 {

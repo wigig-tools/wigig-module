@@ -202,7 +202,7 @@ SuMimoMimoCandidatesSelected (Ptr<DmgWifiMac> wifiMac, Mac48Address from,
 }
 
 void
-SuMimoMimoPhaseMeasurements (Ptr<DmgWifiMac> wifiMac, MimoPhaseMeasurementsAttributes attributes)
+SuMimoMimoPhaseMeasurements (Ptr<DmgWifiMac> wifiMac, MimoPhaseMeasurementsAttributes attributes, SU_MIMO_ANTENNA2ANTENNA antenna2antenna)
 {
   std::cout << "EDMG STA " << wifiMac->GetAddress ()
             << " reporting MIMO phase measurements for SU-MIMO BFT with EDMG STA " << attributes.peerStation

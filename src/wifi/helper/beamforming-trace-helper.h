@@ -210,7 +210,7 @@ private:
    * \param attributes
    */
   static void SuMimoMimoPhaseMeasurements (Ptr<SuMimoBeamformingTraceHelper> helper, Ptr<DmgWifiMac> srcWifiMac,
-                                           MimoPhaseMeasurementsAttributes attributes);
+                                           MimoPhaseMeasurementsAttributes attributes, SU_MIMO_ANTENNA2ANTENNA antenna2antenna);
 
 private:
   Ptr<OutputStreamWrapper> m_sisoPhaseMeasurements;
@@ -294,9 +294,12 @@ private:
    * \param config
    * \param muGroupID
    * \param bftID
+   * \param antenna2responder
+   * \param isInitiator
    */
   static void MuMimoOptimalConfiguration (Ptr<MuMimoBeamformingTraceHelper> helper, Ptr<DmgWifiMac> srcWifiMac,
-                                           MIMO_AWV_CONFIGURATION config, uint8_t muGroupID, uint16_t bftID);
+                                           MIMO_AWV_CONFIGURATION config, uint8_t muGroupID, uint16_t bftID,
+                                           MU_MIMO_ANTENNA2RESPONDER antenna2responder, bool isInitiator);
 
 private:
   Ptr<OutputStreamWrapper> m_sisoPhaseMeasurements;

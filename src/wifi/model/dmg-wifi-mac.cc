@@ -1372,6 +1372,7 @@ DmgWifiMac::ReceiveShortSswFrame (Ptr<Packet> packet, double rxSnr)
             }
           /* Save the SNR measured during the reception of the Short SSW frame */
           MIMO_CONFIGURATION config = std::make_tuple(shortSsw.GetCDOWN (), m_codebook->GetActiveAntennaID (), shortSsw.GetRFChainID ());
+          NS_LOG_DEBUG ("Short SSW config: " << +shortSsw.GetCDOWN () << " " << +m_codebook->GetActiveAntennaID () << " " << +shortSsw.GetRFChainID () );
           m_muMimoSisoSnrMap[config] = rxSnr;
           m_mimoSisoSnrList.push_back (rxSnr);
         }
@@ -2679,7 +2680,7 @@ DmgWifiMac::StartSuMimoBeamforming (Mac48Address responder, bool isBrpTxssNeeded
     {
       /* Set up the antenna combinations to test in each packet of the MIMO BRP TXSS and calculate the number of MIMO BRP TXSS packets that we need
        * if there are multiple antennas which are connected to the same RF Chain we need multiple BRP packets to train them, otherwise we just need one. */
-      m_txssPackets = m_codebook->SetUpMimoBrpTxss (antennaIds);
+      m_txssPackets = m_codebook->SetUpMimoBrpTxss (antennaIds, responder);
       m_txssRepeat = m_txssPackets;
       m_codebook->SetUseAWVsMimoBft (useAwvs);
     }
@@ -2932,7 +2933,6 @@ DmgWifiMac::StartSuMimoMimoPhase (Mac48Address from, MIMO_ANTENNA_COMBINATIONS_L
   NS_LOG_FUNCTION (this << from << uint16_t (txCombinationsRequested) << useAwvs);
   m_peerStation = from;
   m_codebook->SetUseAWVsMimoBft (useAwvs);
-  // For now we set the number of requested tx combinations to 1 - only the best combination
   NS_ABORT_MSG_IF (txCombinationsRequested > 64, "Number of Tx Combinations requested is too big");
   m_txSectorCombinationsRequested = txCombinationsRequested;
   // Note: For now we assume that only one antenna is connected to each RF Chain - all candidates have the same antenna combination
@@ -3157,7 +3157,8 @@ DmgWifiMac::SendSuMimoBfFeedbackFrame (void)
   Ptr<ChannelMeasurementFeedbackElement> channelElement = Create<ChannelMeasurementFeedbackElement> ();
   Ptr<EDMGChannelMeasurementFeedbackElement> edmgChannelElement = Create<EDMGChannelMeasurementFeedbackElement> ();
   uint8_t numberOfMeasurementsElement = 0;
-
+  // Delete the results from previous trainings
+  m_suMimoRxCombinations.erase (m_peerStation);
   for (BEST_TX_COMBINATIONS_AWV_IDS::iterator it = bestCombinations.begin (); it != bestCombinations.end (); it++)
     {
       MIMO_AWV_CONFIGURATION rxCombination = m_codebook->GetMimoConfigFromRxAwvId (it->second, m_peerStation);
@@ -3476,6 +3477,7 @@ DmgWifiMac::FindBestTxCombinations (uint8_t nBestCombinations, uint16_t rxCombin
   std::vector<uint16_t> txIds;
   SNR_MEASUREMENT_AWV_IDs_QUEUE minSnr;
   uint16_t txCombinationsTested = measurements.size () / (rxCombinationsTested);
+  std::priority_queue<std::pair<double, SU_MIMO_ANTENNA2ANTENNA>> antenna2antennaQueue;
 
   // Find all possible valid combinations of valid Tx-Rx pairs for the nTxAntennas streams we want to set up
   std::vector<std::vector<uint16_t>> validTxRxPairs;
@@ -3539,7 +3541,7 @@ DmgWifiMac::FindBestTxCombinations (uint8_t nBestCombinations, uint16_t rxCombin
 
           double maxMinSnr;
           bool firstMax = true;
-//          uint8_t bestTxRxPairIdx = 0; // TO-DO (Check with NINA)
+          uint8_t bestTxRxPairIdx = 0; // TO-DO (Check with NINA)
           uint8_t indexPairs = 0;
           /* For this Rx combination check all valid Tx-Rx pairs for the different streams */
           for (auto & validTxRxPair : validTxRxPairs)
@@ -3562,7 +3564,7 @@ DmgWifiMac::FindBestTxCombinations (uint8_t nBestCombinations, uint16_t rxCombin
               if (firstMax || minSnr > maxMinSnr)
                 {
                   maxMinSnr = minSnr;
-//                  bestTxRxPairIdx = indexPairs;
+                  bestTxRxPairIdx = indexPairs;
                   firstMax = false;
                 }
               indexPairs++;
@@ -3577,12 +3579,24 @@ DmgWifiMac::FindBestTxCombinations (uint8_t nBestCombinations, uint16_t rxCombin
             }
           measurementAwvId.second = rxAwvIds;
           minSnr.push (std::make_pair (maxMinSnr, measurementAwvId));
+          if (m_suMimoBeamformingTraining)
+            {
+              SU_MIMO_ANTENNA2ANTENNA antenna2antenna;
+              for (auto txRxPair : validTxRxPairs.at (bestTxRxPairIdx))
+                {
+                  uint16_t txId = std::floor (txRxPair / static_cast<double> (nRxAntennas)) + 1;
+                  uint16_t rxId = (txRxPair % nRxAntennas) + 1;
+                  antenna2antenna[txId] = rxId;
+
+                }
+                antenna2antennaQueue.push (std::make_pair (maxMinSnr, antenna2antenna));
+            }
         }
     }
   if (m_suMimoBeamformingTraining)
     {
       m_suMimoMimoPhaseMeasurements (MimoPhaseMeasurementsAttributes (m_peerStation, measurements, minSnr, differentRxCombinations,
-                                     nTxAntennas, nRxAntennas, rxCombinationsTested, m_bftIdMap[m_peerStation]));
+                                     nTxAntennas, nRxAntennas, rxCombinationsTested, m_bftIdMap[m_peerStation]), antenna2antennaQueue.top ().second);
     }
   else
     {
@@ -3838,6 +3852,7 @@ DmgWifiMac::StartMuMimoSisoFeedback (void)
   m_currentMuGroupMember = m_edmgMuGroup.aidList.begin ();
   m_edmgTrnM = 0;
   m_peerLTxRx = 0;
+  m_muMimoFeedbackMap.clear ();
   SendBrpFbckPollFrame ();
 }
 
@@ -4445,23 +4460,28 @@ void
 DmgWifiMac::StartMuMimoSelectionSubphase (void)
 {
   NS_LOG_FUNCTION (this);
+  m_muMimoTxCombinations.erase (m_edmgMuGroup.groupID);
   /* Select the optimal comfiguration for MU MIMO */
   MIMO_FEEDBACK_COMBINATION optimalConfigs = FindOptimalMuMimoConfig (m_codebook->GetCurrentMimoAntennaIdList ().size (),
                                                                       m_edmgMuGroup.aidList.size (),
                                                                       m_muMimoFeedbackMap, m_txAwvIdList);
   /* For each STA in the MU group save the SISO IS Subset Index that corresponds to the optimal MU MIMO config that will be chosen. */
+  MU_MIMO_ANTENNA2RESPONDER antenna2responder;
   for (auto & aid : m_edmgMuGroup.aidList)
     {
       for (auto & config : optimalConfigs)
         {
           if (std::get<1> (config) == aid)
-            m_sisoIdSubsetIndexList.push_back (m_sisoIdSubsetIndexMap[config]);
+            {
+              m_sisoIdSubsetIndexList.push_back (m_sisoIdSubsetIndexMap[config]);
+              antenna2responder[std::get<0> (config)] = m_aidMap[aid];
+            }
         }
     }
   uint16_t txId = std::get<2> (optimalConfigs.at (0));
   /* Find and save the optimal MIMO Tx Configuration for future use */
   MIMO_AWV_CONFIGURATION txCombination = m_codebook->GetMimoConfigFromTxAwvId (txId, GetAddress ());
-  m_muMimoOptimalConfig (txCombination, m_edmgMuGroup.groupID, m_muMimoBftIdMap [m_edmgMuGroup.groupID]);
+  m_muMimoOptimalConfig (txCombination, m_edmgMuGroup.groupID, m_muMimoBftIdMap [m_edmgMuGroup.groupID], antenna2responder, true);
   BEST_ANTENNA_MU_MIMO_COMBINATIONS::iterator it1 = m_muMimoTxCombinations.find (m_edmgMuGroup.groupID);
   if (it1 != m_muMimoTxCombinations.end ())
     {
@@ -5181,6 +5201,7 @@ DmgWifiMac::FrameTxOkSuMimoBFT (const WifiMacHeader &hdr)
             {
               /* We finished transmitting MIMO BF Setup frame for responder, set up for initiator SMBT */
               bool firstCombination = true;
+              m_mimoSnrList.clear ();
               m_codebook->InitializeMimoSectorSweeping (m_peerStation, ReceiveSectorSweep, firstCombination);
             }
         }
@@ -5748,7 +5769,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                         /* Set up the antenna combinations to test in each packet of the MIMO BRP TXSS and calculate
                          * the number of MIMO BRP TXSS packets that we need if there are multiple antennas which are connected
                          * to the same RF Chain we need multiple BRP packets to train them, otherwise we just need one. */
-                        m_txssPackets = m_codebook->SetUpMimoBrpTxss (antennaIds);
+                        m_txssPackets = m_codebook->SetUpMimoBrpTxss (antennaIds, from);
                         m_txssRepeat = m_txssPackets;
                         GetDmgWifiPhy ()->SetTxssRepeat (m_txssRepeat);
                         edmgReplyRequestElement.SetTXSS_Packets (m_txssPackets);
@@ -5805,9 +5826,10 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                                 /* if the feedback frame is for SU-MIMO BFT */
                                 if (element.GetBfTrainingType () == SU_MIMO_BF && m_isMimoBrpSetupCompleted[from])
                                   {
+                                    SectorID sector = m_codebook->GetSectorIdMimoBrpTxss (sectorIdList.at (i).TXAntennaID, sectorIdList.at (i).SectorID);
                                     MIMO_FEEDBACK_CONFIGURATION feedbackConfig
                                         = std::make_tuple (sectorIdList.at (i).TXAntennaID, sectorIdList.at (i).RXAntennaID,
-                                                           sectorIdList.at (i).SectorID);
+                                                           sector);
                                     //In case of multiple measurements for the same combination (if TRN subfields are repeated), save the maximum SNR
                                     MIMO_FEEDBACK_MAP::iterator iter = m_suMimoFeedbackMap.find (feedbackConfig);
                                     if (iter != m_suMimoFeedbackMap.end ())
@@ -6084,6 +6106,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                     // If we are the initiator start the MIMO BF training Subphase
                     else
                       {
+                        m_mimoSnrList.clear ();
                         Simulator::Schedule (m_mbifs, &DmgWifiMac::StartSuMimoBfTrainingSubphase, this);
                       }
                   }
@@ -6096,9 +6119,10 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                     if (!m_recordTrnSnrValues && m_edmgMuGroup.groupID == setupElement.GetEDMGGroupID () &&
                         IsIncludedInUserGroup (setupElement.GetGroupUserMask ()).first)
                       {
+                        m_mimoSnrList.clear ();
                         GetDmgWifiPhy ()->SetMuMimoBeamformingTraining (true);
                         m_recordTrnSnrValues = true;
-                        m_codebook->SetUpMimoBrpTxss (m_codebook->GetTotalAntennaIdList ());
+                        m_codebook->SetUpMimoBrpTxss (m_codebook->GetTotalAntennaIdList (), from);
                         // for now we train all receive sectors - can't choose candidates since no UL training was done in the SISO phase.
                         bool firstCombination = true;
                         m_codebook->InitializeMimoSectorSweeping (from, ReceiveSectorSweep, firstCombination);
@@ -6131,6 +6155,11 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                 if ((m_suMimoBeamformingTraining && m_isMimoBrpSetupCompleted[from]) ||
                     (m_muMimoBeamformingTraining && (m_muMimoBfPhase == MU_MIMO_BF_FBCK)))
                   {
+                    // Delete any existing results from previous trainings
+                    if (m_suMimoBeamformingTraining)
+                      {
+                        m_suMimoTxCombinations.erase (from);
+                      }
                     uint8_t index = 0;
                     uint16_t sisoIdSubsetIndex = 0;
                     if (m_muMimoBeamformingTraining)
@@ -6268,6 +6297,7 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                 // Check if we are a part of the MU Group that this frame is meant for
                 if (m_muMimoBeamformingTraining && (element.GetEDMGGroupID () == m_edmgMuGroup.groupID))
                   {
+                    m_muMimoRxCombinations.erase (element.GetEDMGGroupID ());
                     std::map<RX_ANTENNA_ID, uint16_t> rxAwvIds;
                     MultiUserTransmissionConfigType muType = element.GetMultiUserTransmissionConfigurationType ();
                     if (muType == MU_NonReciprocal)
@@ -6296,7 +6326,8 @@ DmgWifiMac::Receive (Ptr<WifiMacQueueItem> mpdu)
                       }
                     /* Find the MIMO RX combination associated with the Rx Indices and save them for future MIMO transmissions. */
                     MIMO_AWV_CONFIGURATION rxCombination = m_codebook->GetMimoConfigFromRxAwvId (rxAwvIds, from);
-                    m_muMimoOptimalConfig (rxCombination, element.GetEDMGGroupID (), m_muMimoBftIdMap [element.GetEDMGGroupID ()]);
+                    MU_MIMO_ANTENNA2RESPONDER antenna2responder;
+                    m_muMimoOptimalConfig (rxCombination, element.GetEDMGGroupID (), m_muMimoBftIdMap [element.GetEDMGGroupID ()], antenna2responder, false);
                     BEST_ANTENNA_MU_MIMO_COMBINATIONS::iterator it1 = m_muMimoRxCombinations.find (element.GetEDMGGroupID ());
                     if (it1 != m_muMimoRxCombinations.end ())
                       {

@@ -151,7 +151,7 @@ ControlTrailer::Deserialize (Buffer::Iterator start)
       uint64_t value = i.ReadLsbtohU64 ();
       m_aggregateChannel = (firstByte >> 4) & 0x1;
       m_bw |= (firstByte >> 5) & 0x7;
-      m_bw |= (value && 0x1F) << 3;
+      m_bw |= (value & 0x1F) << 3;
       m_primaryChannelNumber = (value >> 5) & 0x7;
       m_mimoTransmission = (value >> 8) & 0x1;
       m_muMimoTransmission = (value >> 9) & 0x1;
@@ -164,7 +164,7 @@ ControlTrailer::Deserialize (Buffer::Iterator start)
       uint64_t value = i.ReadLsbtohU64 ();
       m_aggregateChannel = (firstByte >> 4) & 0x1;
       m_bw |= (firstByte >> 5) & 0x7;
-      m_bw |= (value && 0x1F) << 3;
+      m_bw |= (value & 0x1F) << 3;
       m_primaryChannelNumber = (value >> 5) & 0x7;
       m_mimoTransmission = (value >> 8) & 0x1;
       m_muMimoTransmission = (value >> 9) & 0x1;
@@ -181,7 +181,7 @@ ControlTrailer::Deserialize (Buffer::Iterator start)
       uint32_t value = i.ReadLsbtohU32 ();
       m_aggregateChannel = (firstByte >> 4) & 0x1;
       m_bw |= (firstByte >> 5) & 0x7;
-      m_bw |= (value && 0x1F) << 3;
+      m_bw |= (value & 0x1F) << 3;
       m_primaryChannelNumber = (value >> 5) & 0x7;
       m_isChannelNumber = (value >> 8) << 1;
       m_totalNumberOfSectors = (value >> 9) & 0x7FF;
@@ -196,8 +196,8 @@ ControlTrailer::Deserialize (Buffer::Iterator start)
       for (uint8_t i = 0; i < numStreams; i++)
         {
           StreamMeasurement stream;
-          stream.SNR = (value >> offset) && 0xF;
-          stream.RSSI = (value >> (offset + 4)) && 0x7;
+          stream.SNR = (value >> offset) & 0xF;
+          stream.RSSI = (value >> (offset + 4)) & 0x7;
           offset += 7;
           m_streamMeasurementList.push_back (stream);
         }

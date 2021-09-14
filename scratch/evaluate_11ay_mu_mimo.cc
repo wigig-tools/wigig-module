@@ -245,7 +245,7 @@ main (int argc, char *argv[])
   bool pcapTracing = false;                                       /* PCAP Tracing is enabled or not. */
   std::string arrayConfigAp = "28x_AzEl_SU-MIMO_2x2_27";          /* Phased antenna array configuration. */
   std::string arrayConfigSta = "28x_AzEl_27";                     /* Phased antenna array configuration. */
-  std::string qdChannelFolder = "IndoorMuMimo120/Output/Ns3";     /* Path to the folder containing SU-MIMO Q-D files. */
+  std::string qdChannelFolder = "IndoorMuMimo120";     /* Path to the folder containing SU-MIMO Q-D files. */
   std::string tracesFolder = "Traces/";                           /* Directory to store the traces. */
   bool preambleDetection = true;	             /* Whether a preamble detection model is used. */
   double preambleMinRssi = -78; 		     /* The min RSSI needed to detect the preamble if a preamble detection model is used. */

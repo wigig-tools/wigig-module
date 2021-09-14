@@ -309,10 +309,11 @@ SuMimoBeamformingTraceHelper::SuMimoMimoCandidatesSelected (Ptr<SuMimoBeamformin
 
 void
 SuMimoBeamformingTraceHelper::SuMimoMimoPhaseMeasurements (Ptr<SuMimoBeamformingTraceHelper> helper,
-                                                           Ptr<DmgWifiMac> srcWifiMac, MimoPhaseMeasurementsAttributes attributes)
+                                                           Ptr<DmgWifiMac> srcWifiMac, MimoPhaseMeasurementsAttributes attributes,
+                                                           SU_MIMO_ANTENNA2ANTENNA antenna2antenna)
 {
-  uint32_t srcID = helper->map_Mac2ID[srcWifiMac->GetAddress ()];
-  uint32_t dstID = helper->map_Mac2ID[attributes.peerStation];
+  uint32_t dstID = helper->map_Mac2ID[srcWifiMac->GetAddress ()];
+  uint32_t srcID = helper->map_Mac2ID[attributes.peerStation];
   uint32_t AP_ID = helper->map_Mac2ID[srcWifiMac->GetBssid ()];
   Ptr<DmgWifiMac> dstWifiMac = helper->m_mapMac2Class[attributes.peerStation];
 
@@ -349,7 +350,7 @@ SuMimoBeamformingTraceHelper::SuMimoMimoPhaseMeasurements (Ptr<SuMimoBeamforming
        *outputMimoResults->GetStream () << "TIME,TRACE_ID,SRC_ID,DST_ID,BFT_ID,";
       for (uint8_t i = 1; i <= attributes.nTxAntennas; i++)
         {
-          *outputMimoResults->GetStream () << "TX_ANTENNA_ID" << uint16_t (i) << ",TX_SECTOR_ID" << uint16_t (i) << ",TX_AWV_ID" << uint16_t (i) << ",";
+          *outputMimoResults->GetStream () << "PEER_RX_ID" << uint16_t (i) << ",TX_ANTENNA_ID" << uint16_t (i) << ",TX_SECTOR_ID" << uint16_t (i) << ",TX_AWV_ID" << uint16_t (i) << ",";
         }
       for (uint8_t i = 1; i <= attributes.nRxAntennas; i++)
         {
@@ -381,7 +382,8 @@ SuMimoBeamformingTraceHelper::SuMimoMimoPhaseMeasurements (Ptr<SuMimoBeamforming
                                  << srcID << "," << dstID << "," << attributes.bftID << ",";
   for (uint8_t i = 0; i < attributes.nTxAntennas; i ++)
     {
-      *helper->m_mimoPhaseResults[pair]->GetStream () << uint16_t (txCombination.at (i).first.first - 1)
+      *helper->m_mimoPhaseResults[pair]->GetStream () << uint16_t (antenna2antenna[txCombination.at (i).first.first] - 1) << ","
+                                     << uint16_t (txCombination.at (i).first.first - 1)
                                      << "," << uint16_t (txCombination.at (i).first.second - 1)
                                      << "," << uint16_t (txCombination.at (i).second) << ",";
     }
@@ -581,8 +583,8 @@ MuMimoBeamformingTraceHelper::MuMimoMimoPhaseMeasurements (Ptr<MuMimoBeamforming
   Ptr<DmgWifiMac> dstWifiMac = helper->m_mapMac2Class[attributes.peerStation];
   /* Save the MIMO Phase Measurements to a trace file */
   SRC_DST_ID_PAIR pair = std::make_pair (srcID, dstID);
-  MAP_PAIR2STREAM_I it = helper->m_mimoTxCandidates.find (pair);
-  if (it == helper->m_mimoTxCandidates.end ())
+  MAP_PAIR2STREAM_I it = helper->m_mimoPhaseMeasurements.find (pair);
+  if (it == helper->m_mimoPhaseMeasurements.end ())
     {
       Ptr<OutputStreamWrapper> outputMimoPhase = helper->m_ascii.CreateFileStream (helper->m_tracesFolder + "MuMimoMimoPhaseMeasurements_" +
                                                                                    std::to_string (srcID) + "_" + std::to_string (dstID) + "_"
@@ -622,7 +624,7 @@ MuMimoBeamformingTraceHelper::MuMimoMimoPhaseMeasurements (Ptr<MuMimoBeamforming
         {
           for (uint8_t j = 0; j < attributes.nRxAntennas; j++)
             {
-              *outputMimoPhase->GetStream () << "SINR_" << uint16_t (i) << "_" << uint16_t (j) << ",";
+              *outputMimoPhaseR->GetStream () << "SINR_" << uint16_t (i) << "_" << uint16_t (j) << ",";
             }
         }
       *outputMimoPhaseR->GetStream () << "BSS_ID,MIN_STREAM_SINR_DB" << std::endl;
@@ -710,7 +712,8 @@ void
 MuMimoBeamformingTraceHelper::MuMimoOptimalConfiguration (Ptr<MuMimoBeamformingTraceHelper> helper,
                                                            Ptr<DmgWifiMac> srcWifiMac,
                                                            MIMO_AWV_CONFIGURATION config,
-                                                           uint8_t muGroupID, uint16_t bftID)
+                                                           uint8_t muGroupID, uint16_t bftID,
+                                                           MU_MIMO_ANTENNA2RESPONDER antenna2responder, bool isInitiator)
 {
   uint32_t srcID = helper->map_Mac2ID[srcWifiMac->GetAddress ()];
   uint32_t AP_ID = helper->map_Mac2ID[srcWifiMac->GetBssid ()];
@@ -719,25 +722,54 @@ MuMimoBeamformingTraceHelper::MuMimoOptimalConfiguration (Ptr<MuMimoBeamformingT
   MAP_PAIR2STREAM_I it = helper->m_mimoOptimalConfiguration.find (pair);
   if (it == helper->m_mimoOptimalConfiguration.end ())
     {
-      Ptr<OutputStreamWrapper> outputMimoPhase = helper->m_ascii.CreateFileStream (helper->m_tracesFolder + "MuMimo_" +
-                                                                                   std::to_string (srcID) + "_" + std::to_string (muGroupID) + "_"
-                                                                                   + helper->m_runNumber + ".csv");
-      *outputMimoPhase->GetStream () << "TIME,TRACE_ID,SRC_ID,MU_GROUP_ID,BFT_ID,";
-      for (uint8_t i = 1; i <= config.size (); i++)
+      if (isInitiator)
         {
-          *outputMimoPhase->GetStream () << "ANTENNA_ID" << uint16_t (i) << ",SECTOR_ID" << uint16_t (i) << ",AWV_ID" << uint16_t (i) << ",";
+          Ptr<OutputStreamWrapper> outputMimoPhase = helper->m_ascii.CreateFileStream (helper->m_tracesFolder + "MuMimo_I_" +
+                                                                                       std::to_string (srcID) + "_" + std::to_string (muGroupID) + "_"
+                                                                                       + helper->m_runNumber + ".csv");
+          *outputMimoPhase->GetStream () << "TIME,TRACE_ID,SRC_ID,MU_GROUP_ID,BFT_ID,";
+          for (uint8_t i = 1; i <= config.size (); i++)
+            {
+              *outputMimoPhase->GetStream () << "RESPONDER_ID" << uint16_t (i) << ",ANTENNA_ID" << uint16_t (i)
+                                             << ",SECTOR_ID" << uint16_t (i) << ",AWV_ID" << uint16_t (i) << ",";
+            }
+          *outputMimoPhase->GetStream () << "BSS_ID" << std::endl;
+          helper->m_mimoOptimalConfiguration [pair] = outputMimoPhase;
         }
-      *outputMimoPhase->GetStream () << "BSS_ID" << std::endl;
-      helper->m_mimoOptimalConfiguration [pair] = outputMimoPhase;
+      else
+        {
+          Ptr<OutputStreamWrapper> outputMimoPhase = helper->m_ascii.CreateFileStream (helper->m_tracesFolder + "MuMimo_R_" +
+                                                                                       std::to_string (srcID) + "_" + std::to_string (muGroupID) + "_"
+                                                                                       + helper->m_runNumber + ".csv");
+          *outputMimoPhase->GetStream () << "TIME,TRACE_ID,SRC_ID,MU_GROUP_ID,BFT_ID,";
+          for (uint8_t i = 1; i <= config.size (); i++)
+            {
+              *outputMimoPhase->GetStream () << "ANTENNA_ID" << uint16_t (i) << ",SECTOR_ID" << uint16_t (i) << ",AWV_ID" << uint16_t (i) << ",";
+            }
+          *outputMimoPhase->GetStream () << "BSS_ID" << std::endl;
+          helper->m_mimoOptimalConfiguration [pair] = outputMimoPhase;
+        }
     }
   *helper->m_mimoOptimalConfiguration [pair]->GetStream () << Simulator::Now ().GetNanoSeconds () << ","
                                                                << helper->m_qdPropagationEngine->GetCurrentTraceIndex () << ","
                                                                << srcID << "," << uint16_t (muGroupID) << "," << bftID << "," ;
-  for (uint8_t i = 0; i < config.size (); i ++)
+  if (isInitiator)
     {
-      *helper->m_mimoOptimalConfiguration [pair]->GetStream () << uint16_t (config.at (i).first.first - 1) << "," << uint16_t (config.at (i).first.second - 1)
-                                         << "," << uint16_t (config.at (i).second) << ",";
+      for (uint8_t i = 0; i < config.size (); i ++)
+        {
+          *helper->m_mimoOptimalConfiguration [pair]->GetStream () << helper->map_Mac2ID[antenna2responder[config.at (i).first.first]] << "," << uint16_t (config.at (i).first.first - 1) << ","
+                                                                   << uint16_t (config.at (i).first.second - 1) << "," << uint16_t (config.at (i).second) << ",";
+        }
     }
+  else
+    {
+      for (uint8_t i = 0; i < config.size (); i ++)
+        {
+          *helper->m_mimoOptimalConfiguration [pair]->GetStream () << uint16_t (config.at (i).first.first - 1) << "," << uint16_t (config.at (i).first.second - 1)
+                                             << "," << uint16_t (config.at (i).second) << ",";
+        }
+    }
+
   *helper->m_mimoOptimalConfiguration [pair]->GetStream () << AP_ID << std::endl;
 }
 

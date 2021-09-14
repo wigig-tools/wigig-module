@@ -471,11 +471,10 @@ public:
    * \param last upper bound on the set of nodes on which a wifi device must be created
    * \returns a device container which contains all the devices created by this method.
    */
-  NetDeviceContainer
-  virtual Install (const WifiPhyHelper &phy,
-                   const WifiMacHelper &mac,
-                   NodeContainer::Iterator first,
-                   NodeContainer::Iterator last) const;
+  virtual NetDeviceContainer Install (const WifiPhyHelper &phy,
+                                      const WifiMacHelper &mac,
+                                      NodeContainer::Iterator first,
+                                      NodeContainer::Iterator last) const;
   /**
    * \param phy the PHY helper to create PHY objects
    * \param mac the MAC helper to create MAC objects

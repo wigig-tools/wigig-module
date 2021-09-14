@@ -220,6 +220,19 @@ Codebook::SetBeamformingSectorList (SectorSweepType type, Mac48Address address, 
     }
 }
 
+void
+Codebook::SetMimoBeamformingSectorList (SectorSweepType type, Mac48Address address, Antenna2SectorList &sectorList)
+{
+  if (type == TransmitSectorSweep)
+    {
+      m_txMimoCustomSectors[address] = sectorList;
+    }
+  else
+    {
+      m_rxMimoCustomSectors[address] = sectorList;
+    }
+}
+
 uint8_t
 Codebook::GetNumberOfSectorsForBeamforming (Mac48Address address, SectorSweepType type)
 {
@@ -433,7 +446,7 @@ Codebook::CountMimoNumberOfSectors (Antenna2SectorList sectorList, bool useAwv)
 uint16_t
 Codebook::CountMimoNumberOfTxSubfields (Mac48Address peer)
 {
-  Antenna2SectorList *txSectorList = (Antenna2SectorList *) &m_txCustomSectors.find (peer)->second;
+  Antenna2SectorList *txSectorList = (Antenna2SectorList *) &m_txMimoCustomSectors.find (peer)->second;
   uint16_t numberOfSectors =  txSectorList->begin ()->second.size ();
   std::vector<uint16_t> numberOfAwsPerSector (numberOfSectors, 1);
   for (Antenna2SectorListI iter = txSectorList->begin (); iter != txSectorList->end (); iter++)
@@ -1039,9 +1052,12 @@ Codebook::GetRemaingAWVCount (void) const
 
 //// NINA ////
 uint8_t
-Codebook::SetUpMimoBrpTxss (std::vector<AntennaID> antennaIds)
+Codebook::SetUpMimoBrpTxss (std::vector<AntennaID> antennaIds, Mac48Address peerStation)
 {
   // Iterate over all antennas that we want to train
+  m_mimoCombinations.clear ();
+  m_txMimoCustomSectors.erase (peerStation);
+  m_rxMimoCustomSectors.erase (peerStation);
   for (auto const &antennaId : antennaIds)
     {
       AntennaArrayListI it = m_antennaArrayList.find (antennaId);
@@ -1168,9 +1184,9 @@ Codebook::InitializeMimoSectorSweeping (Mac48Address address, SectorSweepType ty
   if (type == TransmitSectorSweep)
     {
       /* Transmit Sector Sweep */
-      iter = m_txCustomSectors.find (address);
+      iter = m_txMimoCustomSectors.find (address);
       Antenna2SectorList *fullSectorList;
-      if (iter != m_txCustomSectors.end ())
+      if (iter != m_txMimoCustomSectors.end ())
         {
           fullSectorList = (Antenna2SectorList *) &iter->second;
         }
@@ -1187,9 +1203,9 @@ Codebook::InitializeMimoSectorSweeping (Mac48Address address, SectorSweepType ty
   else
     {
       /* Receive Sector Sweep */
-      iter = m_rxCustomSectors.find (address);
+      iter = m_rxMimoCustomSectors.find (address);
       Antenna2SectorList *fullSectorList;
-      if (iter != m_rxCustomSectors.end ())
+      if (iter != m_rxMimoCustomSectors.end ())
         {
           fullSectorList = (Antenna2SectorList *) &iter->second;
         }
@@ -1256,8 +1272,8 @@ Codebook::GetSMBT_Subfields (Mac48Address from, std::vector<AntennaID> antennaCa
     }
   m_mimoCombinations.push_back (newCombination);
   // Set the list of sectors that we want to train for each antenna
-  SetBeamformingSectorList (TransmitSectorSweep, from, txSectorCandidates);
-  SetBeamformingSectorList (ReceiveSectorSweep, from, rxSectorCandidates);
+  SetMimoBeamformingSectorList (TransmitSectorSweep, from, txSectorCandidates);
+  SetMimoBeamformingSectorList (ReceiveSectorSweep, from, rxSectorCandidates);
   // Count the number of subfields that we want to train
   uint16_t numberOfSubfields = CountMimoNumberOfSectors (rxSectorCandidates, m_useAWVsMimoBft);
   return numberOfSubfields;
@@ -1296,7 +1312,7 @@ MIMO_AWV_CONFIGURATION
 Codebook::GetMimoConfigFromTxAwvId (uint32_t index, Mac48Address peer)
 {
   MIMO_AWV_CONFIGURATION bestCombination;
-  Antenna2SectorList *txSectorList = (Antenna2SectorList *) &m_txCustomSectors.find (peer)->second;
+  Antenna2SectorList *txSectorList = (Antenna2SectorList *) &m_txMimoCustomSectors.find (peer)->second;
   uint16_t numberOfSectors =  txSectorList->begin ()->second.size ();
   std::vector<uint16_t> numberOfAwsPerSector (numberOfSectors, 1);
   if (m_useAWVsMimoBft)
@@ -1360,9 +1376,9 @@ Codebook::GetMimoConfigFromRxAwvId (std::map<RX_ANTENNA_ID, uint16_t> indices, M
 {
   MIMO_AWV_CONFIGURATION bestCombination;
   BeamformingSectorListCI iter;
-  iter = m_rxCustomSectors.find (peer);
+  iter = m_rxMimoCustomSectors.find (peer);
   Antenna2SectorList *fullSectorList;
-  if (iter != m_rxCustomSectors.end ())
+  if (iter != m_rxMimoCustomSectors.end ())
     {
       fullSectorList = (Antenna2SectorList *) &iter->second;
     }
@@ -1461,6 +1477,17 @@ Codebook::GetAntennaConfigurationShortSSW (uint16_t cdown)
   return antennaConfig;
 }
 
+SectorID
+Codebook::GetSectorIdMimoBrpTxss (AntennaID antenna, SectorID sector)
+{
+  uint8_t numberOfSectorsTrained = m_currentSectorList->find (antenna)->second.size ();
+  if (sector > numberOfSectorsTrained)
+    {
+      sector = std::remainder (sector, numberOfSectorsTrained);
+    }
+  return sector;
+}
+
 //// NINA ////
 
 void
@@ -1486,7 +1513,7 @@ Codebook::SetUpMuMimoSectorSweeping (Mac48Address own, std::vector<AntennaID> an
     }
   m_mimoCombinations.push_back (newCombination);
   // Set the list of sectors that we want to train for each antenna
-  SetBeamformingSectorList (TransmitSectorSweep, own, txSectorCandidates);
+  SetMimoBeamformingSectorList (TransmitSectorSweep, own, txSectorCandidates);
 }
 
 void

@@ -709,7 +709,6 @@ private:
   TracedCallback<Mac48Address> m_informationReceived;
   bool m_groupTraining;                         //!< Flag to indicate whether we are currently performing beamforming training using TRN fields in Beacons.
   bool m_groupBeamformingFailed;                //!< Flag to indicate whether the previous beamforming training failed (the information response was not received by the AP).
-  bool m_groupTrainingPerformed;                //!< Flag to indicate whether any training using TRN SFs was performed.
   TracedCallback<Mac48Address> m_updateFailed;
 };
 

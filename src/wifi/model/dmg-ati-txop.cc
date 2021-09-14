@@ -181,9 +181,9 @@ DmgAtiTxop::NotifyInternalCollision (void)
 }
 
 void
-DmgAtiTxop::GotAck (double snr, WifiMode txMode)
+DmgAtiTxop::GotAck (void)
 {
-  NS_LOG_FUNCTION (this << snr << txMode);
+  NS_LOG_FUNCTION (this);
   NS_LOG_DEBUG ("got ack. tx done.");
   if (!m_txOkCallback.IsNull ())
     {

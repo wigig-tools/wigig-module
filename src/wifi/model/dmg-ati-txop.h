@@ -58,11 +58,8 @@ private:
   /* Event handlers */
   /**
    * Event handler when an ACK is received.
-   *
-   * \param snr
-   * \param txMode
    */
-  void GotAck (double snr, WifiMode txMode);
+  void GotAck (void);
   /**
    * Event handler when an ACK is missed.
    */

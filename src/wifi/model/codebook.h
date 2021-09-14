@@ -176,6 +176,13 @@ public:
    */
   void SetBeamformingSectorList (SectorSweepType type, Mac48Address address, Antenna2SectorList &sectorList);
   /**
+   * Set the list of transmit/receive sectors utilized during MIMO beamforming training with specific station.
+   * \param type The type of sector sweep.
+   * \param address The MAC address of the peer station.
+   * \param sectors the list of sectors utilized during MIMO BFT.
+   */
+  void SetMimoBeamformingSectorList (SectorSweepType type, Mac48Address address, Antenna2SectorList &sectorList);
+  /**
    * Remove sector from the list of Beaconing sectors.
    * \param antennaID The ID of the antenna array.
    * \param sectorID The ID of the sector.
@@ -270,6 +277,13 @@ public:
    * were used in the SISO phase of MU-MIMO BF training.
    */
   ANTENNA_CONFIGURATION GetAntennaConfigurationShortSSW (uint16_t cdown);
+  /**
+   * A function that returns the correct sector ID from a given antenna configuration reported by the peer station based on the list of sectors that
+   * were used in the MIMO BRP phase of SU-MIMO BF training. This is necessary in case the number of sectors does not exactly match the
+   * number of TRN Subfields used (since all units have to have the same number of subfields there might be extra subfields in the last unit)
+   * which leads to some repetition of the sectors trained at the end.
+   */
+  SectorID GetSectorIdMimoBrpTxss (AntennaID antenna, SectorID sector);
 
 protected:
   friend class DmgWifiHelper;
@@ -411,7 +425,7 @@ protected:
    * \param antennaMask The antenna mask which defines the ID of the active antennas.
    * \return The total number of BRP packets to transmit.
    */
-  uint8_t SetUpMimoBrpTxss (std::vector<AntennaID> antennaIds);
+  uint8_t SetUpMimoBrpTxss (std::vector<AntennaID> antennaIds, Mac48Address peerStation);
   /**
    * This function returns a list of the antenna IDs that will be trained in the current packet during MIMO BFT.
    * \return A list of the antenna IDs of the antennas to be tested in the current MIMO BFT packet.
@@ -759,6 +773,8 @@ protected:
   /* MIMO Beamforming variables */
   std::vector<ActiveRFChainList> m_mimoCombinations; //!< A vector that contains the combinations of Antennas (and their RF Chains) that need to be used to transmit each packet during MIMO BFT.
   std::vector<ActiveRFChainList>::iterator m_currentMimoCombination; //!< Iterator to the combination of antennas used in the current packet during MIMO BFT.
+  BeamformingSectorList m_txMimoCustomSectors;    //!< List of transmit sectors utilized during MIMO BFT per Station.
+  BeamformingSectorList m_rxMimoCustomSectors;    //!< List of receive sectors utilized during MIMO BFT per Station.
   //// NINA ////
   bool m_useAWVsMimoBft;                      //!< Flag that indicates if we´re using AWVs during the MIMO BFT.
 

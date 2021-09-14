@@ -203,7 +203,6 @@ private:
   uint8_t m_sectors;            //!< The number of sectors per antenna for the simple analytical codebook.
   uint8_t m_awvs;               //!< The number of AWVs per virtual sector.
   double m_overlapPercentage;   //!< The percentage of overlap between AWVs of the same sector.
-  AnalyticalCodebookType m_analyticalCodebookType; //!< The type of the analytical codebook.
 
 };
 

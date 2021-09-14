@@ -974,11 +974,6 @@ DmgWifiPhy::StartReceiveTrnSubfield (WifiTxVector txVector, double rxPowerDbm)
   else
     {
       NS_LOG_DEBUG ("Drop TRN Subfield because did not receive successfully the PHY frame");
-      if ((txVector.remainingTrnUnits == 0) && (txVector.remainingTrnSubfields == 0)
-          && m_state->IsStateRx () && (txVector.GetSender () == m_currentSender))
-        {
-            Simulator::Schedule (TRN_SUBFIELD_DURATION, &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-        }
     }
 }
 
@@ -1023,12 +1018,6 @@ DmgWifiPhy::StartReceiveEdmgTrnSubfield (WifiTxVector txVector, double rxPowerDb
                                            NO_AWV_ID, txVector, event);
                     }
                 }
-              /* Make sure to end the reception at the end of the TRN field for the AP. */
-              else if ((txVector.remainingTrnUnits == 0) && (txVector.remainingTrnSubfields == 0))
-                {
-                  Simulator::Schedule (txVector.edmgTrnSubfieldDuration, &DmgWifiPhy::EndReceiveTrnField, this,
-                                       txVector.IsDMGBeacon ());
-                }
             }
           /* If receiving a regular TRN field as part of a BRP packet. */
           else
@@ -1069,23 +1058,6 @@ DmgWifiPhy::StartReceiveEdmgTrnSubfield (WifiTxVector txVector, double rxPowerDb
   else
     {
       NS_LOG_DEBUG ("Drop TRN Subfield because did not receive successfully the PHY frame");
-      /* Make sure to end the reception at the end of the TRN field  */
-      if ((txVector.remainingTrnUnits == 0) && (txVector.remainingTrnSubfields == 0)
-          && m_state->IsStateRx () && (txVector.GetSender () == m_currentSender))
-        {
-          /* TRN-T and TRN-RT fields end with P TRN subfields after the end of the the last unit */
-          if (txVector.GetPacketType () != TRN_R)
-            {
-              if (txVector.remainingPSubfields == 0)
-                {
-                  Simulator::Schedule (txVector.edmgTrnSubfieldDuration, &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-                }
-            }
-          else
-            {
-              Simulator::Schedule (txVector.edmgTrnSubfieldDuration, &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-            }
-        }
     }
 }
 
@@ -1144,22 +1116,6 @@ DmgWifiPhy::EndReceiveTrnSubfield (SectorID sectorId, AntennaID antennaId, WifiT
           m_codebook->GetNextAWV ();
         }
     }
-
-  /* Check if this is the last TRN subfield in the current transmission */
-  if ((txVector.remainingTrnUnits == 0) && (txVector.remainingTrnSubfields == 0))
-    {
-      if ((txVector.GetEDMGTrainingFieldLength () > 0) && (txVector.GetPacketType () != TRN_R))
-        {
-          if (txVector.remainingPSubfields == 0)
-            {
-              Simulator::Schedule (NanoSeconds (1), &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-            }
-        }
-      else
-        {
-          Simulator::Schedule (NanoSeconds (1), &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-        }
-    }
 }
 
 void
@@ -1189,11 +1145,6 @@ DmgWifiPhy::EndReceiveBeaconTrnSubfield (SectorID sectorId, AntennaID antennaId,
           m_codebook->GetNextSector (changeAntenna);
           m_codebook->StartSectorRefinement ();
         }
-    }
-  /* Check if this is the last TRN subfield in the current transmission */
-  if ((txVector.remainingTrnUnits == 0) && (txVector.remainingTrnSubfields == 0))
-    {
-      Simulator::Schedule (NanoSeconds (1), &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
     }
 }
 
@@ -1302,24 +1253,7 @@ DmgWifiPhy::StartReceiveEdmgTrnSubfield (WifiTxVector txVector, std::vector<doub
     }
   else
     {
-      //NS_LOG_DEBUG ("Drop TRN Subfield because PPDU reception failed (" << rxPowerW << "<" << GetEdThresholdW ());
-      /* Make sure to end the reception at the end of the TRN field  */
-      if ((txVector.remainingTrnUnits == 0) && (txVector.remainingTrnSubfields == 0)
-          && m_state->IsStateRx () && (txVector.GetSender () == m_currentSender))
-        {
-          /* TRN-T and TRN-RT subfields end with P-TRN subfields after the end of the the last unit */
-          if (txVector.GetPacketType () != TRN_R)
-            {
-              if (txVector.remainingPSubfields == 0)
-                {
-                  Simulator::Schedule (txVector.edmgTrnSubfieldDuration, &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-                }
-            }
-          else
-            {
-              Simulator::Schedule (txVector.edmgTrnSubfieldDuration, &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-            }
-        }
+      NS_LOG_DEBUG ("Drop TRN Subfield because PPDU reception failed ");
     }
 }
 
@@ -1383,22 +1317,6 @@ DmgWifiPhy::EndReceiveMimoTrnSubfield (WifiTxVector txVector, Ptr<Event> event, 
             {
               m_codebook->GetNextAWV ();
             }
-        }
-    }
-
-  /* Check if this is the last TRN subfield in the current transmission */
-  if ((txVector.remainingTrnUnits == 0) && (txVector.remainingTrnSubfields == 0))
-    {
-      if ((txVector.GetEDMGTrainingFieldLength () > 0) && (txVector.GetPacketType () != TRN_R))
-        {
-          if (txVector.remainingPSubfields == 0)
-            {
-              Simulator::Schedule (NanoSeconds (1), &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
-            }
-        }
-      else
-        {
-          Simulator::Schedule (NanoSeconds (1), &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
         }
     }
 }
@@ -1947,6 +1865,10 @@ DmgWifiPhy::StartReceivePayload (Ptr<Event> event)
       m_state->SwitchToRx (payloadDuration + GetTRN_Field_Duration (txVector));
       NS_LOG_DEBUG ("Rx Duration=" << payloadDuration + GetTRN_Field_Duration (txVector));
       NS_LOG_DEBUG ("End Rx=" << Simulator::Now () + payloadDuration + GetTRN_Field_Duration (txVector));
+      if (txVector.GetEDMGTrainingFieldLength () > 0 || txVector.GetTrainngFieldLength () > 0)
+        {
+          Simulator::Schedule (payloadDuration + GetTRN_Field_Duration (txVector), &DmgWifiPhy::EndReceiveTrnField, this, txVector.IsDMGBeacon ());
+        }
       //// WIGIG ////
       m_endRxEvent = Simulator::Schedule (payloadDuration, &DmgWifiPhy::EndReceive, this, event);
       NS_LOG_DEBUG ("Receiving PSDU");

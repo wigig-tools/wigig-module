@@ -132,6 +132,8 @@ typedef std::pair<uint16_t, std::map<RX_ANTENNA_ID, uint16_t>> MEASUREMENT_AWV_I
 typedef std::priority_queue<std::pair<double, MEASUREMENT_AWV_IDs>> SNR_MEASUREMENT_AWV_IDs_QUEUE;
 typedef std::vector<MEASUREMENT_AWV_IDs> BEST_TX_COMBINATIONS_AWV_IDS; /* A typedef to store the Tx and Rx AWV IDs of the top Tx Measurements from the MIMO phase of MIMO BFT.*/
 typedef std::pair<bool, uint8_t> userMaskConfig; /* Typedef to store the result of the reading of the Group User Mask field. */
+typedef std::map<AntennaID, Mac48Address> MU_MIMO_ANTENNA2RESPONDER;         /* Typedef for a map between an Antenna ID and the responder it will transmit to in MU-MIMO*/
+typedef std::map<AntennaID, AntennaID> SU_MIMO_ANTENNA2ANTENNA;              /* Typedef for a map between a TX Antenna ID and the RX Antenna ID it will transmit to in SU-MIMO*/
 
 /**
  * The SLS completion callback structure.
@@ -1720,7 +1722,7 @@ protected:
   /**
    * Trace callback for MIMO Phase measurements in SU-MIMO BFT.
    */
-  TracedCallback<MimoPhaseMeasurementsAttributes> m_suMimoMimoPhaseMeasurements;
+  TracedCallback<MimoPhaseMeasurementsAttributes, SU_MIMO_ANTENNA2ANTENNA> m_suMimoMimoPhaseMeasurements;
   TracedCallback<Mac48Address> m_suMimoMimoPhaseComplete;
   /**
    * Trace callback for SISO Phase Measurements in MU-MIMO BFT.
@@ -1755,8 +1757,10 @@ protected:
    * \param MIMO_AWV_CONFIGURATION The optimal MIMO configuration.
    * \param uint8_t The MU Group ID of the group being trained.
    * \param uint16_t The BFT ID of the current BFT.
+   * \param MU_MIMO_ANTENNA2RESPONDER The matching between the antenna IDs and the responders they will transmit to.
+   * \param bool Whether the node is the initiator or a responder in the MU-MIMO training
    */
-  TracedCallback<MIMO_AWV_CONFIGURATION, uint8_t, uint16_t> m_muMimoOptimalConfig;
+  TracedCallback<MIMO_AWV_CONFIGURATION, uint8_t, uint16_t, MU_MIMO_ANTENNA2RESPONDER, bool> m_muMimoOptimalConfig;
   TracedCallback<> m_muMimoMimoPhaseComplete;
   /**
    * Trace callback for polling from Inititator during SISO Fbck phase of MU-MIMO BFT.

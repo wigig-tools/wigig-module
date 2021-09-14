@@ -229,7 +229,6 @@ DmgStaWifiMac::DoInitialize (void)
   /* EDMG variables */
   m_groupTraining = false;
   m_groupBeamformingFailed = false;
-  m_groupTrainingPerformed = false;
 
   /* Initialize upper DMG Wifi MAC */
   DmgWifiMac::DoInitialize ();
@@ -1230,7 +1229,6 @@ DmgStaWifiMac::StartGroupBeamformingTraining (void)
       /* To do: if there is no antenna reciprocity perform an unsolicted RSS */
     }
   m_groupTraining = false;
-  m_groupTrainingPerformed = false;
 }
 
 void
@@ -1421,7 +1419,7 @@ DmgStaWifiMac::StartDataTransmissionInterval (void)
         */
 
       // If we´ve associated and there were TRN fields appended to the beacons in the last BTI - start group beamforming training
-      if (m_groupTraining && IsAssociated () && m_groupTrainingPerformed)
+      if (m_groupTraining && IsAssociated ())
         {
           StartGroupBeamformingTraining ();
         }

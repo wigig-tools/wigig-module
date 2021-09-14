@@ -7315,7 +7315,7 @@ TDDSlotStructureElement::SerializeInformationField (Buffer::Iterator start) cons
   start.WriteHtolsbU32 (m_slotStructureStartTime);
   start.WriteHtolsbU16 (m_numberOfTDDIntervals);
   start.WriteHtolsbU16 (m_tddIntervalDuration);
-  start.WriteU8 (m_slotStructureFieldList.size () && 0xFF);
+  start.WriteU8 (m_slotStructureFieldList.size () & 0xFF);
   for (SlotStructureFieldListCI it = m_slotStructureFieldList.begin (); it != m_slotStructureFieldList.end (); it++)
     {
       start.WriteHtolsbU16 (it->SlotStart);
@@ -7676,11 +7676,11 @@ TDDSectorFeedbackSubelement::DeserializeInformationField (Buffer::Iterator start
       TxBeamFeedback beamFB;
       uint8_t numDecodedTxSectors = 0;
       start.Read (value, 3);
-      beamFB.TxSectorID |= value[0] && 0xFF;
-      beamFB.TxSectorID |= (value[1] && 0x1) << 8;
-      beamFB.TxAntennaID = (value[1] >> 1) && 0x7;
-      numDecodedTxSectors |= (value[1] >> 4) && 0xF;
-      numDecodedTxSectors |= (value[2] && 0xF) << 4;
+      beamFB.TxSectorID |= value[0] & 0xFF;
+      beamFB.TxSectorID |= (value[1] & 0x1) << 8;
+      beamFB.TxAntennaID = (value[1] >> 1) & 0x7;
+      numDecodedTxSectors |= (value[1] >> 4) & 0xF;
+      numDecodedTxSectors |= (value[2] & 0xF) << 4;
       for (uint16_t j = 0; j < numDecodedTxSectors; j++)
         {
           DecodedRxSectorsInformation decodedInfo;
