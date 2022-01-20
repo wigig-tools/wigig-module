@@ -26,26 +26,25 @@ We list the supported features based on the standard.
 1. Abstract DMG PHY layer implementation for DMG CTRL/SC/OFDM.
 1. Beamforming Codebook design for beamforming training and beam steering.
 1. Fast Session Transfer (FST) mechanism.
-1. Dynamic Allocation of Service Period (Polling).
-1. Service Period Allocation.
-1. DMG Relay Support (Full Duplex and Half Duplex Modes).
-1. Beamformed Link Maintenance for service Period Allocation.
+1. Dynamic allocation of service period (Polling).
+1. Service period allocation.
+1. DMG Relay support (Full-duplex and half-duplex modes).
+1. Beamformedlink maintenance for service period allocation.
 1. Decentralized clustering support.
 1. Spatial sharing and interference assessment mechanism. 
 1. Quasi-deterministic channel model to simulate real propagation environments.
-1. Codebook Generator Application in MATLAB to generate beams codebook.
 1. Multi-antenna beamforming training support.
-1. Accurate BER vs. SNR lookup tables for all DMG PHY layers.
+1. Accurate BER vs. SNR lookup tables for all DMG PHY modes.
 1. Beam refinement for both transmit and receive beam patterns.
 1. Multi-AP support without the need for decentralized clustering.
 1. A comprehensive set of examples and tutorials for each feature.
 
 ### IEEE 802.11ay Features
-The IEEE 802.11ay implemention is an extension to our IEEE 802.11ad model and it supports the follwoing list of features:
+The IEEE 802.11ay implementation is an extension to our IEEE 802.11ad model, and it supports the following list of features:
 
 1. IEEE 802.11ay PHY frame structure, new MAC frame formats, and new Information Elements.
 1. Advanced beamforming techniques (EDMG BRP PPDU and short SSW frame).
-1. Channel bonding up-to four channels.
+1. Channel bonding up to four channels.
 1. Channel transmit masks for all channel configurations in IEEE 802.11ay.
 1. SU-MIMO beamforming training and channel access procedures.
 1. MU-MIMO beamforming training procedure.
@@ -80,10 +79,10 @@ To build the project in optimized mode for fast execution type the following com
     ./waf configure --disable-examples --disable-tests --disable-python --enable-modules='applications','core','internet','point-to-point','wifi','flow-monitor','spectrum' --enable-static -d optimized
     ./waf build
 
-Warning: The previous command will generate large executable files. Make sure you have large free space in your system.
+Warning: The previous command will generate large executable files. Make sure you have enough free space in your system.
 
 ### How to Run
-Our WiGig module includes an extensive set of tutorial scripts located in the scratch folder. A user can explore these examples to test and validate the performance of our framework. At the beginning of each script, we added a detailed description regarding the tested functionality, network topology, expected output, and usage method. 
+Our WiGig module includes an extensive set of tutorial scripts located in the scratch folder. A user can explore these examples to test and validate the performance of our framework. At the beginning of each simulation script, we added a detailed description regarding the tested functionality, network topology, expected output, and usage method. 
 
 ## Publications
 The following papers include background on IEEE 802.11ad/ay, implementation details, and evaluation for the WiGig model. If you use our framework in your research, please cite the following papers: 
@@ -123,9 +122,9 @@ The WiGig module and Codebook Generator Application is developed and maintained 
 1. [Nina Grosheva](https://networks.imdea.org/team/imdea-networks-team/people/nina-grosheva/)
 
 ## Bug Reporting
-In case you come across a bug during the usage of the original model, please report the problem to the following email address (hany.assasa@gmail.com). In the email, please include the following:
+When you come across a bug during the usage of the original model, please report the problem to the following email address (hany.assasa@gmail.com). In the email, please include the following:
 
-1. Simulation file with a small description of the simulated scenario and the expected output.
+1. Simulation file with a brief description of the simulated scenario and the expected output.
 1. The set of input parameters that caused the simulation to crash.
 
 Please do not report any problem related to your modification of the original code.
